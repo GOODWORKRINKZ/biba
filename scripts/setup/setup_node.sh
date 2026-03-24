@@ -7,6 +7,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 RED='\033[0;31m'
+PURPLE='\033[0;35m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 REPO_URL="${BIBA_REPO_URL:-https://github.com/GOODWORKRINKZ/biba.git}"
@@ -37,6 +39,25 @@ step() {
     echo -e "${BLUE}============================================================${NC}"
     echo -e "${BLUE}$1${NC}"
     echo -e "${BLUE}============================================================${NC}"
+}
+
+print_logo() {
+    echo -e "${PURPLE}"
+    cat << 'EOF'
+    ╔═══════════════════════════════════════════════════════╗
+    ║                                                       ║
+    ║  ██████╗  ██╗ ██████╗   █████╗                        ║
+    ║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██╗                       ║
+    ║  ██████╔╝ ██║ ██████╔╝ ███████║                       ║
+    ║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██║                       ║
+    ║  ██████╔╝ ██║ ██████╔╝ ██║  ██║                       ║
+    ║  ╚═════╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝                       ║
+    ║                                                       ║
+    ╚═══════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+    echo -e "${CYAN}              🤖  BiBa Node Setup v1.0  🤖${NC}"
+    echo ""
 }
 
 install_packages() {
@@ -139,13 +160,120 @@ print_summary() {
     echo "  5. Tail logs: bblogs"
 }
 
+setup_motd() {
+    step "Configuring custom MOTD"
+
+    MOTD_SCRIPT="/usr/local/bin/biba-motd"
+
+    sudo tee "$MOTD_SCRIPT" > /dev/null << 'MOTDEOF'
+#!/bin/bash
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+HOSTNAME=$(hostname)
+UPTIME=$(uptime -p 2>/dev/null | sed 's/up //' || uptime)
+MEMORY=$(free -h 2>/dev/null | awk '/^Mem:/ {print $3 "/" $2}' || echo "N/A")
+DISK=$(df -h / 2>/dev/null | awk 'NR==2 {print $3 "/" $2 " (" $5 ")"}' || echo "N/A")
+
+if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+    RAW=$(cat /sys/class/thermal/thermal_zone0/temp)
+    CPU_TEMP="${RAW%???}.${RAW: -3:1}°C"
+else
+    CPU_TEMP="N/A"
+fi
+
+WLAN_IP=$(ip -4 addr show wlan0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "N/A")
+ETH_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "N/A")
+
+if command -v docker &>/dev/null; then
+    DOCKER_RUNNING=$(docker ps --format "{{.Names}}" 2>/dev/null | wc -l)
+    DOCKER_TOTAL=$(docker ps -a --format "{{.Names}}" 2>/dev/null | wc -l)
+    DOCKER_STATUS="${GREEN}${DOCKER_RUNNING}${NC}/${DOCKER_TOTAL} running"
+else
+    DOCKER_RUNNING=0
+    DOCKER_STATUS="${RED}Not installed${NC}"
+fi
+
+echo -e "${PURPLE}"
+cat << 'LOGO'
+    ╔═══════════════════════════════════════════════════════╗
+    ║                                                       ║
+    ║  ██████╗  ██╗ ██████╗   █████╗                        ║
+    ║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██╗                       ║
+    ║  ██████╔╝ ██║ ██████╔╝ ███████║                       ║
+    ║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██║                       ║
+    ║  ██████╔╝ ██║ ██████╔╝ ██║  ██║                       ║
+    ║  ╚═════╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝                       ║
+    ║                                                       ║
+    ╚═══════════════════════════════════════════════════════╝
+LOGO
+echo -e "${NC}"
+echo -e "${CYAN}                🤖  BiBa Controller  🤖${NC}"
+echo ""
+
+echo -e "${BOLD}${CYAN}SYSTEM${NC}"
+echo -e "  ${BLUE}Hostname:${NC}    $HOSTNAME"
+echo -e "  ${BLUE}Uptime:${NC}      $UPTIME"
+echo -e "  ${BLUE}Memory:${NC}      $MEMORY"
+echo -e "  ${BLUE}Disk:${NC}        $DISK"
+echo -e "  ${BLUE}CPU Temp:${NC}    $CPU_TEMP"
+echo ""
+
+echo -e "${BOLD}${GREEN}NETWORK${NC}"
+echo -e "  ${BLUE}Ethernet:${NC}    $ETH_IP"
+echo -e "  ${BLUE}WiFi:${NC}        $WLAN_IP"
+echo ""
+
+echo -e "${BOLD}${PURPLE}DOCKER${NC}"
+echo -e "  ${BLUE}Containers:${NC}  $DOCKER_STATUS"
+if [ "$DOCKER_RUNNING" -gt 0 ] 2>/dev/null; then
+    docker ps --format "  ${GREEN}✓${NC} {{.Names}}  {{.Status}}" 2>/dev/null
+fi
+echo ""
+
+echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}Quick Commands:${NC}"
+echo -e "  ${BLUE}bbstatus${NC}    Container status"
+echo -e "  ${BLUE}bblogs${NC}      Tail logs"
+echo -e "  ${BLUE}bbupdate${NC}    Full update (git pull + pull + restart)"
+echo -e "  ${BLUE}bbhealth${NC}    Docker overview"
+echo -e "  ${BLUE}bbrestart${NC}   Restart stack"
+echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
+echo ""
+MOTDEOF
+
+    sudo chmod +x "$MOTD_SCRIPT"
+
+    if [ -d /etc/update-motd.d ]; then
+        sudo chmod -x /etc/update-motd.d/* 2>/dev/null || true
+    fi
+
+    if ! grep -q "biba-motd" "$HOME/.bashrc"; then
+        {
+            echo ""
+            echo "# BiBa Custom MOTD"
+            echo "$MOTD_SCRIPT"
+        } >> "$HOME/.bashrc"
+    fi
+
+    log_success "Custom MOTD configured"
+}
+
 main() {
+    print_logo
     install_packages
     install_docker
     clone_or_update_repo
     install_aliases
     write_env_file
     setup_service
+    setup_motd
     print_summary
 }
 
