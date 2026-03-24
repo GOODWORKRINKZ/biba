@@ -15,3 +15,5 @@ services:
       CH_STEERING: 0
       CH_THROTTLE: 1
       CH_ARM: 4
+      MOTOR1_INVERTED: 0
+      MOTOR2_INVERTED: 0

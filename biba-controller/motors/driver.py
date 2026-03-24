@@ -12,10 +12,11 @@ import config
 class MotorDriver:
     """Control one motor through a PWM pin and a direction pin."""
 
-    def __init__(self, pi: pigpio.pi, pwm_pin: int, dir_pin: int) -> None:
+    def __init__(self, pi: pigpio.pi, pwm_pin: int, dir_pin: int, inverted: bool = False) -> None:
         self.pi = pi
         self.pwm_pin = pwm_pin
         self.dir_pin = dir_pin
+        self.inverted = inverted
         self.pi.set_mode(self.pwm_pin, pigpio.OUTPUT)
         self.pi.set_mode(self.dir_pin, pigpio.OUTPUT)
         self.pi.set_PWM_frequency(self.pwm_pin, config.PWM_FREQUENCY_HZ)
@@ -26,6 +27,8 @@ class MotorDriver:
         """Set motor speed in the range -1.0..1.0."""
         clamped = max(-1.0, min(1.0, value))
         direction = 1 if clamped < 0 else 0
+        if self.inverted:
+            direction = 1 - direction
         duty_cycle = int(abs(clamped) * 255)
         self.pi.write(self.dir_pin, direction)
         self.pi.set_PWM_dutycycle(self.pwm_pin, duty_cycle)

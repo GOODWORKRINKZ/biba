@@ -58,6 +58,16 @@ def test_motor_driver_sets_direction_and_duty_cycle() -> None:
     assert pi.duty_calls[-1] == (18, 127)
 
 
+def test_motor_driver_can_invert_direction_logic() -> None:
+    pi = FakePi()
+    driver = MotorDriver(pi, pwm_pin=18, dir_pin=23, inverted=True)
+
+    driver.set_speed(-0.5)
+
+    assert pi.write_calls[-1] == (23, 0)
+    assert pi.duty_calls[-1] == (18, 127)
+
+
 def test_differential_drive_mixes_throttle_and_steering() -> None:
     left_motor = FakeMotor()
     right_motor = FakeMotor()

@@ -64,8 +64,18 @@ def main() -> int:
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = DalyBMS(config.BMS_PORT, config.BMS_BAUD)
-    left_motor = MotorDriver(pi, config.MOTOR1_PWM, config.MOTOR1_DIR)
-    right_motor = MotorDriver(pi, config.MOTOR2_PWM, config.MOTOR2_DIR)
+    left_motor = MotorDriver(
+        pi,
+        config.MOTOR1_PWM,
+        config.MOTOR1_DIR,
+        inverted=bool(config.MOTOR1_INVERTED),
+    )
+    right_motor = MotorDriver(
+        pi,
+        config.MOTOR2_PWM,
+        config.MOTOR2_DIR,
+        inverted=bool(config.MOTOR2_INVERTED),
+    )
     drive = DifferentialDrive(left_motor, right_motor)
     buzzer = Buzzer(pi, config.BUZZER_PIN)
 

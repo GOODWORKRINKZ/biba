@@ -29,6 +29,8 @@ MOTOR1_PWM = _get_env_int("MOTOR1_PWM", 18)
 MOTOR1_DIR = _get_env_int("MOTOR1_DIR", 23)
 MOTOR2_PWM = _get_env_int("MOTOR2_PWM", 13)
 MOTOR2_DIR = _get_env_int("MOTOR2_DIR", 24)
+MOTOR1_INVERTED = _get_env_int("MOTOR1_INVERTED", 0)
+MOTOR2_INVERTED = _get_env_int("MOTOR2_INVERTED", 0)
 BUZZER_PIN = _get_env_int("BUZZER_PIN", 17)
 
 CRSF_PORT = os.getenv("CRSF_PORT", "/dev/ttyAMA0")
