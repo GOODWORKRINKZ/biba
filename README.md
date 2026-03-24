@@ -30,7 +30,7 @@ BiBa — это колесная робот-платформа на базе Ras
 
 - `biba-controller/` — Python-контроллер для CRSF, моторов, буззера и телеметрии BMS
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
-- `.github/workflows/build.yml` — CI для линтинга и сборки arm64 Docker-образа
+- `.github/workflows/build.yml` — CI для Ruff, pytest и сборки arm64 Docker-образа
 - `.agents/skills/` — вендорный каталог skills, скопированный из `/home/builder/mylamp/.agents/skills`
 
 ## Подготовка Raspberry Pi
@@ -56,6 +56,8 @@ docker compose up -d
 
 Контейнер запускает `pigpiod`, слушает ELRS CRSF кадры на `/dev/ttyAMA0`, управляет моторами, опрашивает Daly BMS на `/dev/ttyUSB0` и отправляет батарейную телеметрию обратно на передатчик.
 
+Docker-образ собирается под `linux/arm64`, чтобы совпадать с Raspberry Pi Zero 2W. Для этого `pigpiod` собирается внутри образа из upstream `pigpio`, так как готовый пакет `pigpio` отсутствует в Debian bookworm arm64.
+
 Направление вращения каждого колеса можно переопределить через переменные окружения в `docker-compose.yml`:
 
 - `MOTOR1_INVERTED=0|1`
@@ -63,9 +65,36 @@ docker compose up -d
 
 Если после сборки одно из колёс едет в обратную сторону, достаточно выставить для него значение `1`.
 
+## CI и образы
+
+GitHub Actions выполняет:
+
+- `ruff check biba-controller/ tests/`
+- `pytest`
+- сборку arm64 Docker-образа через Buildx
+
+Workflow можно запускать вручную из GitHub Actions:
+
+- с опциональным пушем образа в GHCR
+- с дополнительным `image_tag` для ручных сборок
+
+Обычные `push` и теги `v*` также запускают pipeline автоматически.
+
 ## Экран телеметрии
 
 Скопируйте `lua/SCRIPTS/TELEMETRY/biba.lua` на SD-карту передатчика в каталог `SCRIPTS/TELEMETRY/`, затем добавьте скрипт как экран телеметрии в EdgeTX/OpenTX.
+
+Текущая версия экрана показывает:
+
+- общее напряжение батареи
+- ток
+- SOC в процентах
+- RSSI
+- 6 ячеек батареи
+- `min/max/delta` по ячейкам
+- мигающее предупреждение `LOW`, если минимальная ячейка уходит ниже порога
+
+Скрипт пытается читать реальные cell sensors (`Cels`), а если передатчик их не отдает, использует fallback-оценку от общего напряжения пакета.
 
 ## Каталог skills
 
