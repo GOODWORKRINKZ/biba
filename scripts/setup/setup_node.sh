@@ -8,7 +8,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 RED='\033[0;31m'
 PURPLE='\033[0;35m'
-BOLD='\033[1m'
 NC='\033[0m'
 
 REPO_URL="${BIBA_REPO_URL:-https://github.com/GOODWORKRINKZ/biba.git}"
