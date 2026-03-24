@@ -1,5 +1,7 @@
 services:
   biba-controller:
+    image: ghcr.io/goodworkrinkz/biba/biba-controller:${BIBA_IMAGE_TAG:-latest}
+    pull_policy: always
     build:
       context: ./biba-controller
     privileged: true

@@ -1,0 +1,135 @@
+name: "G: Build Controller Image"
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      push_to_registry:
+        description: Push image to GHCR after successful build
+        required: false
+        default: true
+        type: boolean
+      image_tag:
+        description: Optional extra image tag for manual builds
+        required: false
+        default: ""
+        type: string
+  workflow_call:
+    inputs:
+      push_to_registry:
+        description: Push image to GHCR after successful build
+        required: false
+        default: true
+        type: boolean
+      image_tag:
+        description: Optional extra image tag for manual builds
+        required: false
+        default: ""
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository }}/biba-controller
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run Ruff
+        run: ruff check biba-controller/ tests/
+
+      - name: Run pytest
+        run: pytest
+
+  determine-tag:
+    name: Determine Docker Tag
+    runs-on: ubuntu-latest
+    outputs:
+      docker_tag: ${{ steps.set-tag.outputs.docker_tag }}
+    steps:
+      - name: Determine tag
+        id: set-tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            if [ "$BRANCH_NAME" = "main" ]; then
+              TAG="latest"
+            elif [ "$BRANCH_NAME" = "develop" ]; then
+              TAG="dev"
+            else
+              TAG="test"
+            fi
+          fi
+
+          echo "docker_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved Docker tag: ${TAG}"
+
+  build-controller-image:
+    name: Build Controller Image
+    needs:
+      - lint-and-test
+      - determine-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_to_registry)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.determine-tag.outputs.docker_tag }}
+            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.image_tag != '' }}
+            type=sha,prefix=
+            type=ref,event=tag
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./biba-controller
+          file: ./biba-controller/Dockerfile
+          platforms: linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_to_registry) }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
