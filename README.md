@@ -30,7 +30,8 @@ BiBa — это колесная робот-платформа на базе Ras
 
 - `biba-controller/` — Python-контроллер для CRSF, моторов, буззера и телеметрии BMS
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
-- `.github/workflows/build.yml` — CI для Ruff, pytest и сборки arm64 Docker-образа
+- `.github/workflows/` — global builder workflows для Ruff, pytest и сборки arm64 Docker-образа в GHCR
+- `scripts/setup/setup_node.sh` — bringup-скрипт для Raspberry Pi с установкой Docker, Compose, git и systemd-автозапуска
 - `.agents/skills/` — вендорный каталог skills, скопированный из `/home/builder/mylamp/.agents/skills`
 
 ## Подготовка Raspberry Pi
@@ -44,10 +45,30 @@ BiBa — это колесная робот-платформа на базе Ras
    ```
 
 3. Перезагрузите Raspberry Pi.
-4. Установите Docker и плагин Docker Compose.
-5. Подключите USB-UART адаптер от Daly BMS.
+4. Подключите USB-UART адаптер от Daly BMS.
+
+Вместо ручной установки Docker/Compose можно использовать bringup-скрипт:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/GOODWORKRINKZ/biba/main/scripts/setup/setup_node.sh | bash
+```
+
+Скрипт:
+
+- ставит Docker и Docker Compose plugin
+- ставит базовые системные утилиты
+- клонирует или обновляет репозиторий в `~/biba`
+- настраивает алиасы для управления стеком
+- создает `systemd` unit для автозапуска `docker compose`
 
 ## Запуск
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Локальная сборка по-прежнему доступна при необходимости:
 
 ```bash
 docker compose build
@@ -71,14 +92,22 @@ GitHub Actions выполняет:
 
 - `ruff check biba-controller/ tests/`
 - `pytest`
-- сборку arm64 Docker-образа через Buildx
+- сборку arm64 Docker-образа через Buildx на стороне GitHub Actions
+- push глобального образа в GHCR
 
-Workflow можно запускать вручную из GitHub Actions:
+Workflow'ы организованы по схеме `G-*`:
 
-- с опциональным пушем образа в GHCR
-- с дополнительным `image_tag` для ручных сборок
+- `G-Build-Controller-Image.yml` — линт, тесты, сборка и push образа контроллера
+- `G-Build-All.yml` — верхнеуровневый запуск полной сборки проекта
 
-Обычные `push` и теги `v*` также запускают pipeline автоматически.
+Базовая модель деплоя теперь такая:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Raspberry Pi не обязан собирать образ локально, он просто забирает готовый arm64-образ из GHCR.
 
 ## Экран телеметрии
 
