@@ -59,6 +59,11 @@ jobs:
       - name: Run Ruff
         run: ruff check biba-controller/ tests/
 
+      - name: Shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck scripts/*.sh scripts/setup/*.sh
+
       - name: Run pytest
         run: pytest
 

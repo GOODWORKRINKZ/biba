@@ -10,6 +10,12 @@ services:
       - /dev/ttyAMA0:/dev/ttyAMA0
       - /dev/ttyUSB0:/dev/ttyUSB0
       - /dev/gpiomem:/dev/gpiomem
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python.*main' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     environment:
       CRSF_PORT: /dev/ttyAMA0
       BMS_PORT: /dev/ttyUSB0

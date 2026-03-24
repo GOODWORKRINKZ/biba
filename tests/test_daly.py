@@ -89,3 +89,31 @@ def test_read_state_aggregates_all_measurements() -> None:
     assert state.min_cell == 3.5
     assert state.max_cell == 3.54
     assert state.delta == pytest.approx(0.04)
+
+
+def test_send_command_returns_none_on_timeout() -> None:
+    bms = DalyBMS("/dev/ttyUSB0", 9600)
+    bms.serial_port = FakeSerial([b""])
+
+    result = bms._send_command(0x90)
+
+    assert result is None
+
+
+def test_send_command_returns_none_on_partial_response() -> None:
+    partial = bytes([0xA5, 0x01, 0x90, 0x08, 0x00])
+    bms = DalyBMS("/dev/ttyUSB0", 9600)
+    bms.serial_port = FakeSerial([partial])
+
+    result = bms._send_command(0x90)
+
+    assert result is None
+
+
+def test_get_cell_voltages_returns_empty_on_no_data() -> None:
+    bms = DalyBMS("/dev/ttyUSB0", 9600)
+    bms.serial_port = FakeSerial([b""])
+
+    result = bms.get_cell_voltages()
+
+    assert result == []

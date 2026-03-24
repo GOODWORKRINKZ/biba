@@ -30,9 +30,12 @@ BiBa — это колесная робот-платформа на базе Ras
 
 - `biba-controller/` — Python-контроллер для CRSF, моторов, буззера и телеметрии BMS
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
-- `.github/workflows/` — global builder workflows для Ruff, pytest и сборки arm64 Docker-образа в GHCR
-- `scripts/setup/setup_node.sh` — bringup-скрипт для Raspberry Pi с установкой Docker, Compose, git и systemd-автозапуска
-- `.agents/skills/` — вендорный каталог skills, скопированный из `/home/builder/mylamp/.agents/skills`
+- `.github/workflows/` — global builder workflows для Ruff, pytest, shellcheck и сборки arm64 Docker-образа в GHCR
+- `scripts/setup/` — bringup-скрипты для Raspberry Pi (Docker, Compose, systemd-автозапуск)
+- `scripts/update.sh` — быстрое обновление (git pull + image pull + restart)
+- `scripts/diagnostics.sh` — диагностика хоста и контейнера
+- `docs/deployment.md` — полное руководство по развёртыванию
+- `.agents/skills/` — вендорный каталог skills
 
 ## Подготовка Raspberry Pi
 
@@ -108,6 +111,8 @@ docker compose up -d
 ```
 
 Raspberry Pi не обязан собирать образ локально, он просто забирает готовый arm64-образ из GHCR.
+
+Полное руководство по развёртыванию: [docs/deployment.md](docs/deployment.md)
 
 ## Экран телеметрии
 

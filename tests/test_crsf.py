@@ -65,3 +65,29 @@ def test_get_channels_normalizes_channel_values() -> None:
     assert channels[0] == pytest.approx(-1.0)
     assert channels[1] == pytest.approx(0.0, abs=0.001)
     assert channels[2] == pytest.approx(1.0)
+
+
+def test_crc8_rejects_known_bad_data() -> None:
+    from crsf.protocol import crc8_dvb_s2
+
+    crc_a = crc8_dvb_s2(b"\x16\x01\x02\x03")
+    crc_b = crc8_dvb_s2(b"\x16\x01\x02\x04")
+
+    assert crc_a != crc_b
+    assert crc_a == crc8_dvb_s2(b"\x16\x01\x02\x03")
+
+
+def test_pop_frame_from_buffer_handles_overflow() -> None:
+    buffer = bytearray()
+    for _ in range(100):
+        buffer.extend(b"\xC8\x04\x16\xAA\xBB\x00")
+
+    popped_count = 0
+    while True:
+        result = pop_frame_from_buffer(buffer)
+        if result is None:
+            break
+        popped_count += 1
+
+    assert len(buffer) == 0
+    assert popped_count <= 100
