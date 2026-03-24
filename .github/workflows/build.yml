@@ -24,11 +24,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Ruff
-        run: pip install ruff
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
 
       - name: Run Ruff
-        run: ruff check biba-controller/
+        run: ruff check biba-controller/ tests/
+
+      - name: Run pytest
+        run: pytest
 
   build:
     runs-on: ubuntu-latest
