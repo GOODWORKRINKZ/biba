@@ -4,6 +4,10 @@
 local CELL_COUNT = 6
 local LOW_CELL_VOLTAGE = 3.5
 
+-- Sound state tracking
+local prev_connected = nil  -- nil = first run, true/false after
+local low_bat_sound_at = 0  -- getTime() of last low-bat alert
+
 -- ──────────────────────────────────────────────────
 -- Utility helpers
 -- ──────────────────────────────────────────────────
@@ -304,13 +308,55 @@ local function draw_wide(voltage, current, pct, rssi, cells, mn, mx, delta, left
 end
 
 -- ──────────────────────────────────────────────────
+-- Sound effects (R2-D2 bip-bop via playTone)
+-- playTone(freq, duration_ms, pause_ms, flags, freqIncr)
+-- ──────────────────────────────────────────────────
+
+local function snd_startup()
+  -- "Bi↑ -- Baaa↓" signature jingle
+  playTone(800, 100, 50)
+  playTone(1600, 200, 30, 0, -3)
+end
+
+local function snd_connected()
+  -- two happy chirps ↑↑
+  playTone(1400, 60, 30)
+  playTone(1800, 80, 0)
+end
+
+local function snd_disconnected()
+  -- sad descending tone
+  playTone(1200, 80, 20)
+  playTone(600, 200, 0)
+end
+
+local function snd_low_battery()
+  -- triple alarm beep
+  playTone(900, 100, 60)
+  playTone(900, 100, 60)
+  playTone(900, 100, 0)
+end
+
+-- ──────────────────────────────────────────────────
 -- Main run
 -- ──────────────────────────────────────────────────
 
 local function run(event)
   lcd.clear()
 
-  if not is_connected() then
+  local connected = is_connected()
+
+  -- Connection state change sounds
+  if prev_connected ~= nil then
+    if connected and not prev_connected then
+      snd_connected()
+    elseif not connected and prev_connected then
+      snd_disconnected()
+    end
+  end
+  prev_connected = connected
+
+  if not connected then
     draw_disconnected()
     return 0
   end
@@ -329,10 +375,20 @@ local function run(event)
     draw_compact(voltage, current, pct, rssi, cells, mn, mx, delta, left_spd, right_spd)
   end
 
+  -- Low battery sound (every ~10 seconds)
+  if mn > 0 and mn < LOW_CELL_VOLTAGE then
+    local now = getTime()
+    if now - low_bat_sound_at >= 1000 then  -- 1000 = 10s in centiseconds
+      low_bat_sound_at = now
+      snd_low_battery()
+    end
+  end
+
   return 0
 end
 
 local function init()
+  snd_startup()
   return 0
 end
 

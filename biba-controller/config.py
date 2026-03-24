@@ -52,3 +52,8 @@ LOW_PACK_VOLTAGE = _get_env_float("LOW_PACK_VOLTAGE", 21.0)
 PWM_FREQUENCY_HZ = _get_env_int("PWM_FREQUENCY_HZ", 20000)
 SERIAL_TIMEOUT_S = _get_env_float("SERIAL_TIMEOUT_S", 0.02)
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Beacon / SOS
+BEACON_ENABLED = bool(_get_env_int("BEACON_ENABLED", 1))
+BEACON_DELAY_S = _get_env_float("BEACON_DELAY_S", 300.0)
+CH_BEACON = _get_env_int("CH_BEACON", 5)

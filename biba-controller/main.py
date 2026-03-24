@@ -12,6 +12,7 @@ import pigpio
 
 import config
 from bms.daly import BatteryState, DalyBMS
+from buzzer.beacon import BeaconManager
 from buzzer.buzzer import Buzzer
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
@@ -78,6 +79,10 @@ def main() -> int:
     )
     drive = DifferentialDrive(left_motor, right_motor)
     buzzer = Buzzer(pi, config.BUZZER_PIN)
+    beacon = BeaconManager(
+        delay_s=config.BEACON_DELAY_S,
+        enabled=config.BEACON_ENABLED,
+    )
 
     try:
         receiver.open()
@@ -94,6 +99,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _signal_handler)
 
     armed = False
+    had_connection = False
     low_voltage_alarm_at = 0.0
     last_frame_time = time.monotonic()
     last_bms_poll = 0.0
@@ -101,6 +107,7 @@ def main() -> int:
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
 
     LOGGER.info("BiBa controller started")
+    buzzer.startup_tone()
 
     try:
         while RUNNING:
@@ -114,6 +121,12 @@ def main() -> int:
 
             if channels is not None:
                 last_frame_time = loop_started_at
+
+                if not had_connection:
+                    had_connection = True
+                    buzzer.connected_tone()
+                beacon.on_connected()
+
                 requested_armed = _is_armed(channels)
                 if requested_armed != armed:
                     armed = requested_armed
@@ -132,10 +145,22 @@ def main() -> int:
                 else:
                     drive.stop()
 
+                # Manual beacon toggle via RC channel
+                beacon_ch = _get_channel(channels, config.CH_BEACON)
+                beacon.set_manual(beacon_ch > config.ARM_THRESHOLD)
+
             if drive.check_failsafe(last_frame_time):
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
+                    buzzer.failsafe_tone()
+                if had_connection:
+                    had_connection = False
+                    buzzer.disconnected_tone()
                 armed = False
+                beacon.on_failsafe(loop_started_at)
+
+            if beacon.should_sos(loop_started_at):
+                buzzer.sos_beacon()
 
             if loop_started_at - last_bms_poll >= config.BMS_POLL_INTERVAL_S:
                 last_bms_poll = loop_started_at
@@ -168,6 +193,7 @@ def main() -> int:
     finally:
         LOGGER.info("Shutting down BiBa controller")
         drive.stop()
+        buzzer.shutdown_tone()
         buzzer.off()
         receiver.close()
         bms.close()
