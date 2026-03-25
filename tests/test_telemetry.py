@@ -53,6 +53,9 @@ def test_send_system_stats_emits_valid_crsf_gps_frame() -> None:
     frame_type, payload = parsed
     assert frame_type == FRAME_TYPE_GPS
     assert len(payload) == 15
+    # latitude = 1 at payload[0:4], longitude = 1 at payload[4:8]
+    assert payload[0:4] == b'\x00\x00\x00\x01'
+    assert payload[4:8] == b'\x00\x00\x00\x01'
     # groundspeed = 45 * 10 = 450 = 0x01C2 at payload[8:10]
     assert payload[8] == 0x01
     assert payload[9] == 0xC2

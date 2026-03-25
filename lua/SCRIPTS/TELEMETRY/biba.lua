@@ -108,8 +108,8 @@ end
 local function read_system()
   local cpu_raw = sensor("GSpd", 0)
   local ram = sensor("Sats", 0)
-  -- GSpd is in km/h*10 units from CRSF, divide to get percent
-  return math.floor(cpu_raw / 10), math.floor(ram)
+  -- GSpd arrives in km/h (CRSF decodes raw/10), we sent cpu%*10 so it arrives as cpu%
+  return math.floor(cpu_raw + 0.5), math.floor(ram)
 end
 
 -- ──────────────────────────────────────────────────

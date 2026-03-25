@@ -52,8 +52,8 @@ class CRSFTelemetry:
         if self.serial_port is None:
             raise RuntimeError("CRSFTelemetry serial port is not attached")
 
-        latitude = 0
-        longitude = 0
+        latitude = 1
+        longitude = 1
         groundspeed = max(0, min(65535, int(round(cpu_pct * 10))))
         heading = 0
         altitude = 1000  # 0m with CRSF 1000m offset
