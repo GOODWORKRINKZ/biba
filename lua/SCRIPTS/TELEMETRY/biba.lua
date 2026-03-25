@@ -230,7 +230,7 @@ local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, 
 
   lcd.drawText(inner_x, inner_y + 22, string.format("%.1fA", current), SMLSIZE)
   if cpu > 0 or ram > 0 then
-    lcd.drawText(inner_x + 32, inner_y + 22, string.format("C%d M%d", cpu, ram), SMLSIZE)
+    lcd.drawText(inner_x + 32, inner_y + 22, string.format("C%02d M%02d", cpu, ram), SMLSIZE)
   end
 
   -- Bottom: cells + stats
@@ -314,7 +314,7 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
 
   -- System stats from Pi
   if cpu > 0 or ram > 0 then
-    lcd.drawText(4, bottom_y + 10, string.format("CPU %d%%  RAM %d%%", cpu, ram), SMLSIZE)
+    lcd.drawText(4, bottom_y + 10, string.format("CPU %02d%%  RAM %02d%%", cpu, ram), SMLSIZE)
   end
 
   -- Low warning

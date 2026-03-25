@@ -73,6 +73,15 @@ def test_draw_wide_shows_cell_source() -> None:
     assert "cell_src" in body, "draw_wide should use cell_src parameter"
 
 
+def test_system_stats_are_zero_padded() -> None:
+    """CPU/RAM values should use fixed-width 2-digit formatting to avoid jitter."""
+    compact = _extract_function(_lua_source(), "draw_compact")
+    wide = _extract_function(_lua_source(), "draw_wide")
+
+    assert "%02d" in compact, "compact system stats should use zero-padded 2-digit formatting"
+    assert "%02d" in wide, "wide system stats should use zero-padded 2-digit formatting"
+
+
 # ── run() reads RQly and passes state to drawers ──
 
 
