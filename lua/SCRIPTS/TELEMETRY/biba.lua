@@ -79,9 +79,9 @@ end
 
 local function is_connected()
   local rssi = sensor("RSSI", 0)
-  if rssi == 0 then return false end
-  local vfas = sensor({ "VFAS", "RxBt" }, 0)
-  return vfas > 0
+  if rssi > 0 then return true end
+  local rqly = sensor("RQly", 0)
+  return rqly > 0
 end
 
 -- ──────────────────────────────────────────────────

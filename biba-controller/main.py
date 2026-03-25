@@ -103,10 +103,10 @@ def _battery_is_low(state: BatteryState) -> bool:
 def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
     if state is None:
         telemetry.send_battery(
-            voltage_v=0.0,
-            current_a=0.0,
-            capacity_mah=0,
-            remaining_pct=0,
+            voltage_v=config.TEST_BATTERY_VOLTAGE,
+            current_a=config.TEST_BATTERY_CURRENT,
+            capacity_mah=config.TEST_BATTERY_CAPACITY_MAH,
+            remaining_pct=config.TEST_BATTERY_REMAINING_PCT,
         )
         return
 

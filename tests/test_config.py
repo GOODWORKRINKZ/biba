@@ -22,6 +22,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR1_INVERTED == 0
     assert module.MOTOR2_INVERTED == 0
     assert module.CRSF_PORT == "/dev/ttyS0"
+    assert module.TEST_BATTERY_VOLTAGE == pytest.approx(25.0)
+    assert module.TEST_BATTERY_CURRENT == pytest.approx(1.2)
+    assert module.TEST_BATTERY_CAPACITY_MAH == 0
+    assert module.TEST_BATTERY_REMAINING_PCT == 55
     assert module.LOG_LEVEL == "INFO"
 
 
