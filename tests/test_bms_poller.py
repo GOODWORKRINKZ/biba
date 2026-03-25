@@ -1,0 +1,96 @@
+"""Tests for the threaded BMS poller."""
+
+from __future__ import annotations
+
+import threading
+import time
+from typing import Optional
+
+import pytest
+
+from bms.daly import BatteryState
+from bms.poller import BMSPoller
+
+
+def _make_state(voltage: float = 24.0) -> BatteryState:
+    return BatteryState(
+        voltage=voltage,
+        current=1.0,
+        soc=80.0,
+        cells=[4.0, 4.0, 4.0],
+        temperatures=[25.0],
+        min_cell=4.0,
+        max_cell=4.0,
+        delta=0.0,
+    )
+
+
+class FakeBMS:
+    def __init__(self, state: Optional[BatteryState] = None) -> None:
+        self.state = state
+        self.call_count = 0
+        self.delay = 0.0
+
+    def read_state(self) -> Optional[BatteryState]:
+        self.call_count += 1
+        if self.delay:
+            time.sleep(self.delay)
+        return self.state
+
+
+def test_poller_returns_none_before_first_poll() -> None:
+    bms = FakeBMS()
+    poller = BMSPoller(bms, interval_s=10.0)
+
+    assert poller.latest_state is None
+
+
+def test_poller_caches_latest_state() -> None:
+    state = _make_state(25.5)
+    bms = FakeBMS(state)
+    poller = BMSPoller(bms, interval_s=0.01)
+    poller.start()
+
+    deadline = time.monotonic() + 2.0
+    while poller.latest_state is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    poller.stop()
+
+    assert poller.latest_state is not None
+    assert poller.latest_state.voltage == 25.5
+
+
+def test_poller_does_not_block_caller() -> None:
+    bms = FakeBMS(_make_state())
+    bms.delay = 0.5  # simulate slow BMS
+    poller = BMSPoller(bms, interval_s=0.01)
+    poller.start()
+
+    t0 = time.monotonic()
+    _ = poller.latest_state  # must return instantly
+    elapsed = time.monotonic() - t0
+    poller.stop()
+
+    assert elapsed < 0.05
+
+
+def test_poller_handles_bms_exception() -> None:
+    class BrokenBMS:
+        def read_state(self):
+            raise OSError("UART error")
+
+    poller = BMSPoller(BrokenBMS(), interval_s=0.01)
+    poller.start()
+    time.sleep(0.1)
+    poller.stop()
+
+    # Should not crash, state stays None
+    assert poller.latest_state is None
+
+
+def test_poller_stop_is_idempotent() -> None:
+    bms = FakeBMS()
+    poller = BMSPoller(bms, interval_s=1.0)
+    poller.start()
+    poller.stop()
+    poller.stop()  # must not raise

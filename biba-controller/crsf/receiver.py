@@ -64,13 +64,52 @@ class CRSFReceiver:
         return max(-1.0, min(1.0, normalized))
 
     def get_channels(self) -> Optional[list[float]]:
-        """Return normalized RC channels when a packed channel frame is available."""
-        frame = self.read_frame()
-        if frame is None:
-            return None
+        """Return normalized RC channels from the latest available frame.
 
-        frame_type, payload = frame
-        if frame_type != FRAME_TYPE_RC_CHANNELS_PACKED:
-            return None
+        Drains all pending frames from the serial buffer so that stale data
+        is discarded and only the most recent channel values are returned.
+        This prevents input latency when frames accumulate (e.g. during a
+        blocking BMS poll).
+        """
+        if self.serial_port is None:
+            raise RuntimeError("CRSFReceiver serial port is not open")
 
-        return [self._normalize_channel(value) for value in self.parse_channels(payload)]
+        # Batch-read all bytes currently available on serial (non-blocking)
+        pending = self.serial_port.in_waiting
+        if pending:
+            self._buffer.extend(self.serial_port.read(pending))
+
+        # Drain all complete frames from the buffer, keeping latest channels
+        latest_payload: Optional[bytes] = None
+        while True:
+            raw_frame = pop_frame_from_buffer(self._buffer)
+            if raw_frame is None:
+                break
+            parsed = parse_frame(raw_frame)
+            if parsed is None:
+                continue
+            frame_type, payload = parsed
+            if frame_type == FRAME_TYPE_RC_CHANNELS_PACKED:
+                latest_payload = payload
+
+        if latest_payload is not None:
+            return [self._normalize_channel(v) for v in self.parse_channels(latest_payload)]
+
+        # Nothing buffered — do one blocking read to wait for next frame
+        data = self.serial_port.read(max(self.serial_port.in_waiting, 1))
+        if data:
+            self._buffer.extend(data)
+            while True:
+                raw_frame = pop_frame_from_buffer(self._buffer)
+                if raw_frame is None:
+                    break
+                parsed = parse_frame(raw_frame)
+                if parsed is None:
+                    continue
+                frame_type, payload = parsed
+                if frame_type == FRAME_TYPE_RC_CHANNELS_PACKED:
+                    latest_payload = payload
+
+        if latest_payload is None:
+            return None
+        return [self._normalize_channel(v) for v in self.parse_channels(latest_payload)]

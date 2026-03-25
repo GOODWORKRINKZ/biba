@@ -57,7 +57,16 @@ def test_parse_channels_rejects_short_payload() -> None:
 def test_get_channels_normalizes_channel_values() -> None:
     receiver = CRSFReceiver("/dev/null", 420000)
     raw_channels = [172, 992, 1811] + [992] * 13
-    receiver.read_frame = lambda: (FRAME_TYPE_RC_CHANNELS_PACKED, pack_channels(raw_channels))
+    frame = build_frame(FRAME_TYPE_RC_CHANNELS_PACKED, pack_channels(raw_channels))
+
+    receiver._buffer = bytearray(frame)
+
+    class FakeSerial:
+        in_waiting = 0
+        def read(self, n):
+            return b""
+
+    receiver.serial_port = FakeSerial()
 
     channels = receiver.get_channels()
 
@@ -75,6 +84,60 @@ def test_crc8_rejects_known_bad_data() -> None:
 
     assert crc_a != crc_b
     assert crc_a == crc8_dvb_s2(b"\x16\x01\x02\x03")
+
+
+def test_get_channels_returns_latest_when_multiple_frames_buffered() -> None:
+    """When several channel frames sit in the serial buffer, get_channels must
+    drain them all and return the LATEST data, not the oldest stale frame."""
+    receiver = CRSFReceiver("/dev/null", 420000)
+
+    old_channels = [172] + [992] * 15  # ch0 = -1.0  (stale)
+    new_channels = [1811] + [992] * 15  # ch0 = +1.0  (latest)
+
+    old_frame = build_frame(FRAME_TYPE_RC_CHANNELS_PACKED, pack_channels(old_channels))
+    new_frame = build_frame(FRAME_TYPE_RC_CHANNELS_PACKED, pack_channels(new_channels))
+
+    # Pre-fill internal buffer with two complete channel frames
+    receiver._buffer = bytearray(old_frame + new_frame)
+
+    class FakeSerial:
+        in_waiting = 0
+        def read(self, n):
+            return b""
+
+    receiver.serial_port = FakeSerial()
+
+    channels = receiver.get_channels()
+
+    assert channels is not None
+    # Must be the LATEST frame (+1.0), not the stale one (-1.0)
+    assert channels[0] == pytest.approx(1.0)
+
+
+def test_get_channels_skips_non_channel_frames_during_drain() -> None:
+    """Non-channel frames (e.g. link statistics) should be skipped while
+    draining; the latest channel frame should still be returned."""
+    from crsf.protocol import FRAME_TYPE_LINK_STATISTICS
+
+    receiver = CRSFReceiver("/dev/null", 420000)
+
+    ch_frame = build_frame(FRAME_TYPE_RC_CHANNELS_PACKED, pack_channels([1811] + [992] * 15))
+    # Link statistics frame (type 0x14) with dummy 10-byte payload
+    link_frame = build_frame(FRAME_TYPE_LINK_STATISTICS, b"\x00" * 10)
+
+    receiver._buffer = bytearray(ch_frame + link_frame)
+
+    class FakeSerial:
+        in_waiting = 0
+        def read(self, n):
+            return b""
+
+    receiver.serial_port = FakeSerial()
+
+    channels = receiver.get_channels()
+
+    assert channels is not None
+    assert channels[0] == pytest.approx(1.0)
 
 
 def test_pop_frame_from_buffer_handles_overflow() -> None:

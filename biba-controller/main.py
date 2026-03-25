@@ -12,11 +12,12 @@ import pigpio
 
 import config
 from bms.daly import BatteryState, DalyBMS
+from bms.poller import BMSPoller
 from buzzer.beacon import BeaconManager
 from buzzer.buzzer import Buzzer
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
-from motors.driver import DifferentialDrive, MotorDriver
+from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
@@ -115,6 +116,41 @@ def _connect_pigpio(retries: int = 5, delay: float = 1.0) -> pigpio.pi:
     return pigpio.pi()
 
 
+def _create_motor_pair(pi: pigpio.pi) -> tuple[object, object]:
+    if config.MOTOR_DRIVER_TYPE == "BTS7960":
+        left_motor = BTS7960MotorDriver(
+            pi,
+            config.LEFT_MOTOR_RPWM,
+            config.LEFT_MOTOR_LPWM,
+            config.LEFT_MOTOR_REN,
+            config.LEFT_MOTOR_LEN,
+            inverted=bool(config.MOTOR1_INVERTED),
+        )
+        right_motor = BTS7960MotorDriver(
+            pi,
+            config.RIGHT_MOTOR_RPWM,
+            config.RIGHT_MOTOR_LPWM,
+            config.RIGHT_MOTOR_REN,
+            config.RIGHT_MOTOR_LEN,
+            inverted=bool(config.MOTOR2_INVERTED),
+        )
+        return left_motor, right_motor
+
+    left_motor = MotorDriver(
+        pi,
+        config.MOTOR1_PWM,
+        config.MOTOR1_DIR,
+        inverted=bool(config.MOTOR1_INVERTED),
+    )
+    right_motor = MotorDriver(
+        pi,
+        config.MOTOR2_PWM,
+        config.MOTOR2_DIR,
+        inverted=bool(config.MOTOR2_INVERTED),
+    )
+    return left_motor, right_motor
+
+
 def _send_system_telemetry(telemetry: CRSFTelemetry, stats: SystemStats) -> None:
     telemetry.send_system_stats(
         cpu_pct=stats.cpu_percent(),
@@ -147,21 +183,11 @@ def main() -> int:
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = DalyBMS(config.BMS_PORT, config.BMS_BAUD)
+    bms_poller: Optional[BMSPoller] = None
     stats = SystemStats()
     pi = _connect_pigpio()
     if pi.connected:
-        left_motor = MotorDriver(
-            pi,
-            config.MOTOR1_PWM,
-            config.MOTOR1_DIR,
-            inverted=bool(config.MOTOR1_INVERTED),
-        )
-        right_motor = MotorDriver(
-            pi,
-            config.MOTOR2_PWM,
-            config.MOTOR2_DIR,
-            inverted=bool(config.MOTOR2_INVERTED),
-        )
+        left_motor, right_motor = _create_motor_pair(pi)
         drive = DifferentialDrive(left_motor, right_motor)
         buzzer = Buzzer(pi, config.BUZZER_PIN)
     else:
@@ -172,8 +198,6 @@ def main() -> int:
         delay_s=config.BEACON_DELAY_S,
         enabled=config.BEACON_ENABLED,
     )
-
-    bms_available = False
 
     try:
         receiver.open()
@@ -188,7 +212,8 @@ def main() -> int:
 
     try:
         bms.open()
-        bms_available = True
+        bms_poller = BMSPoller(bms, interval_s=config.BMS_POLL_INTERVAL_S)
+        bms_poller.start()
     except Exception as exc:
         LOGGER.warning("Daly BMS unavailable on %s: %s", config.BMS_PORT, exc)
 
@@ -199,9 +224,8 @@ def main() -> int:
     had_connection = False
     low_voltage_alarm_at = 0.0
     last_frame_time = time.monotonic()
-    last_bms_poll = 0.0
+    last_telemetry_send = 0.0
     _last_debug_log = 0.0
-    battery_state: Optional[BatteryState] = None
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
 
     LOGGER.info("BiBa controller started")
@@ -268,16 +292,9 @@ def main() -> int:
             if beacon.should_sos(loop_started_at):
                 buzzer.sos_beacon()
 
-            if loop_started_at - last_bms_poll >= config.BMS_POLL_INTERVAL_S:
-                last_bms_poll = loop_started_at
-                if bms_available:
-                    try:
-                        battery_state = bms.read_state()
-                    except Exception as exc:
-                        LOGGER.warning("Failed to poll Daly BMS: %s", exc)
-                        battery_state = None
-                else:
-                    battery_state = None
+            if loop_started_at - last_telemetry_send >= config.BMS_POLL_INTERVAL_S:
+                last_telemetry_send = loop_started_at
+                battery_state = bms_poller.latest_state if bms_poller else None
 
                 try:
                     _send_battery_telemetry(telemetry, battery_state)
@@ -300,6 +317,8 @@ def main() -> int:
                 time.sleep(loop_period - elapsed)
     finally:
         LOGGER.info("Shutting down BiBa controller")
+        if bms_poller:
+            bms_poller.stop()
         drive.emergency_stop()
         buzzer.shutdown_tone()
         buzzer.off()
