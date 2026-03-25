@@ -91,7 +91,7 @@ end
 
 local function read_drive()
   local thr = sensor("ch2", 0)
-  local str = sensor("ch1", 0)
+  local str = sensor("ch4", 0)
   -- ch values are -1024..1024 in EdgeTX
   local thr_n = thr / 1024
   local str_n = str / 1024
