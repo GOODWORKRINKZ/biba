@@ -50,3 +50,21 @@ def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.M
     assert module.MOTOR1_PWM == 18
     assert module.MOTOR1_INVERTED == 0
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.5)
+
+
+def test_docker_compose_exposes_beacon_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "BEACON_ENABLED:" in compose
+    assert "BEACON_DELAY_S:" in compose
+    assert "CH_BEACON:" in compose
+
+
+def test_env_example_documents_beacon_environment_variables() -> None:
+    with open(".env.example", encoding="utf-8") as env_file:
+        env_example = env_file.read()
+
+    assert "BEACON_ENABLED=" in env_example
+    assert "BEACON_DELAY_S=" in env_example
+    assert "CH_BEACON=" in env_example

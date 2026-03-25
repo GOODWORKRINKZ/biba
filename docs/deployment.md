@@ -105,6 +105,9 @@ bash ~/biba/scripts/diagnostics.sh
 | `CH_STEERING` | `0` | Номер канала руления |
 | `CH_THROTTLE` | `1` | Номер канала газа |
 | `CH_ARM` | `4` | Номер канала арма |
+| `BEACON_ENABLED` | `1` | Включить звуковой маяк/SOS на роботе |
+| `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
+| `CH_BEACON` | `5` | Канал тумблера для ручного включения маяка |
 | `MOTOR1_INVERTED` | `0` | Инверсия мотора 1 |
 | `MOTOR2_INVERTED` | `0` | Инверсия мотора 2 |
 
@@ -112,7 +115,22 @@ bash ~/biba/scripts/diagnostics.sh
 
 ```
 BIBA_IMAGE_TAG=latest
+BEACON_ENABLED=1
+BEACON_DELAY_S=300
+CH_BEACON=5
 ```
+
+### Звуковая индикация
+
+BiBa использует пьезо-буззер на GPIO17 для:
+
+- startup/shutdown мелодий
+- arm/disarm сигналов
+- low-voltage warning
+- сигнала потери связи
+- SOS-маяка после длительного failsafe
+
+На передатчике EdgeTX Lua-скрипт дополнительно проигрывает `playTone` события при старте, восстановлении/потере связи и low battery.
 
 ## Troubleshooting
 
