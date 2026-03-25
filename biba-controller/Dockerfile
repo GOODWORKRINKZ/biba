@@ -27,4 +27,4 @@ RUN ln -s /usr/local/lib/libpigpio.so.1 /usr/local/lib/libpigpio.so
 
 COPY . ./
 
-CMD ["sh", "-c", "pigpiod && python -u main.py"]
+CMD ["sh", "-c", "rm -f /var/run/pigpio.pid && pigpiod && sleep 1 && python -u main.py"]

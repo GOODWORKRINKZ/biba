@@ -100,6 +100,20 @@ def _battery_is_low(state: BatteryState) -> bool:
     return state.voltage <= config.LOW_PACK_VOLTAGE
 
 
+def _connect_pigpio(retries: int = 5, delay: float = 1.0) -> pigpio.pi:
+    """Try to connect to pigpiod, retrying on failure."""
+    for attempt in range(1, retries + 1):
+        pi = pigpio.pi()
+        if pi.connected:
+            return pi
+        pi.stop()
+        if attempt < retries:
+            LOGGER.warning("pigpio attempt %d/%d failed, retrying in %.1fs", attempt, retries, delay)
+            time.sleep(delay)
+    LOGGER.warning("pigpio: all %d attempts failed", retries)
+    return pigpio.pi()
+
+
 def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
     if state is None:
         telemetry.send_battery(
@@ -125,7 +139,7 @@ def main() -> int:
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = DalyBMS(config.BMS_PORT, config.BMS_BAUD)
-    pi = pigpio.pi()
+    pi = _connect_pigpio()
     if pi.connected:
         left_motor = MotorDriver(
             pi,

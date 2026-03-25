@@ -272,3 +272,50 @@ def test_main_sends_test_battery_telemetry_when_bms_is_unavailable(monkeypatch: 
 
     assert main.main() == 0
     assert sent_packets == [(25.0, 1.2, 0, 55)]
+
+
+def test_connect_pigpio_retries_on_initial_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_connect_pigpio should retry when first attempt fails and succeed on later attempt."""
+    main = importlib.import_module("main")
+
+    call_count = 0
+
+    class DisconnectedPi:
+        connected = False
+        def stop(self) -> None:
+            pass
+
+    class ConnectedPi:
+        connected = True
+        def stop(self) -> None:
+            pass
+
+    def fake_pi():
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            return DisconnectedPi()
+        return ConnectedPi()
+
+    monkeypatch.setattr(main.pigpio, "pi", fake_pi)
+    monkeypatch.setattr(main.time, "sleep", lambda _: None)
+
+    pi = main._connect_pigpio(retries=5, delay=0.5)
+    assert pi.connected is True
+    assert call_count == 3
+
+
+def test_connect_pigpio_returns_disconnected_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_connect_pigpio returns disconnected pi if all retries fail."""
+    main = importlib.import_module("main")
+
+    class DisconnectedPi:
+        connected = False
+        def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: DisconnectedPi())
+    monkeypatch.setattr(main.time, "sleep", lambda _: None)
+
+    pi = main._connect_pigpio(retries=3, delay=0.5)
+    assert pi.connected is False
