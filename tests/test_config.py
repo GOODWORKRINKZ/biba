@@ -62,6 +62,15 @@ def test_docker_compose_exposes_beacon_environment_variables() -> None:
     assert "CH_BEACON:" in compose
 
 
+def test_docker_compose_exposes_pigpio_device_mappings() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "/dev/gpiomem:/dev/gpiomem" in compose
+    assert "/dev/vcio:/dev/vcio" in compose
+    assert "/dev/mem:/dev/mem" in compose
+
+
 def test_env_example_documents_beacon_environment_variables() -> None:
     with open(".env.example", encoding="utf-8") as env_file:
         env_example = env_file.read()

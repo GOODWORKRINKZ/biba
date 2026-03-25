@@ -10,6 +10,8 @@ services:
       - /dev/ttyS0:/dev/ttyS0
       - /dev/ttyUSB0:/dev/ttyUSB0
       - /dev/gpiomem:/dev/gpiomem
+      - /dev/vcio:/dev/vcio
+      - /dev/mem:/dev/mem
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python.*main' || exit 1"]
       interval: 30s
