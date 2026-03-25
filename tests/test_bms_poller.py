@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import threading
 import time
 from typing import Optional
-
-import pytest
 
 from bms.daly import BatteryState
 from bms.poller import BMSPoller
