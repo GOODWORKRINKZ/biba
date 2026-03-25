@@ -22,6 +22,53 @@ LOGGER = logging.getLogger("biba-controller")
 RUNNING = True
 
 
+class _NullDrive:
+    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> None:
+        del throttle, steering, dt
+
+    def stop(self) -> None:
+        pass
+
+    def check_failsafe(self, last_frame_time: float) -> bool:
+        del last_frame_time
+        return False
+
+    def emergency_stop(self) -> None:
+        pass
+
+
+class _NullBuzzer:
+    def off(self) -> None:
+        pass
+
+    def startup_tone(self) -> None:
+        pass
+
+    def shutdown_tone(self) -> None:
+        pass
+
+    def connected_tone(self) -> None:
+        pass
+
+    def disconnected_tone(self) -> None:
+        pass
+
+    def arm_tone(self) -> None:
+        pass
+
+    def disarm_tone(self) -> None:
+        pass
+
+    def failsafe_tone(self) -> None:
+        pass
+
+    def sos_beacon(self) -> None:
+        pass
+
+    def low_voltage_alarm(self) -> None:
+        pass
+
+
 def _setup_logging() -> None:
     logging.basicConfig(
         level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
@@ -57,28 +104,29 @@ def main() -> int:
     """Run the BiBa control loop until a shutdown signal is received."""
     _setup_logging()
 
-    pi = pigpio.pi()
-    if not pi.connected:
-        LOGGER.error("Could not connect to pigpio daemon")
-        return 1
-
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = DalyBMS(config.BMS_PORT, config.BMS_BAUD)
-    left_motor = MotorDriver(
-        pi,
-        config.MOTOR1_PWM,
-        config.MOTOR1_DIR,
-        inverted=bool(config.MOTOR1_INVERTED),
-    )
-    right_motor = MotorDriver(
-        pi,
-        config.MOTOR2_PWM,
-        config.MOTOR2_DIR,
-        inverted=bool(config.MOTOR2_INVERTED),
-    )
-    drive = DifferentialDrive(left_motor, right_motor)
-    buzzer = Buzzer(pi, config.BUZZER_PIN)
+    pi = pigpio.pi()
+    if pi.connected:
+        left_motor = MotorDriver(
+            pi,
+            config.MOTOR1_PWM,
+            config.MOTOR1_DIR,
+            inverted=bool(config.MOTOR1_INVERTED),
+        )
+        right_motor = MotorDriver(
+            pi,
+            config.MOTOR2_PWM,
+            config.MOTOR2_DIR,
+            inverted=bool(config.MOTOR2_INVERTED),
+        )
+        drive = DifferentialDrive(left_motor, right_motor)
+        buzzer = Buzzer(pi, config.BUZZER_PIN)
+    else:
+        LOGGER.warning("Could not connect to pigpio daemon, starting in telemetry-only mode")
+        drive = _NullDrive()
+        buzzer = _NullBuzzer()
     beacon = BeaconManager(
         delay_s=config.BEACON_DELAY_S,
         enabled=config.BEACON_ENABLED,
@@ -93,7 +141,8 @@ def main() -> int:
         LOGGER.exception("Hardware initialization failed: %s", exc)
         drive.stop()
         buzzer.off()
-        pi.stop()
+        if pi.connected:
+            pi.stop()
         return 1
 
     try:
@@ -204,7 +253,8 @@ def main() -> int:
         buzzer.off()
         receiver.close()
         bms.close()
-        pi.stop()
+        if pi.connected:
+            pi.stop()
 
     return 0
 

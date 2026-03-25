@@ -61,15 +61,53 @@ def test_battery_is_low_falls_back_to_pack_voltage_without_cells(monkeypatch: py
     assert main._battery_is_low(state) is True
 
 
-def test_main_returns_error_when_pigpio_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_continues_when_pigpio_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
 
     class FakePi:
         connected = False
 
-    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+        def stop(self) -> None:
+            pass
 
-    assert main.main() == 1
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            return None
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main, "RUNNING", False)
+
+    assert main.main() == 0
 
 
 def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
