@@ -100,6 +100,24 @@ def _battery_is_low(state: BatteryState) -> bool:
     return state.voltage <= config.LOW_PACK_VOLTAGE
 
 
+def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
+    if state is None:
+        telemetry.send_battery(
+            voltage_v=0.0,
+            current_a=0.0,
+            capacity_mah=0,
+            remaining_pct=0,
+        )
+        return
+
+    telemetry.send_battery(
+        voltage_v=state.voltage,
+        current_a=max(0.0, state.current),
+        capacity_mah=0,
+        remaining_pct=int(round(state.soc)),
+    )
+
+
 def main() -> int:
     """Run the BiBa control loop until a shutdown signal is received."""
     _setup_logging()
@@ -218,26 +236,23 @@ def main() -> int:
             if beacon.should_sos(loop_started_at):
                 buzzer.sos_beacon()
 
-            if bms_available and loop_started_at - last_bms_poll >= config.BMS_POLL_INTERVAL_S:
+            if loop_started_at - last_bms_poll >= config.BMS_POLL_INTERVAL_S:
                 last_bms_poll = loop_started_at
-                try:
-                    battery_state = bms.read_state()
-                except Exception as exc:
-                    LOGGER.warning("Failed to poll Daly BMS: %s", exc)
+                if bms_available:
+                    try:
+                        battery_state = bms.read_state()
+                    except Exception as exc:
+                        LOGGER.warning("Failed to poll Daly BMS: %s", exc)
+                        battery_state = None
+                else:
                     battery_state = None
 
-                if battery_state is not None:
-                    remaining_pct = int(round(battery_state.soc))
-                    try:
-                        telemetry.send_battery(
-                            voltage_v=battery_state.voltage,
-                            current_a=max(0.0, battery_state.current),
-                            capacity_mah=0,
-                            remaining_pct=remaining_pct,
-                        )
-                    except Exception as exc:
-                        LOGGER.warning("Failed to send CRSF battery telemetry: %s", exc)
+                try:
+                    _send_battery_telemetry(telemetry, battery_state)
+                except Exception as exc:
+                    LOGGER.warning("Failed to send CRSF battery telemetry: %s", exc)
 
+                if battery_state is not None:
                     if _battery_is_low(battery_state) and loop_started_at - low_voltage_alarm_at > 3.0:
                         low_voltage_alarm_at = loop_started_at
                         LOGGER.warning("Low battery warning: %.2fV", battery_state.voltage)

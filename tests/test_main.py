@@ -210,3 +210,61 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0
+
+
+def test_main_sends_zero_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    sent_packets: list[tuple[float, float, int, int]] = []
+
+    class FakePi:
+        connected = False
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._read_count = 0
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            self._read_count += 1
+            main.RUNNING = False
+            return [0.0, 0.0, 0.0, 0.0, -1.0, 0.0]
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, voltage_v: float, current_a: float, capacity_mah: int, remaining_pct: int) -> None:
+            sent_packets.append((voltage_v, current_a, capacity_mah, remaining_pct))
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 0.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert sent_packets == [(0.0, 0.0, 0, 0)]
