@@ -191,6 +191,7 @@ def main() -> int:
     low_voltage_alarm_at = 0.0
     last_frame_time = time.monotonic()
     last_bms_poll = 0.0
+    _last_debug_log = 0.0
     battery_state: Optional[BatteryState] = None
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
 
@@ -227,6 +228,14 @@ def main() -> int:
 
                 throttle = _get_channel(channels, config.CH_THROTTLE)
                 steering = _get_channel(channels, config.CH_STEERING)
+                arm_ch = _get_channel(channels, config.CH_ARM)
+                if loop_started_at - _last_debug_log >= 1.0:
+                    _last_debug_log = loop_started_at
+                    ch_vals = [f"{v:+.2f}" for v in channels[:6]]
+                    LOGGER.info(
+                        "CH[%s] thr=%.2f str=%.2f arm_ch=%.2f armed=%s",
+                        ",".join(ch_vals), throttle, steering, arm_ch, armed,
+                    )
                 if armed:
                     drive.drive(throttle, steering, loop_period)
                 else:
