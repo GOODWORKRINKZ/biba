@@ -88,15 +88,15 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 Тип драйвера и распиновку можно переопределить через переменные окружения в `docker-compose.yml`:
 
-- `MOTOR_DRIVER_TYPE=PWM_DIR|BTS7960`
+- `MOTOR_DRIVER_TYPE=BTS7960|PWM_DIR`
 - `LEFT_MOTOR_RPWM=18`
 - `LEFT_MOTOR_LPWM=13`
 - `LEFT_MOTOR_REN=23`
-- `LEFT_MOTOR_LEN=24`
+- `LEFT_MOTOR_LEN=23`
 - `RIGHT_MOTOR_RPWM=12`
 - `RIGHT_MOTOR_LPWM=16`
 - `RIGHT_MOTOR_REN=20`
-- `RIGHT_MOTOR_LEN=21`
+- `RIGHT_MOTOR_LEN=20`
 - `MOTOR1_INVERTED=0|1`
 - `MOTOR2_INVERTED=0|1`
 - `BEACON_ENABLED=0|1`

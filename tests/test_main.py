@@ -207,6 +207,7 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(main, "Buzzer", FakeBuzzer)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "MOTOR_DRIVER_TYPE", "PWM_DIR")
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0

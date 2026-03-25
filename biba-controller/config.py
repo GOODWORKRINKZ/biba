@@ -35,7 +35,7 @@ def _get_env_choice(name: str, default: str, choices: set[str]) -> str:
     return default
 
 
-MOTOR_DRIVER_TYPE = _get_env_choice("MOTOR_DRIVER_TYPE", "PWM_DIR", {"PWM_DIR", "BTS7960"})
+MOTOR_DRIVER_TYPE = _get_env_choice("MOTOR_DRIVER_TYPE", "BTS7960", {"PWM_DIR", "BTS7960"})
 MOTOR1_PWM = _get_env_int("MOTOR1_PWM", 18)
 MOTOR1_DIR = _get_env_int("MOTOR1_DIR", 23)
 MOTOR2_PWM = _get_env_int("MOTOR2_PWM", 13)
@@ -43,11 +43,11 @@ MOTOR2_DIR = _get_env_int("MOTOR2_DIR", 24)
 LEFT_MOTOR_RPWM = _get_env_int("LEFT_MOTOR_RPWM", 18)
 LEFT_MOTOR_LPWM = _get_env_int("LEFT_MOTOR_LPWM", 13)
 LEFT_MOTOR_REN = _get_env_int("LEFT_MOTOR_REN", 23)
-LEFT_MOTOR_LEN = _get_env_int("LEFT_MOTOR_LEN", 24)
+LEFT_MOTOR_LEN = _get_env_int("LEFT_MOTOR_LEN", 23)
 RIGHT_MOTOR_RPWM = _get_env_int("RIGHT_MOTOR_RPWM", 12)
 RIGHT_MOTOR_LPWM = _get_env_int("RIGHT_MOTOR_LPWM", 16)
 RIGHT_MOTOR_REN = _get_env_int("RIGHT_MOTOR_REN", 20)
-RIGHT_MOTOR_LEN = _get_env_int("RIGHT_MOTOR_LEN", 21)
+RIGHT_MOTOR_LEN = _get_env_int("RIGHT_MOTOR_LEN", 20)
 MOTOR1_INVERTED = _get_env_int("MOTOR1_INVERTED", 0)
 MOTOR2_INVERTED = _get_env_int("MOTOR2_INVERTED", 0)
 BUZZER_PIN = _get_env_int("BUZZER_PIN", 17)
