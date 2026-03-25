@@ -7,7 +7,7 @@ services:
     privileged: true
     restart: unless-stopped
     devices:
-      - /dev/ttyAMA0:/dev/ttyAMA0
+      - /dev/ttyS0:/dev/ttyS0
       - /dev/ttyUSB0:/dev/ttyUSB0
       - /dev/gpiomem:/dev/gpiomem
     healthcheck:
@@ -17,7 +17,7 @@ services:
       retries: 3
       start_period: 15s
     environment:
-      CRSF_PORT: /dev/ttyAMA0
+      CRSF_PORT: /dev/ttyS0
       BMS_PORT: /dev/ttyUSB0
       LOG_LEVEL: INFO
       CH_STEERING: 0

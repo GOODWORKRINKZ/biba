@@ -21,6 +21,7 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR1_PWM == 18
     assert module.MOTOR1_INVERTED == 0
     assert module.MOTOR2_INVERTED == 0
+    assert module.CRSF_PORT == "/dev/ttyS0"
     assert module.LOG_LEVEL == "INFO"
 
 

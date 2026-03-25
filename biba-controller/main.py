@@ -84,16 +84,23 @@ def main() -> int:
         enabled=config.BEACON_ENABLED,
     )
 
+    bms_available = False
+
     try:
         receiver.open()
         telemetry.attach(receiver.serial_port)
-        bms.open()
     except Exception as exc:
         LOGGER.exception("Hardware initialization failed: %s", exc)
         drive.stop()
         buzzer.off()
         pi.stop()
         return 1
+
+    try:
+        bms.open()
+        bms_available = True
+    except Exception as exc:
+        LOGGER.warning("Daly BMS unavailable on %s: %s", config.BMS_PORT, exc)
 
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
@@ -162,7 +169,7 @@ def main() -> int:
             if beacon.should_sos(loop_started_at):
                 buzzer.sos_beacon()
 
-            if loop_started_at - last_bms_poll >= config.BMS_POLL_INTERVAL_S:
+            if bms_available and loop_started_at - last_bms_poll >= config.BMS_POLL_INTERVAL_S:
                 last_bms_poll = loop_started_at
                 try:
                     battery_state = bms.read_state()

@@ -33,7 +33,7 @@ MOTOR1_INVERTED = _get_env_int("MOTOR1_INVERTED", 0)
 MOTOR2_INVERTED = _get_env_int("MOTOR2_INVERTED", 0)
 BUZZER_PIN = _get_env_int("BUZZER_PIN", 17)
 
-CRSF_PORT = os.getenv("CRSF_PORT", "/dev/ttyAMA0")
+CRSF_PORT = os.getenv("CRSF_PORT", "/dev/ttyS0")
 CRSF_BAUD = _get_env_int("CRSF_BAUD", 420000)
 BMS_PORT = os.getenv("BMS_PORT", "/dev/ttyUSB0")
 BMS_BAUD = _get_env_int("BMS_BAUD", 9600)
