@@ -101,6 +101,18 @@ local function read_drive()
 end
 
 -- ──────────────────────────────────────────────────
+-- System stats from Pi (sent via GPS frame)
+-- GSpd = CPU%, Sats = RAM%
+-- ──────────────────────────────────────────────────
+
+local function read_system()
+  local cpu_raw = sensor("GSpd", 0)
+  local ram = sensor("Sats", 0)
+  -- GSpd is in km/h*10 units from CRSF, divide to get percent
+  return math.floor(cpu_raw / 10), math.floor(ram)
+end
+
+-- ──────────────────────────────────────────────────
 -- Drawing: disconnected screen
 -- ──────────────────────────────────────────────────
 
@@ -132,31 +144,33 @@ end
 --   x,y = top-left, w/h = size, spd = -1..1
 -- ──────────────────────────────────────────────────
 
-local function draw_wheel(x, y, ww, wh, spd)
+local function draw_wheel(x, y, ww, wh, spd, arrow_w)
+  arrow_w = arrow_w or 2
   -- Wheel outline (filled dark rectangle)
   lcd.drawFilledRectangle(x, y, ww, wh)
 
   if math.abs(spd) < 0.05 then return end
 
-  -- Draw tread marks / motion arrows inside wheel
+  -- Arrow count based on speed: each arrow = 20% throttle
   local mid_x = x + math.floor(ww / 2)
-  local slots = 4
-  local slot_h = math.floor(wh / (slots + 1))
-  -- Animation phase based on time and speed
-  local phase = math.floor(getTime() / math.max(4, math.floor(20 / (math.abs(spd) + 0.01)))) % slots
+  local pct = math.abs(spd) * 100
+  local count = math.min(5, math.floor(pct / 20))
+  if count == 0 then return end
 
-  for i = 0, slots - 1 do
-    local sy = y + 2 + ((i + phase) % slots) * slot_h
-    if sy + 2 < y + wh - 1 then
-      if spd > 0 then
-        -- Forward: upward chevron ↑
-        lcd.drawLine(mid_x - 2, sy + 2, mid_x, sy, SOLID, ERASE)
-        lcd.drawLine(mid_x, sy, mid_x + 2, sy + 2, SOLID, ERASE)
-      else
-        -- Reverse: downward chevron ↓
-        lcd.drawLine(mid_x - 2, sy, mid_x, sy + 2, SOLID, ERASE)
-        lcd.drawLine(mid_x, sy + 2, mid_x + 2, sy, SOLID, ERASE)
-      end
+  local margin = 2
+  local usable_h = wh - margin * 2
+  local slot_h = math.floor(usable_h / 5)
+
+  for i = 0, count - 1 do
+    local sy = y + margin + i * slot_h + math.floor(slot_h / 2)
+    if spd > 0 then
+      -- Forward: upward chevron
+      lcd.drawLine(mid_x - arrow_w, sy + arrow_w, mid_x, sy, SOLID, ERASE)
+      lcd.drawLine(mid_x, sy, mid_x + arrow_w, sy + arrow_w, SOLID, ERASE)
+    else
+      -- Reverse: downward chevron
+      lcd.drawLine(mid_x - arrow_w, sy, mid_x, sy + arrow_w, SOLID, ERASE)
+      lcd.drawLine(mid_x, sy + arrow_w, mid_x + arrow_w, sy, SOLID, ERASE)
     end
   end
 end
@@ -177,7 +191,7 @@ end
 -- Drawing: compact connected (128×64)
 -- ──────────────────────────────────────────────────
 
-local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
+local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
   local w = sw()
 
   -- Header with link quality and battery source
@@ -188,7 +202,7 @@ local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, 
 
   -- Robot body: front view centred
   -- Layout: [wheel] [  body  ] [wheel]
-  local wheel_w = 8
+  local wheel_w = 7
   local wheel_h = 36
   local body_w  = w - wheel_w * 2 - 8
   local body_h  = 30
@@ -215,6 +229,9 @@ local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, 
   draw_bat_bar(inner_x, inner_y + 14, bar_w, 6, pct)
 
   lcd.drawText(inner_x, inner_y + 22, string.format("%.1fA", current), SMLSIZE)
+  if cpu > 0 or ram > 0 then
+    lcd.drawText(inner_x + 32, inner_y + 22, string.format("C%d M%d", cpu, ram), SMLSIZE)
+  end
 
   -- Bottom: cells + stats
   local cy = body_y + body_h + 4
@@ -243,7 +260,7 @@ end
 -- Drawing: wide connected (≥212×128)
 -- ──────────────────────────────────────────────────
 
-local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
+local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
   local w, h = sw(), sh()
 
   -- Header with link quality and battery source
@@ -253,7 +270,7 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
   lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
 
   -- Robot body: front view centred
-  local wheel_w  = 18
+  local wheel_w  = 17
   local wheel_h  = 70
   local body_w   = w - wheel_w * 2 - 24
   local body_h   = 56
@@ -262,8 +279,8 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
   local wheel_y  = body_y + math.floor((body_h - wheel_h) / 2)
 
   -- Wheels
-  draw_wheel(4, wheel_y, wheel_w, wheel_h, left_spd)
-  draw_wheel(w - wheel_w - 4, wheel_y, wheel_w, wheel_h, right_spd)
+  draw_wheel(4, wheel_y, wheel_w, wheel_h, left_spd, 3)
+  draw_wheel(w - wheel_w - 4, wheel_y, wheel_w, wheel_h, right_spd, 3)
 
   -- Body
   lcd.drawRectangle(body_x, body_y, body_w, body_h)
@@ -294,6 +311,11 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
   lcd.drawText(4, bottom_y, string.format("Min %.2fV", mn), SMLSIZE)
   lcd.drawText(math.floor(w / 3), bottom_y, string.format("Max %.2fV", mx), SMLSIZE)
   lcd.drawText(math.floor(w * 2 / 3), bottom_y, string.format("Delta %.3fV", delta), SMLSIZE)
+
+  -- System stats from Pi
+  if cpu > 0 or ram > 0 then
+    lcd.drawText(4, bottom_y + 10, string.format("CPU %d%%  RAM %d%%", cpu, ram), SMLSIZE)
+  end
 
   -- Low warning
   if mn > 0 and mn < LOW_CELL_VOLTAGE and math.floor(getTime() / 50) % 2 == 0 then
@@ -374,11 +396,12 @@ local function run(event)
   local cells, cell_src = read_cells(voltage)
   local mn, mx, delta = cell_stats(cells)
   local left_spd, right_spd = read_drive()
+  local cpu, ram = read_system()
 
   if sw() >= 212 and sh() >= 128 then
-    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
+    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
   else
-    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
+    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
   end
 
   -- Low battery sound (every ~10 seconds)

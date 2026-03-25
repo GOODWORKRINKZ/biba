@@ -6,7 +6,7 @@ from typing import Optional
 
 import serial
 
-from crsf.protocol import FRAME_TYPE_BATTERY_SENSOR, build_frame
+from crsf.protocol import FRAME_TYPE_BATTERY_SENSOR, FRAME_TYPE_GPS, build_frame
 
 
 class CRSFTelemetry:
@@ -42,3 +42,29 @@ class CRSFTelemetry:
         payload.append(percentage)
 
         self.serial_port.write(build_frame(FRAME_TYPE_BATTERY_SENSOR, bytes(payload)))
+
+    def send_system_stats(self, cpu_pct: float, mem_pct: float) -> None:
+        """Send CPU and memory usage via CRSF GPS frame.
+
+        CPU percentage is encoded as ground speed (GSpd sensor).
+        Memory percentage is encoded as satellite count (Sats sensor).
+        """
+        if self.serial_port is None:
+            raise RuntimeError("CRSFTelemetry serial port is not attached")
+
+        latitude = 0
+        longitude = 0
+        groundspeed = max(0, min(65535, int(round(cpu_pct * 10))))
+        heading = 0
+        altitude = 1000  # 0m with CRSF 1000m offset
+        satellites = max(0, min(255, int(round(mem_pct))))
+
+        payload = bytearray()
+        payload.extend(latitude.to_bytes(4, byteorder="big", signed=True))
+        payload.extend(longitude.to_bytes(4, byteorder="big", signed=True))
+        payload.extend(groundspeed.to_bytes(2, byteorder="big", signed=False))
+        payload.extend(heading.to_bytes(2, byteorder="big", signed=False))
+        payload.extend(altitude.to_bytes(2, byteorder="big", signed=False))
+        payload.append(satellites)
+
+        self.serial_port.write(build_frame(FRAME_TYPE_GPS, bytes(payload)))

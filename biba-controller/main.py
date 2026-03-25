@@ -17,6 +17,7 @@ from buzzer.buzzer import Buzzer
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
 from motors.driver import DifferentialDrive, MotorDriver
+from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
 RUNNING = True
@@ -114,6 +115,13 @@ def _connect_pigpio(retries: int = 5, delay: float = 1.0) -> pigpio.pi:
     return pigpio.pi()
 
 
+def _send_system_telemetry(telemetry: CRSFTelemetry, stats: SystemStats) -> None:
+    telemetry.send_system_stats(
+        cpu_pct=stats.cpu_percent(),
+        mem_pct=stats.memory_percent(),
+    )
+
+
 def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
     if state is None:
         telemetry.send_battery(
@@ -139,6 +147,7 @@ def main() -> int:
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = DalyBMS(config.BMS_PORT, config.BMS_BAUD)
+    stats = SystemStats()
     pi = _connect_pigpio()
     if pi.connected:
         left_motor = MotorDriver(
@@ -274,6 +283,11 @@ def main() -> int:
                     _send_battery_telemetry(telemetry, battery_state)
                 except Exception as exc:
                     LOGGER.warning("Failed to send CRSF battery telemetry: %s", exc)
+
+                try:
+                    _send_system_telemetry(telemetry, stats)
+                except Exception as exc:
+                    LOGGER.warning("Failed to send CRSF system telemetry: %s", exc)
 
                 if battery_state is not None:
                     if _battery_is_low(battery_state) and loop_started_at - low_voltage_alarm_at > 3.0:
