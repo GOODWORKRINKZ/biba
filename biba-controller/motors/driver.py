@@ -7,6 +7,7 @@ import time
 import pigpio
 
 import config
+from motors.ramping import SpeedRamp
 
 
 class MotorDriver:
@@ -44,26 +45,42 @@ class DifferentialDrive:
     def __init__(self, left_motor: MotorDriver, right_motor: MotorDriver) -> None:
         self.left_motor = left_motor
         self.right_motor = right_motor
+        self._left_ramp = SpeedRamp(
+            accel_rate=config.RAMP_ACCEL_RATE,
+            decel_rate=config.RAMP_DECEL_RATE,
+            deadband=config.MOTOR_DEADBAND,
+        )
+        self._right_ramp = SpeedRamp(
+            accel_rate=config.RAMP_ACCEL_RATE,
+            decel_rate=config.RAMP_DECEL_RATE,
+            deadband=config.MOTOR_DEADBAND,
+        )
 
     @staticmethod
     def _clamp(value: float) -> float:
         return max(-1.0, min(1.0, value))
 
-    def drive(self, throttle: float, steering: float) -> None:
+    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> None:
         """Apply throttle and steering to the left and right motor outputs."""
         left = self._clamp(throttle + steering)
         right = self._clamp(throttle - steering)
-        self.left_motor.set_speed(left)
-        self.right_motor.set_speed(right)
+        self.left_motor.set_speed(self._left_ramp.update(left, dt))
+        self.right_motor.set_speed(self._right_ramp.update(right, dt))
+
+    def emergency_stop(self) -> None:
+        """Bypass ramp and stop motors immediately (shutdown only)."""
+        self._left_ramp.reset()
+        self._right_ramp.reset()
+        self.left_motor.stop()
+        self.right_motor.stop()
 
     def stop(self) -> None:
-        """Stop both drive motors."""
+        """Stop both drive motors immediately (legacy, no ramp)."""
         self.left_motor.stop()
         self.right_motor.stop()
 
     def check_failsafe(self, last_frame_time: float) -> bool:
-        """Stop the platform when no fresh CRSF frame arrives in time."""
+        """Flag failsafe when no fresh CRSF frame arrives in time."""
         if time.monotonic() - last_frame_time > config.FAILSAFE_TIMEOUT_S:
-            self.stop()
             return True
         return False

@@ -73,10 +73,15 @@ def test_differential_drive_mixes_throttle_and_steering() -> None:
     right_motor = FakeMotor()
     drive = DifferentialDrive(left_motor, right_motor)
 
+    # With default ramp (accel_rate=2.0, dt=0.02): max_step=0.04
+    # target left=1.0, target right=0.25
     drive.drive(0.75, 0.5)
 
-    assert left_motor.speed_calls == [1.0]
-    assert right_motor.speed_calls == [0.25]
+    # Both outputs are ramped from 0 — capped at accel step
+    assert len(left_motor.speed_calls) == 1
+    assert len(right_motor.speed_calls) == 1
+    assert left_motor.speed_calls[0] == pytest.approx(0.04)
+    assert right_motor.speed_calls[0] == pytest.approx(0.04)
 
 
 def test_check_failsafe_stops_platform_when_frame_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,6 +91,7 @@ def test_check_failsafe_stops_platform_when_frame_is_stale(monkeypatch: pytest.M
 
     monkeypatch.setattr("motors.driver.time.monotonic", lambda: 10.0)
 
+    # check_failsafe now only returns True, does not call stop()
     assert drive.check_failsafe(8.0) is True
-    assert left_motor.stop_calls == 1
-    assert right_motor.stop_calls == 1
+    assert left_motor.stop_calls == 0
+    assert right_motor.stop_calls == 0

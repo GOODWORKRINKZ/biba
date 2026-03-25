@@ -135,15 +135,14 @@ def main() -> int:
                         buzzer.arm_tone()
                     else:
                         LOGGER.info("Platform disarmed")
-                        drive.stop()
                         buzzer.disarm_tone()
 
                 throttle = _get_channel(channels, config.CH_THROTTLE)
                 steering = _get_channel(channels, config.CH_STEERING)
                 if armed:
-                    drive.drive(throttle, steering)
+                    drive.drive(throttle, steering, loop_period)
                 else:
-                    drive.stop()
+                    drive.drive(0.0, 0.0, loop_period)
 
                 # Manual beacon toggle via RC channel
                 beacon_ch = _get_channel(channels, config.CH_BEACON)
@@ -153,6 +152,7 @@ def main() -> int:
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
                     buzzer.failsafe_tone()
+                drive.drive(0.0, 0.0, loop_period)
                 if had_connection:
                     had_connection = False
                     buzzer.disconnected_tone()
@@ -192,7 +192,7 @@ def main() -> int:
                 time.sleep(loop_period - elapsed)
     finally:
         LOGGER.info("Shutting down BiBa controller")
-        drive.stop()
+        drive.emergency_stop()
         buzzer.shutdown_tone()
         buzzer.off()
         receiver.close()

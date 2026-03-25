@@ -53,6 +53,11 @@ PWM_FREQUENCY_HZ = _get_env_int("PWM_FREQUENCY_HZ", 20000)
 SERIAL_TIMEOUT_S = _get_env_float("SERIAL_TIMEOUT_S", 0.02)
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# Motor ramping / slew rate
+RAMP_ACCEL_RATE = _get_env_float("RAMP_ACCEL_RATE", 2.0)
+RAMP_DECEL_RATE = _get_env_float("RAMP_DECEL_RATE", 3.0)
+MOTOR_DEADBAND = _get_env_float("MOTOR_DEADBAND", 0.05)
+
 # Beacon / SOS
 BEACON_ENABLED = bool(_get_env_int("BEACON_ENABLED", 1))
 BEACON_DELAY_S = _get_env_float("BEACON_DELAY_S", 300.0)
