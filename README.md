@@ -8,7 +8,7 @@ BiBa — это колесная робот-платформа на базе Ras
 - ELRS-приемник с подключением по UART/CRSF
 - Daly BMS с USB-UART адаптером
 - 6S аккумулятор с телеметрией BMS
-- Двухканальный драйвер моторов с входами PWM и DIR
+- Два драйвера BTS7960 для левого и правого моторов
 - Буззер на GPIO17
 
 ## Распиновка
@@ -18,10 +18,14 @@ BiBa — это колесная робот-платформа на базе Ras
 | ELRS TX | 14 | 8 |
 | ELRS RX | 15 | 10 |
 | Buzzer | 17 | 11 |
-| Motor 1 PWM | 18 | 12 |
-| Motor 1 DIR | 23 | 16 |
-| Motor 2 DIR | 24 | 18 |
-| Motor 2 PWM | 13 | 33 |
+| Left BTS7960 RPWM | 18 | 12 |
+| Left BTS7960 LPWM | 13 | 33 |
+| Left BTS7960 REN | 23 | 16 |
+| Left BTS7960 LEN | 24 | 18 |
+| Right BTS7960 RPWM | 12 | 32 |
+| Right BTS7960 LPWM | 16 | 36 |
+| Right BTS7960 REN | 20 | 38 |
+| Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
 
 Подробное описание подключения находится в [docs/wiring.md](docs/wiring.md).
@@ -82,8 +86,17 @@ docker compose up -d
 
 Docker-образ собирается под `linux/arm64`, чтобы совпадать с Raspberry Pi Zero 2W. Для этого `pigpiod` собирается внутри образа из upstream `pigpio`, так как готовый пакет `pigpio` отсутствует в Debian bookworm arm64.
 
-Направление вращения каждого колеса можно переопределить через переменные окружения в `docker-compose.yml`:
+Тип драйвера и распиновку можно переопределить через переменные окружения в `docker-compose.yml`:
 
+- `MOTOR_DRIVER_TYPE=PWM_DIR|BTS7960`
+- `LEFT_MOTOR_RPWM=18`
+- `LEFT_MOTOR_LPWM=13`
+- `LEFT_MOTOR_REN=23`
+- `LEFT_MOTOR_LEN=24`
+- `RIGHT_MOTOR_RPWM=12`
+- `RIGHT_MOTOR_LPWM=16`
+- `RIGHT_MOTOR_REN=20`
+- `RIGHT_MOTOR_LEN=21`
 - `MOTOR1_INVERTED=0|1`
 - `MOTOR2_INVERTED=0|1`
 - `BEACON_ENABLED=0|1`

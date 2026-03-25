@@ -39,6 +39,69 @@ class MotorDriver:
         self.pi.set_PWM_dutycycle(self.pwm_pin, 0)
 
 
+class BTS7960MotorDriver:
+    """Control one motor through BTS7960 RPWM/LPWM and enable pins."""
+
+    def __init__(
+        self,
+        pi: pigpio.pi,
+        rpwm_pin: int,
+        lpwm_pin: int,
+        ren_pin: int,
+        len_pin: int,
+        inverted: bool = False,
+    ) -> None:
+        self.pi = pi
+        self.rpwm_pin = rpwm_pin
+        self.lpwm_pin = lpwm_pin
+        self.ren_pin = ren_pin
+        self.len_pin = len_pin
+        self.inverted = inverted
+
+        for pin in self._unique_pins(self.rpwm_pin, self.lpwm_pin, self.ren_pin, self.len_pin):
+            self.pi.set_mode(pin, pigpio.OUTPUT)
+
+        self.pi.set_PWM_frequency(self.rpwm_pin, config.PWM_FREQUENCY_HZ)
+        self.pi.set_PWM_frequency(self.lpwm_pin, config.PWM_FREQUENCY_HZ)
+
+        for pin in self._unique_pins(self.ren_pin, self.len_pin):
+            self.pi.write(pin, 1)
+
+        self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
+        self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
+
+    @staticmethod
+    def _unique_pins(*pins: int) -> list[int]:
+        seen: set[int] = set()
+        unique: list[int] = []
+        for pin in pins:
+            if pin not in seen:
+                seen.add(pin)
+                unique.append(pin)
+        return unique
+
+    def set_speed(self, value: float) -> None:
+        """Set motor speed in the range -1.0..1.0."""
+        clamped = max(-1.0, min(1.0, value))
+        if self.inverted:
+            clamped *= -1.0
+
+        duty_cycle = int(abs(clamped) * 255)
+        if clamped > 0.0:
+            self.pi.set_PWM_dutycycle(self.rpwm_pin, duty_cycle)
+            self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
+        elif clamped < 0.0:
+            self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
+            self.pi.set_PWM_dutycycle(self.lpwm_pin, duty_cycle)
+        else:
+            self.stop()
+
+    def stop(self) -> None:
+        """Stop the motor immediately."""
+        self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
+        self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
+
+
 class DifferentialDrive:
     """Apply arcade mixing for a two-wheel robot."""
 

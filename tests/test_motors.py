@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from motors.driver import DifferentialDrive, MotorDriver
+from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 
 
 class FakePi:
@@ -66,6 +66,53 @@ def test_motor_driver_can_invert_direction_logic() -> None:
 
     assert pi.write_calls[-1] == (23, 0)
     assert pi.duty_calls[-1] == (18, 127)
+
+
+def test_bts7960_motor_driver_initializes_pwm_and_enable_pins() -> None:
+    pi = FakePi()
+
+    BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+
+    assert pi.mode_calls == [(18, 1), (13, 1), (23, 1), (24, 1)]
+    assert pi.frequency_calls == [(18, 20000), (13, 20000)]
+    assert pi.write_calls == [(23, 1), (24, 1)]
+    assert pi.duty_calls == [(18, 0), (13, 0)]
+
+
+def test_bts7960_motor_driver_uses_rpwm_for_forward_motion() -> None:
+    pi = FakePi()
+    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+
+    driver.set_speed(0.5)
+
+    assert pi.duty_calls[-2:] == [(18, 127), (13, 0)]
+
+
+def test_bts7960_motor_driver_uses_lpwm_for_reverse_motion() -> None:
+    pi = FakePi()
+    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+
+    driver.set_speed(-0.5)
+
+    assert pi.duty_calls[-2:] == [(18, 0), (13, 127)]
+
+
+def test_bts7960_motor_driver_can_invert_direction_logic() -> None:
+    pi = FakePi()
+    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24, inverted=True)
+
+    driver.set_speed(0.5)
+
+    assert pi.duty_calls[-2:] == [(18, 0), (13, 127)]
+
+
+def test_bts7960_motor_driver_supports_shared_enable_pin() -> None:
+    pi = FakePi()
+
+    BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=23)
+
+    assert pi.mode_calls == [(18, 1), (13, 1), (23, 1)]
+    assert pi.write_calls == [(23, 1)]
 
 
 def test_differential_drive_mixes_throttle_and_steering() -> None:

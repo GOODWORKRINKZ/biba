@@ -102,6 +102,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `CRSF_PORT` | `/dev/ttyAMA0` | UART-порт ELRS |
 | `BMS_PORT` | `/dev/ttyUSB0` | USB-UART порт Daly BMS |
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
+| `MOTOR_DRIVER_TYPE` | `PWM_DIR` | Тип драйвера моторов: старый `PWM_DIR` или `BTS7960` |
 | `CH_STEERING` | `0` | Номер канала руления |
 | `CH_THROTTLE` | `1` | Номер канала газа |
 | `CH_ARM` | `4` | Номер канала арма |
@@ -111,6 +112,14 @@ bash ~/biba/scripts/diagnostics.sh
 | `RAMP_ACCEL_RATE` | `2.0` | Макс. скорость разгона мотора (ед/сек); 0→100% за 0.5с |
 | `RAMP_DECEL_RATE` | `3.0` | Макс. скорость торможения (ед/сек); 100%→0 за 0.33с |
 | `MOTOR_DEADBAND` | `0.05` | Мёртвая зона: значения ниже порога → мотор стоит |
+| `LEFT_MOTOR_RPWM` | `18` | Левый BTS7960 `RPWM` |
+| `LEFT_MOTOR_LPWM` | `13` | Левый BTS7960 `LPWM` |
+| `LEFT_MOTOR_REN` | `23` | Левый BTS7960 `REN` |
+| `LEFT_MOTOR_LEN` | `24` | Левый BTS7960 `LEN` |
+| `RIGHT_MOTOR_RPWM` | `12` | Правый BTS7960 `RPWM` |
+| `RIGHT_MOTOR_LPWM` | `16` | Правый BTS7960 `LPWM` |
+| `RIGHT_MOTOR_REN` | `20` | Правый BTS7960 `REN` |
+| `RIGHT_MOTOR_LEN` | `21` | Правый BTS7960 `LEN` |
 | `MOTOR1_INVERTED` | `0` | Инверсия мотора 1 |
 | `MOTOR2_INVERTED` | `0` | Инверсия мотора 2 |
 
@@ -118,6 +127,7 @@ bash ~/biba/scripts/diagnostics.sh
 
 ```
 BIBA_IMAGE_TAG=latest
+MOTOR_DRIVER_TYPE=BTS7960
 BEACON_ENABLED=1
 BEACON_DELAY_S=300
 CH_BEACON=5
