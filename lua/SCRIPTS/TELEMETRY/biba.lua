@@ -55,12 +55,13 @@ end
 
 local function read_cells(pack_v)
   local c = cell_list(getValue("Cels"))
-  if #c > 0 then return c end
+  if #c > 0 then return c, "BMS" end
   if pack_v and pack_v > 0 then
     local fb = pack_v / CELL_COUNT
     for i = 1, CELL_COUNT do c[i] = fb end
+    return c, "PCK"
   end
-  return c
+  return c, ""
 end
 
 local function cell_stats(cells)
@@ -176,12 +177,14 @@ end
 -- Drawing: compact connected (128×64)
 -- ──────────────────────────────────────────────────
 
-local function draw_compact(voltage, current, pct, rssi, cells, mn, mx, delta, left_spd, right_spd)
+local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
   local w = sw()
 
-  -- Header
+  -- Header with link quality and battery source
   lcd.drawText(0, 0, "BiBa", SMLSIZE)
-  lcd.drawText(w - 34, 0, string.format("R:%d", rssi), SMLSIZE)
+  local hdr = string.format("R%d Q%d", rssi, rqly)
+  if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
+  lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
 
   -- Robot body: front view centred
   -- Layout: [wheel] [  body  ] [wheel]
@@ -240,12 +243,14 @@ end
 -- Drawing: wide connected (≥212×128)
 -- ──────────────────────────────────────────────────
 
-local function draw_wide(voltage, current, pct, rssi, cells, mn, mx, delta, left_spd, right_spd)
+local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
   local w, h = sw(), sh()
 
-  -- Header
+  -- Header with link quality and battery source
   lcd.drawText(4, 2, "BiBa", DBLSIZE)
-  lcd.drawText(w - 64, 4, string.format("RSSI %d", rssi), SMLSIZE)
+  local hdr = string.format("RSSI %d  Q %d%%", rssi, rqly)
+  if cell_src ~= "" then hdr = hdr .. "  " .. cell_src end
+  lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
 
   -- Robot body: front view centred
   local wheel_w  = 18
@@ -365,14 +370,15 @@ local function run(event)
   local current = sensor("Curr", 0)
   local pct     = sensor({ "Bat%", "Fuel" }, 0)
   local rssi    = sensor("RSSI", 0)
-  local cells   = read_cells(voltage)
+  local rqly    = sensor("RQly", 0)
+  local cells, cell_src = read_cells(voltage)
   local mn, mx, delta = cell_stats(cells)
   local left_spd, right_spd = read_drive()
 
   if sw() >= 212 and sh() >= 128 then
-    draw_wide(voltage, current, pct, rssi, cells, mn, mx, delta, left_spd, right_spd)
+    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
   else
-    draw_compact(voltage, current, pct, rssi, cells, mn, mx, delta, left_spd, right_spd)
+    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd)
   end
 
   -- Low battery sound (every ~10 seconds)
