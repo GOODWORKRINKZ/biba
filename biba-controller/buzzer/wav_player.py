@@ -15,7 +15,7 @@ import wave
 
 import pigpio
 
-DEFAULT_CARRIER_HZ = 25000
+DEFAULT_CARRIER_HZ = 4000
 _DUTY_MAX = 1_000_000
 _INTERRUPT_CHECK_INTERVAL = 256  # check interrupt every N samples
 
