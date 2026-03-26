@@ -77,8 +77,9 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> None:
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
             drive_calls.append((throttle, steering, dt))
+            return (0.0, 0.0)
 
         def stop(self) -> None:
             pass
@@ -409,8 +410,8 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False
@@ -574,8 +575,8 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False
@@ -697,8 +698,8 @@ def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False
@@ -820,8 +821,9 @@ def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_r
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
             main.RUNNING = False
+            return (0.0, 0.0)
 
         def check_failsafe(self, last_frame_time: float) -> bool:
             return main.time.monotonic() - last_frame_time > main.config.FAILSAFE_TIMEOUT_S
@@ -981,8 +983,8 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False
@@ -1129,8 +1131,8 @@ def test_main_does_not_start_playlist_melody_when_rc_melodies_disabled(
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False
@@ -1297,8 +1299,8 @@ def test_main_only_plays_low_voltage_alarm_once_per_low_battery_episode(
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False
@@ -1454,8 +1456,8 @@ def test_main_sets_control_priority_when_drive_input_is_active(
         def stop(self) -> None:
             pass
 
-        def drive(self, *args, **kwargs) -> None:
-            pass
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
 
         def check_failsafe(self, *args, **kwargs) -> bool:
             return False

@@ -141,19 +141,27 @@ class DifferentialDrive:
     def _clamp(value: float) -> float:
         return max(-1.0, min(1.0, value))
 
-    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> None:
-        """Apply throttle and steering to the left and right motor outputs."""
+    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+        """Apply throttle and steering to the left and right motor outputs.
+
+        Returns (left_duty, right_duty) after ramping.
+        """
         left = self._clamp(throttle + steering)
         right = self._clamp(throttle - steering)
         if self.left_enabled:
-            self.left_motor.set_speed(self._left_ramp.update(left, dt))
+            left_duty = self._left_ramp.update(left, dt)
+            self.left_motor.set_speed(left_duty)
         else:
             self._left_ramp.reset()
+            left_duty = 0.0
 
         if self.right_enabled:
-            self.right_motor.set_speed(self._right_ramp.update(right, dt))
+            right_duty = self._right_ramp.update(right, dt)
+            self.right_motor.set_speed(right_duty)
         else:
             self._right_ramp.reset()
+            right_duty = 0.0
+        return left_duty, right_duty
 
     def emergency_stop(self) -> None:
         """Bypass ramp and stop motors immediately (shutdown only)."""

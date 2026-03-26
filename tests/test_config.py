@@ -42,7 +42,7 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.TEST_BATTERY_CURRENT == pytest.approx(1.2)
     assert module.TEST_BATTERY_CAPACITY_MAH == 0
     assert module.TEST_BATTERY_REMAINING_PCT == 55
-    assert module.THROTTLE_FILTER_MODE == "KALMAN"
+    assert module.THROTTLE_FILTER_MODE == "NONE"
     assert module.THROTTLE_KALMAN_PROCESS_NOISE == pytest.approx(0.02)
     assert module.THROTTLE_KALMAN_MEASUREMENT_NOISE == pytest.approx(0.5)
     assert module.RAMP_ACCEL_RATE == pytest.approx(2.0)
@@ -172,7 +172,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "BEACON_DELAY_S=" in env_example
     assert "CH_BEACON=" in env_example
     assert "MOTOR_DRIVER_TYPE=BTS7960" in env_example
-    assert "THROTTLE_FILTER_MODE=KALMAN" in env_example
+    assert "THROTTLE_FILTER_MODE=NONE" in env_example
     assert "THROTTLE_KALMAN_PROCESS_NOISE=0.02" in env_example
     assert "THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5" in env_example
     assert "RAMP_ZERO_HOLD_S=0.15" in env_example

@@ -28,8 +28,9 @@ _BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
 
 
 class _NullDrive:
-    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> None:
+    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
         del throttle, steering, dt
+        return (0.0, 0.0)
 
     def stop(self) -> None:
         pass
@@ -357,19 +358,20 @@ def main() -> int:
                     abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
                 )
                 buzzer.set_control_active(control_active)
+                if armed:
+                    left_duty, right_duty = drive.drive(throttle, steering, loop_period)
+                else:
+                    if throttle_filter is not None:
+                        throttle_filter.reset()
+                    left_duty, right_duty = drive.drive(0.0, 0.0, loop_period)
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]
                     LOGGER.info(
-                        "CH[%s] raw_thr=%.2f thr=%.2f str=%.2f arm_ch=%.2f armed=%s",
-                        ",".join(ch_vals), raw_throttle, throttle, steering, arm_ch, armed,
+                        "CH[%s] raw_thr=%.2f thr=%.2f str=%.2f lm=%.3f rm=%.3f arm_ch=%.2f armed=%s",
+                        ",".join(ch_vals), raw_throttle, throttle, steering,
+                        left_duty, right_duty, arm_ch, armed,
                     )
-                if armed:
-                    drive.drive(throttle, steering, loop_period)
-                else:
-                    if throttle_filter is not None:
-                        throttle_filter.reset()
-                    drive.drive(0.0, 0.0, loop_period)
 
                 # Manual beacon toggle via RC channel
                 beacon_ch = _get_channel(channels, config.CH_BEACON)
