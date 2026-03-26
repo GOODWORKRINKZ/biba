@@ -248,6 +248,9 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
         def play_named(self, name: str) -> None:
             played.append(name)
 
+        def set_control_active(self, active: bool) -> None:
+            del active
+
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
             pass
@@ -412,6 +415,9 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         def play_named(self, name: str) -> None:
             del name
 
+        def set_control_active(self, active: bool) -> None:
+            del active
+
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
             pass
@@ -564,6 +570,9 @@ def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_r
 
         def play_named_async(self, name: str) -> None:
             del name
+
+        def set_control_active(self, active: bool) -> None:
+            del active
 
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
@@ -723,6 +732,9 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
         def play_named_async(self, name: str) -> None:
             playlist_calls.append(name)
 
+        def set_control_active(self, active: bool) -> None:
+            del active
+
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
             pass
@@ -757,6 +769,333 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
     assert main.main() == 0
     assert tone_calls == ["arm", "disarm"]
     assert playlist_calls == []
+
+
+def test_main_only_plays_low_voltage_alarm_once_per_low_battery_episode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    low_voltage_calls: list[str] = []
+    fake_time = [10.0]
+    low_state = BatteryState(
+        voltage=24.2,
+        current=0.0,
+        soc=20.0,
+        cells=[3.45, 3.46, 3.47, 3.45, 3.46, 3.47, 3.44],
+        temperatures=[25.0],
+        min_cell=3.44,
+        max_cell=3.47,
+        delta=0.03,
+    )
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._count = 0
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            self._count += 1
+            if self._count >= 4:
+                main.RUNNING = False
+            fake_time[0] += 4.0
+            return [0.0, 0.0, 0.0, 0.0, -0.98, 0.0, 0.0, 0.0, 0.0]
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class FakeBMSPoller:
+        def __init__(self, *args, **kwargs) -> None:
+            self.latest_state = low_state
+
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> None:
+            pass
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def sos_beacon(self) -> None:
+            pass
+
+        def low_voltage_alarm(self) -> None:
+            low_voltage_calls.append("low")
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeStats:
+        def cpu_percent(self) -> float:
+            return 0.0
+
+        def memory_percent(self) -> float:
+            return 0.0
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "_create_bms", lambda: FakeBMS())
+    monkeypatch.setattr(main, "BMSPoller", FakeBMSPoller)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "SystemStats", FakeStats)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 0.0)
+    monkeypatch.setattr(main.config, "LOW_CELL_VOLTAGE", 3.5)
+    monkeypatch.setattr(main.config, "LOW_PACK_VOLTAGE", 21.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert low_voltage_calls == ["low"]
+
+
+def test_main_sets_control_priority_when_drive_input_is_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    control_active_calls: list[bool] = []
+    frames = iter(
+        [
+            [0.0, 0.75, 0.0, 0.10, 0.98, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.00, 0.0, 0.00, 0.98, 0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            try:
+                return next(frames)
+            except StopIteration:
+                main.RUNNING = False
+                return None
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> None:
+            pass
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def sos_beacon(self) -> None:
+            pass
+
+        def low_voltage_alarm(self) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def set_control_active(self, active: bool) -> None:
+            control_active_calls.append(active)
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert control_active_calls == [True, False]
 
 
 def test_main_sends_test_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

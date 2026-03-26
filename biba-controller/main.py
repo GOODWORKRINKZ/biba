@@ -77,6 +77,9 @@ class _NullBuzzer:
     def play_named_async(self, name: str) -> None:
         del name
 
+    def set_control_active(self, active: bool) -> None:
+        del active
+
     def play_blheli(self, melody_str: str, tempo_bpm: int = 120) -> None:
         del melody_str, tempo_bpm
 
@@ -252,7 +255,7 @@ def main() -> int:
 
     armed = False
     had_connection = False
-    low_voltage_alarm_at = 0.0
+    low_voltage_active = False
     melody_zone = -1
     last_frame_time = time.monotonic()
     last_telemetry_send = 0.0
@@ -300,6 +303,10 @@ def main() -> int:
                 throttle = _get_channel(channels, config.CH_THROTTLE)
                 steering = _get_channel(channels, config.CH_STEERING)
                 arm_ch = _get_channel(channels, config.CH_ARM)
+                control_active = armed and (
+                    abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
+                )
+                buzzer.set_control_active(control_active)
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]
@@ -357,10 +364,15 @@ def main() -> int:
                     LOGGER.warning("Failed to send CRSF system telemetry: %s", exc)
 
                 if battery_state is not None:
-                    if _battery_is_low(battery_state) and loop_started_at - low_voltage_alarm_at > 3.0:
-                        low_voltage_alarm_at = loop_started_at
+                    is_low_voltage = _battery_is_low(battery_state)
+                    if is_low_voltage and not low_voltage_active:
+                        low_voltage_active = True
                         LOGGER.warning("Low battery warning: %.2fV", battery_state.voltage)
                         buzzer.low_voltage_alarm()
+                    elif not is_low_voltage:
+                        low_voltage_active = False
+                else:
+                    low_voltage_active = False
 
             elapsed = time.monotonic() - loop_started_at
             if elapsed < loop_period:

@@ -47,3 +47,28 @@ class TestMotorSynth:
         pi.hardware_PWM.reset_mock()
         synth.play_named("nonexistent_melody_xyz")
         pi.hardware_PWM.assert_not_called()
+
+    def test_control_priority_interrupts_active_playback(self):
+        synth, pi = self._make_synth()
+        pi.hardware_PWM.reset_mock()
+
+        def interrupt_playback(_delay):
+            synth.set_control_active(True)
+            return True
+
+        synth._wait_or_interrupted = interrupt_playback
+
+        synth.play([(1000, 100, 0), (1200, 100, 0)])
+
+        pi.hardware_PWM.assert_any_call(18, 1000, 50000)
+        assert (18, 1200, 50000) not in [call.args for call in pi.hardware_PWM.call_args_list]
+
+    @patch("time.sleep")
+    def test_control_priority_blocks_new_melodies(self, mock_sleep):
+        synth, pi = self._make_synth()
+        synth.set_control_active(True)
+        pi.hardware_PWM.reset_mock()
+
+        synth.play_named("arm")
+
+        pi.hardware_PWM.assert_not_called()
