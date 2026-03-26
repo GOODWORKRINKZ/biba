@@ -95,6 +95,10 @@ CATALOG: dict[str, list[tuple[int, int, int]]] = {
 
 BLHELI_CATALOG: dict[str, tuple[str, int]] = {
     # ── System melodies ────────────────────────────
+    "biba_signature": (
+        "B5 1/16 E6 1/16 E6 1/8 D6 1/8 A5 1/8",
+        168,
+    ),
     "startup": (
         "C5 1/16 E5 1/16 E5 1/8 D5 1/8 C5 1/8",
         150,

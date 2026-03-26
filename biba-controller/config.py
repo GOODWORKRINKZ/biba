@@ -93,5 +93,6 @@ BEACON_DELAY_S = _get_env_float("BEACON_DELAY_S", 300.0)
 CH_BEACON = _get_env_int("CH_BEACON", 7)
 
 # Melody selection
+ENABLE_RC_MELODIES = bool(_get_env_int("ENABLE_RC_MELODIES", 0))
 CH_MELODY = _get_env_int("CH_MELODY", 8)
-STARTUP_MELODY = os.getenv("STARTUP_MELODY", "imperial_march")
+STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")

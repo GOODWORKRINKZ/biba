@@ -137,6 +137,9 @@ class TestBlheliMelodyCatalog:
         }
         assert expected.issubset(set(melodies.BLHELI_CATALOG.keys()))
 
+    def test_blheli_catalog_has_biba_signature(self):
+        assert "biba_signature" in melodies.BLHELI_CATALOG
+
     def test_blheli_catalog_has_fun_melodies(self):
         fun = {"imperial_march", "katyusha", "korobeiniki", "nokia_tune", "pacman"}
         assert fun.issubset(set(melodies.BLHELI_CATALOG.keys()))
