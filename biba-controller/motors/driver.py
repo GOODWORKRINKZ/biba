@@ -102,9 +102,17 @@ class BTS7960MotorDriver:
 class DifferentialDrive:
     """Apply arcade mixing for a two-wheel robot."""
 
-    def __init__(self, left_motor: MotorDriver, right_motor: MotorDriver) -> None:
+    def __init__(
+        self,
+        left_motor: MotorDriver,
+        right_motor: MotorDriver,
+        left_enabled: bool | None = None,
+        right_enabled: bool | None = None,
+    ) -> None:
         self.left_motor = left_motor
         self.right_motor = right_motor
+        self.left_enabled = config.LEFT_MOTOR_ENABLED if left_enabled is None else left_enabled
+        self.right_enabled = config.RIGHT_MOTOR_ENABLED if right_enabled is None else right_enabled
         self._left_ramp = SpeedRamp(
             accel_rate=config.RAMP_ACCEL_RATE,
             decel_rate=config.RAMP_DECEL_RATE,
@@ -124,8 +132,17 @@ class DifferentialDrive:
         """Apply throttle and steering to the left and right motor outputs."""
         left = self._clamp(throttle + steering)
         right = self._clamp(throttle - steering)
-        self.left_motor.set_speed(self._left_ramp.update(left, dt))
-        self.right_motor.set_speed(self._right_ramp.update(right, dt))
+        if self.left_enabled:
+            self.left_motor.set_speed(self._left_ramp.update(left, dt))
+        else:
+            self._left_ramp.reset()
+            self.left_motor.stop()
+
+        if self.right_enabled:
+            self.right_motor.set_speed(self._right_ramp.update(right, dt))
+        else:
+            self._right_ramp.reset()
+            self.right_motor.stop()
 
     def emergency_stop(self) -> None:
         """Bypass ramp and stop motors immediately (shutdown only)."""

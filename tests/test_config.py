@@ -29,10 +29,12 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.LEFT_MOTOR_LPWM == 13
     assert module.LEFT_MOTOR_REN == 23
     assert module.LEFT_MOTOR_LEN == 24
+    assert module.LEFT_MOTOR_ENABLED is True
     assert module.RIGHT_MOTOR_RPWM == 12
     assert module.RIGHT_MOTOR_LPWM == 19
     assert module.RIGHT_MOTOR_REN == 20
     assert module.RIGHT_MOTOR_LEN == 21
+    assert module.RIGHT_MOTOR_ENABLED is True
     assert module.CRSF_PORT == "/dev/ttyS0"
     assert module.BMS_TRANSPORT == "UART"
     assert module.BMS_BLE_ADDRESS == ""
@@ -50,6 +52,8 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("MOTOR2_INVERTED", "1")
     monkeypatch.setenv("LEFT_MOTOR_REN", "26")
     monkeypatch.setenv("RIGHT_MOTOR_LEN", "6")
+    monkeypatch.setenv("LEFT_MOTOR_ENABLED", "0")
+    monkeypatch.setenv("RIGHT_MOTOR_ENABLED", "0")
     monkeypatch.setenv("FAILSAFE_TIMEOUT_S", "0.75")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("BMS_TRANSPORT", "ble")
@@ -63,6 +67,8 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.MOTOR2_INVERTED == 1
     assert module.LEFT_MOTOR_REN == 26
     assert module.RIGHT_MOTOR_LEN == 6
+    assert module.LEFT_MOTOR_ENABLED is False
+    assert module.RIGHT_MOTOR_ENABLED is False
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.75)
     assert module.LOG_LEVEL == "DEBUG"
     assert module.BMS_TRANSPORT == "BLE"
@@ -111,10 +117,12 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
     assert "LEFT_MOTOR_LPWM:" in compose
     assert "LEFT_MOTOR_REN:" in compose
     assert "LEFT_MOTOR_LEN:" in compose
+    assert "LEFT_MOTOR_ENABLED:" in compose
     assert "RIGHT_MOTOR_RPWM:" in compose
     assert "RIGHT_MOTOR_LPWM:" in compose
     assert "RIGHT_MOTOR_REN:" in compose
     assert "RIGHT_MOTOR_LEN:" in compose
+    assert "RIGHT_MOTOR_ENABLED:" in compose
 
 
 def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
@@ -147,6 +155,8 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "MOTOR_DRIVER_TYPE=BTS7960" in env_example
     assert "LEFT_MOTOR_RPWM=" in env_example
     assert "LEFT_MOTOR_LEN=24" in env_example
+    assert "LEFT_MOTOR_ENABLED=1" in env_example
     assert "RIGHT_MOTOR_LPWM=19" in env_example
     assert "RIGHT_MOTOR_REN=20" in env_example
     assert "RIGHT_MOTOR_LEN=21" in env_example
+    assert "RIGHT_MOTOR_ENABLED=0" in env_example

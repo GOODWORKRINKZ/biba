@@ -145,6 +145,32 @@ def test_differential_drive_mixes_throttle_and_steering() -> None:
     assert right_motor.speed_calls[0] == pytest.approx(0.04)
 
 
+def test_differential_drive_can_disable_right_motor() -> None:
+    left_motor = FakeMotor()
+    right_motor = FakeMotor()
+    drive = DifferentialDrive(left_motor, right_motor, right_enabled=False)
+
+    drive.drive(0.75, 0.5)
+
+    assert len(left_motor.speed_calls) == 1
+    assert left_motor.speed_calls[0] == pytest.approx(0.04)
+    assert right_motor.speed_calls == []
+    assert right_motor.stop_calls == 1
+
+
+def test_differential_drive_can_disable_left_motor() -> None:
+    left_motor = FakeMotor()
+    right_motor = FakeMotor()
+    drive = DifferentialDrive(left_motor, right_motor, left_enabled=False)
+
+    drive.drive(0.75, 0.5)
+
+    assert left_motor.speed_calls == []
+    assert left_motor.stop_calls == 1
+    assert len(right_motor.speed_calls) == 1
+    assert right_motor.speed_calls[0] == pytest.approx(0.04)
+
+
 def test_check_failsafe_stops_platform_when_frame_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:
     left_motor = FakeMotor()
     right_motor = FakeMotor()
