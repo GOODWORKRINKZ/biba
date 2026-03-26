@@ -77,12 +77,17 @@ def play_samples(
     carrier_freq: int = DEFAULT_CARRIER_HZ,
     interrupt_event: threading.Event | None = None,
 ) -> None:
-    """Play 8-bit unsigned PCM samples via hardware PWM duty-cycle modulation."""
-    period = 1.0 / sample_rate
+    """Play 8-bit unsigned PCM samples via hardware PWM duty-cycle modulation.
+
+    When hardware_PWM calls are slower than the sample period (common with
+    multiple pins over the pigpio socket), samples are skipped to maintain
+    real-time playback speed.
+    """
     n_samples = len(samples)
     start = time.monotonic()
+    i = 0
 
-    for i in range(n_samples):
+    while i < n_samples:
         if interrupt_event and i % _INTERRUPT_CHECK_INTERVAL == 0:
             if interrupt_event.is_set():
                 break
@@ -91,10 +96,9 @@ def play_samples(
         for pin in pins:
             pi.hardware_PWM(pin, carrier_freq, duty)
 
-        # Spin-wait for accurate timing
-        target = start + (i + 1) * period
-        while time.monotonic() < target:
-            pass
+        # Advance index to where we should be in real time
+        elapsed = time.monotonic() - start
+        i = max(i + 1, int(elapsed * sample_rate))
 
     # Cleanup: silence all pins
     for pin in pins:
