@@ -115,11 +115,11 @@ bash ~/biba/scripts/diagnostics.sh
 | `LEFT_MOTOR_RPWM` | `18` | Левый BTS7960 `RPWM` |
 | `LEFT_MOTOR_LPWM` | `13` | Левый BTS7960 `LPWM` |
 | `LEFT_MOTOR_REN` | `23` | Левый BTS7960 `REN` |
-| `LEFT_MOTOR_LEN` | `23` | Левый BTS7960 `LEN` (по умолчанию общий GPIO с `REN`) |
+| `LEFT_MOTOR_LEN` | `24` | Левый BTS7960 `LEN` |
 | `RIGHT_MOTOR_RPWM` | `12` | Правый BTS7960 `RPWM` |
-| `RIGHT_MOTOR_LPWM` | `16` | Правый BTS7960 `LPWM` |
+| `RIGHT_MOTOR_LPWM` | `19` | Правый BTS7960 `LPWM` |
 | `RIGHT_MOTOR_REN` | `20` | Правый BTS7960 `REN` |
-| `RIGHT_MOTOR_LEN` | `20` | Правый BTS7960 `LEN` (по умолчанию общий GPIO с `REN`) |
+| `RIGHT_MOTOR_LEN` | `21` | Правый BTS7960 `LEN` |
 | `MOTOR1_INVERTED` | `0` | Инверсия мотора 1 |
 | `MOTOR2_INVERTED` | `0` | Инверсия мотора 2 |
 

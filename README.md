@@ -23,7 +23,7 @@ BiBa — это колесная робот-платформа на базе Ras
 | Left BTS7960 REN | 23 | 16 |
 | Left BTS7960 LEN | 24 | 18 |
 | Right BTS7960 RPWM | 12 | 32 |
-| Right BTS7960 LPWM | 16 | 36 |
+| Right BTS7960 LPWM | 19 | 35 |
 | Right BTS7960 REN | 20 | 38 |
 | Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
@@ -92,11 +92,11 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `LEFT_MOTOR_RPWM=18`
 - `LEFT_MOTOR_LPWM=13`
 - `LEFT_MOTOR_REN=23`
-- `LEFT_MOTOR_LEN=23`
+- `LEFT_MOTOR_LEN=24`
 - `RIGHT_MOTOR_RPWM=12`
-- `RIGHT_MOTOR_LPWM=16`
+- `RIGHT_MOTOR_LPWM=19`
 - `RIGHT_MOTOR_REN=20`
-- `RIGHT_MOTOR_LEN=20`
+- `RIGHT_MOTOR_LEN=21`
 - `MOTOR1_INVERTED=0|1`
 - `MOTOR2_INVERTED=0|1`
 - `BEACON_ENABLED=0|1`
