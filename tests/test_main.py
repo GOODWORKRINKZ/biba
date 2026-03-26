@@ -168,6 +168,153 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
     assert drive_calls[-1][0] > 0.0
 
 
+def test_main_uses_elapsed_time_between_drive_updates(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    drive_calls: list[tuple[float, float, float]] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                [0.0, 1.0, 0.0, 0.0, 0.98, 0.0],
+                [0.0, 1.0, 0.0, 0.0, 0.98, 0.0],
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame = self._frames.pop(0)
+            if not self._frames:
+                main.RUNNING = False
+            return frame
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            drive_calls.append((throttle, steering, dt))
+            return (0.0, 0.0)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monotonic_values = iter([0.0, 1.0, 1.0, 1.05, 1.05])
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(main.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "THROTTLE_FILTER_MODE", "NONE")
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 50)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert len(drive_calls) == 2
+    assert drive_calls[0][2] == pytest.approx(0.02)
+    assert drive_calls[1][2] == pytest.approx(0.05)
+
+
 def test_battery_is_low_prefers_cell_voltage_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     monkeypatch.setattr(main.config, "LOW_CELL_VOLTAGE", 3.5)

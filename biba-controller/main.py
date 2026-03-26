@@ -303,6 +303,7 @@ def main() -> int:
     low_voltage_active = False
     melody_zone = -1
     last_frame_time = time.monotonic()
+    last_drive_update_at: float | None = None
     last_telemetry_send = 0.0
     last_battery_telemetry_log = 0.0
     _last_debug_log = 0.0
@@ -358,12 +359,14 @@ def main() -> int:
                     abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
                 )
                 buzzer.set_control_active(control_active)
+                control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
                 if armed:
-                    left_duty, right_duty = drive.drive(throttle, steering, loop_period)
+                    left_duty, right_duty = drive.drive(throttle, steering, control_dt)
                 else:
                     if throttle_filter is not None:
                         throttle_filter.reset()
-                    left_duty, right_duty = drive.drive(0.0, 0.0, loop_period)
+                    left_duty, right_duty = drive.drive(0.0, 0.0, control_dt)
+                last_drive_update_at = loop_started_at
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]
@@ -396,7 +399,9 @@ def main() -> int:
                     buzzer.failsafe_tone()
                 if throttle_filter is not None:
                     throttle_filter.reset()
-                drive.drive(0.0, 0.0, loop_period)
+                control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
+                drive.drive(0.0, 0.0, control_dt)
+                last_drive_update_at = loop_started_at
                 if had_connection:
                     had_connection = False
                     buzzer.disconnected_tone()
