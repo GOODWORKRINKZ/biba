@@ -86,7 +86,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Motor ramping / slew rate
 RAMP_ACCEL_RATE = _get_env_float("RAMP_ACCEL_RATE", 2.0)
-RAMP_DECEL_RATE = _get_env_float("RAMP_DECEL_RATE", 3.0)
+RAMP_DECEL_RATE = _get_env_float("RAMP_DECEL_RATE", 2.0)
 MOTOR_DEADBAND = _get_env_float("MOTOR_DEADBAND", 0.05)
 
 # Beacon / SOS
