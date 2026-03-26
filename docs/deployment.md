@@ -115,6 +115,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `THROTTLE_FILTER_MODE` | `KALMAN` | Фильтрация газа до wheel-mix; `NONE` отключает, `KALMAN` сглаживает выбросы канала |
 | `THROTTLE_KALMAN_PROCESS_NOISE` | `0.02` | Насколько быстро фильтр принимает изменение реального газа |
 | `THROTTLE_KALMAN_MEASUREMENT_NOISE` | `0.5` | Насколько сильно фильтр подавляет шум и ложные выбросы канала |
+| `THROTTLE_REQUIRES_NEUTRAL_BEFORE_REVERSE` | `1` | Блокирует смену направления, пока throttle не побывает в нейтрали |
 | `BEACON_ENABLED` | `1` | Включить звуковой маяк/SOS на роботе |
 | `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
 | `CH_BEACON` | `5` | Канал тумблера для ручного включения маяка |

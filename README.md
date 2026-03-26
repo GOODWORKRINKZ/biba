@@ -102,6 +102,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `THROTTLE_FILTER_MODE=KALMAN|NONE` — фильтрация газа до wheel-mix; `KALMAN` сглаживает выбросы канала
 - `THROTTLE_KALMAN_PROCESS_NOISE=0.02` — насколько быстро фильтр принимает изменения реального setpoint
 - `THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5` — насколько сильно фильтр подавляет шум и ложные выбросы канала
+- `THROTTLE_REQUIRES_NEUTRAL_BEFORE_REVERSE=1` — блокирует мгновенный реверс, пока контроллер не увидит реальную нейтраль стика
 - `BEACON_ENABLED=0|1`
 - `BEACON_DELAY_S=300`
 - `CH_BEACON=5`
