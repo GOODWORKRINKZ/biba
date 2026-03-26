@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -177,6 +179,22 @@ def test_differential_drive_can_disable_left_motor() -> None:
     assert left_motor.stop_calls == 0
     assert len(right_motor.speed_calls) == 1
     assert right_motor.speed_calls[0] == pytest.approx(0.04)
+
+
+def test_differential_drive_logs_large_output_jump(caplog: pytest.LogCaptureFixture) -> None:
+    left_motor = FakeMotor()
+    right_motor = FakeMotor()
+    drive = DifferentialDrive(left_motor, right_motor)
+
+    drive.drive(1.0, 0.0, dt=0.02)
+
+    with caplog.at_level(logging.WARNING, logger="biba-controller"):
+        drive.drive(1.0, 0.0, dt=0.30)
+
+    assert "Large PWM jump" in caplog.text
+    assert "motor=left" in caplog.text
+    assert "previous=0.040" in caplog.text
+    assert "current=0.640" in caplog.text
 
 
 def test_check_failsafe_stops_platform_when_frame_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:
