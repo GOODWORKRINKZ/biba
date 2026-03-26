@@ -193,3 +193,42 @@ def test_build_ble_client_creates_bleak_client_in_loop_thread(monkeypatch: pytes
     assert observed["init_thread"] == observed["notify_thread"]
     assert observed["init_thread"] == observed["write_thread"]
     assert observed["init_thread"] == observed["stop_notify_thread"]
+
+
+def test_build_ble_client_uses_resolved_bluez_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_device = object()
+    observed: dict[str, object] = {}
+
+    class FakeBleakClient:
+        def __init__(self, target: object) -> None:
+            observed["target"] = target
+
+        async def connect(self) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+        async def start_notify(self, uuid: str, callback) -> None:
+            del uuid, callback
+
+        async def stop_notify(self, uuid: str) -> None:
+            del uuid
+
+        async def write_gatt_char(self, uuid: str, data: bytes) -> None:
+            del uuid, data
+
+    async def fake_resolve(address: str) -> object:
+        assert address == "71:C1:46:20:25:4F"
+        return fake_device
+
+    fake_bleak_module = types.SimpleNamespace(BleakClient=FakeBleakClient)
+    monkeypatch.setitem(sys.modules, "bleak", fake_bleak_module)
+    monkeypatch.setattr("bms.daly._resolve_bleak_target", fake_resolve, raising=False)
+
+    client = _build_ble_client("71:C1:46:20:25:4F", "0000fff0-0000-1000-8000-00805f9b34fb")
+
+    client.connect()
+    client.disconnect()
+
+    assert observed["target"] is fake_device

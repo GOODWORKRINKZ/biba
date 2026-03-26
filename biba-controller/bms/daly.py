@@ -297,7 +297,8 @@ def _build_ble_client(address: str, service_uuid: str) -> BleClientProtocol:
             self._loop.run_forever()
 
         async def _create_client(self) -> object:
-            return BleakClient(self._device_address)
+            target = await _resolve_bleak_target(self._device_address)
+            return BleakClient(target)
 
         def _run_coroutine(self, coroutine: Awaitable[object]) -> object:
             future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
@@ -325,3 +326,51 @@ def _build_ble_client(address: str, service_uuid: str) -> BleClientProtocol:
             self._run_coroutine(self._client.write_gatt_char(uuid, data))
 
     return _BleakClientAdapter(address)
+
+
+async def _resolve_bleak_target(address: str) -> object:
+    try:
+        from bleak.backends.device import BLEDevice
+        from dbus_fast import BusType
+        from dbus_fast.aio import MessageBus
+    except ImportError:
+        return address
+
+    bus = None
+    try:
+        bus = MessageBus(bus_type=BusType.SYSTEM)
+        await bus.connect()
+        introspection = await bus.introspect("org.bluez", "/")
+        proxy = bus.get_proxy_object("org.bluez", "/", introspection)
+        manager = proxy.get_interface("org.freedesktop.DBus.ObjectManager")
+        objects = await manager.call_get_managed_objects()
+        normalized_address = address.upper()
+
+        for path, interfaces in objects.items():
+            device_props = interfaces.get("org.bluez.Device1")
+            if device_props is None:
+                continue
+
+            device_address = device_props.get("Address")
+            if device_address is None or str(device_address.value).upper() != normalized_address:
+                continue
+
+            alias = device_props.get("Alias")
+            rssi = device_props.get("RSSI")
+            details = {
+                "path": path,
+                "props": {key: value.value for key, value in device_props.items()},
+            }
+            return BLEDevice(
+                address,
+                str(alias.value) if alias is not None else address,
+                details,
+                rssi=int(rssi.value) if rssi is not None else None,
+            )
+    except Exception:
+        return address
+    finally:
+        if bus is not None:
+            bus.disconnect()
+
+    return address
