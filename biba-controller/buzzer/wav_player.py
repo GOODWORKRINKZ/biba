@@ -24,6 +24,7 @@ def load_wav(path: str) -> tuple[bytes, int]:
     """Read a WAV file and return (8-bit unsigned mono samples, sample_rate).
 
     Handles 8-bit and 16-bit WAVs, mono and stereo.
+    Normalises the result so peak amplitude spans the full 0-255 range.
     """
     with wave.open(path, "rb") as wf:
         n_channels = wf.getnchannels()
@@ -45,22 +46,27 @@ def load_wav(path: str) -> tuple[bytes, int]:
             all_samples = mono
 
         # Convert signed 16-bit (-32768..32767) → unsigned 8-bit (0..255)
-        samples = bytes((s + 32768) >> 8 for s in all_samples)
+        samples_8 = [(s + 32768) >> 8 for s in all_samples]
 
     elif sampwidth == 1:
         # 8-bit unsigned already
         if n_channels == 2:
             # Mix stereo to mono
-            mono = []
-            for i in range(0, len(raw), 2):
-                mono.append((raw[i] + raw[i + 1]) // 2)
-            samples = bytes(mono)
+            samples_8 = [(raw[i] + raw[i + 1]) // 2 for i in range(0, len(raw), 2)]
         else:
-            samples = raw
+            samples_8 = list(raw)
     else:
         raise ValueError(f"Unsupported sample width: {sampwidth}")
 
-    return samples, sample_rate
+    # Normalise to full 0-255 range for maximum volume
+    if samples_8:
+        lo = min(samples_8)
+        hi = max(samples_8)
+        span = hi - lo
+        if span > 0:
+            samples_8 = [(v - lo) * 255 // span for v in samples_8]
+
+    return bytes(samples_8), sample_rate
 
 
 def play_samples(

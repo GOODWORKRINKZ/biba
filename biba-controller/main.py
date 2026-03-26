@@ -316,7 +316,7 @@ def main() -> int:
     LOGGER.info("BiBa controller started")
     if config.STARTUP_VOICE_ENABLED:
         buzzer.play_wav(config.STARTUP_VOICE)
-    if config.STARTUP_MELODY:
+    elif config.STARTUP_MELODY:
         buzzer.play_named(config.STARTUP_MELODY)
     else:
         buzzer.startup_tone()
