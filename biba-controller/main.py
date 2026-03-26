@@ -15,6 +15,7 @@ from bms.daly import BatteryState, DalyBMS
 from bms.poller import BMSPoller
 from buzzer.beacon import BeaconManager
 from buzzer.buzzer import Buzzer
+from buzzer.melodies import FUN_PLAYLIST
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -69,6 +70,15 @@ class _NullBuzzer:
 
     def low_voltage_alarm(self) -> None:
         pass
+
+    def play_named(self, name: str) -> None:
+        del name
+
+    def play_named_async(self, name: str) -> None:
+        del name
+
+    def play_blheli(self, melody_str: str, tempo_bpm: int = 120) -> None:
+        del melody_str, tempo_bpm
 
 
 def _setup_logging() -> None:
@@ -223,13 +233,17 @@ def main() -> int:
     armed = False
     had_connection = False
     low_voltage_alarm_at = 0.0
+    melody_zone = -1
     last_frame_time = time.monotonic()
     last_telemetry_send = 0.0
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
 
     LOGGER.info("BiBa controller started")
-    buzzer.startup_tone()
+    if config.STARTUP_MELODY:
+        buzzer.play_named(config.STARTUP_MELODY)
+    else:
+        buzzer.startup_tone()
 
     try:
         while RUNNING:
@@ -277,6 +291,15 @@ def main() -> int:
                 # Manual beacon toggle via RC channel
                 beacon_ch = _get_channel(channels, config.CH_BEACON)
                 beacon.set_manual(beacon_ch > config.ARM_THRESHOLD)
+
+                # Melody selection via RC channel
+                melody_ch = _get_channel(channels, config.CH_MELODY)
+                num_melodies = len(FUN_PLAYLIST)
+                raw_val = (melody_ch + 1.0) / 2.0  # -1..1 → 0..1
+                new_zone = min(int(raw_val * num_melodies), num_melodies - 1)
+                if new_zone != melody_zone:
+                    melody_zone = new_zone
+                    buzzer.play_named_async(FUN_PLAYLIST[melody_zone])
 
             if drive.check_failsafe(last_frame_time):
                 if armed:

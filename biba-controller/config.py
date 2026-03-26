@@ -85,3 +85,7 @@ MOTOR_DEADBAND = _get_env_float("MOTOR_DEADBAND", 0.05)
 BEACON_ENABLED = bool(_get_env_int("BEACON_ENABLED", 1))
 BEACON_DELAY_S = _get_env_float("BEACON_DELAY_S", 300.0)
 CH_BEACON = _get_env_int("CH_BEACON", 7)
+
+# Melody selection
+CH_MELODY = _get_env_int("CH_MELODY", 8)
+STARTUP_MELODY = os.getenv("STARTUP_MELODY", "imperial_march")
