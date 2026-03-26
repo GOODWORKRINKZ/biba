@@ -112,6 +112,7 @@ def test_main_continues_when_pigpio_is_unavailable(monkeypatch: pytest.MonkeyPat
 
 def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
+    played: list[str] = []
 
     class FakePi:
         connected = True
@@ -182,6 +183,9 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
         def shutdown_tone(self) -> None:
             pass
 
+        def play_named(self, name: str) -> None:
+            played.append(name)
+
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
             pass
@@ -208,9 +212,11 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.config, "MOTOR_DRIVER_TYPE", "PWM_DIR")
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "imperial_march")
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0
+    assert played == ["imperial_march"]
 
 
 def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -286,6 +292,9 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
 
         def shutdown_tone(self) -> None:
             pass
+
+        def play_named(self, name: str) -> None:
+            del name
 
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
