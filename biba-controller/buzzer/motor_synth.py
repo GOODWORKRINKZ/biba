@@ -25,6 +25,9 @@ class MotorSynth:
         self.off()
 
     def set_control_active(self, active: bool) -> None:
+        if active == self._control_active:
+            return
+
         self._control_active = active
         if active:
             self._interrupt_event.set()

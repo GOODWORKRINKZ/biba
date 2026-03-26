@@ -48,6 +48,18 @@ class TestMotorSynth:
         synth.play_named("nonexistent_melody_xyz")
         pi.hardware_PWM.assert_not_called()
 
+    def test_set_control_active_only_turns_outputs_off_on_state_change(self):
+        synth, pi = self._make_synth()
+        pi.hardware_PWM.reset_mock()
+
+        synth.set_control_active(True)
+        first_call_count = pi.hardware_PWM.call_count
+
+        synth.set_control_active(True)
+
+        assert first_call_count > 0
+        assert pi.hardware_PWM.call_count == first_call_count
+
     def test_control_priority_interrupts_active_playback(self):
         synth, pi = self._make_synth()
         pi.hardware_PWM.reset_mock()
