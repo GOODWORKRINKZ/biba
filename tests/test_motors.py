@@ -78,10 +78,10 @@ def test_bts7960_motor_driver_initializes_pwm_and_enable_pins() -> None:
     BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
 
     assert pi.mode_calls == [(18, 1), (13, 1), (23, 1), (24, 1)]
-    assert pi.frequency_calls == []
-    assert pi.hardware_pwm_calls == [(18, 20000, 0), (13, 20000, 0)]
+    assert pi.frequency_calls == [(18, 20000), (13, 20000)]
+    assert pi.hardware_pwm_calls == []
     assert pi.write_calls == [(23, 1), (24, 1)]
-    assert pi.duty_calls == []
+    assert pi.duty_calls == [(18, 0), (13, 0)]
 
 
 def test_bts7960_motor_driver_uses_rpwm_for_forward_motion() -> None:
@@ -90,7 +90,8 @@ def test_bts7960_motor_driver_uses_rpwm_for_forward_motion() -> None:
 
     driver.set_speed(0.5)
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 500000), (13, 20000, 0)]
+    assert pi.hardware_pwm_calls == []
+    assert pi.duty_calls[-2:] == [(18, 127), (13, 0)]
 
 
 def test_bts7960_motor_driver_uses_lpwm_for_reverse_motion() -> None:
@@ -99,7 +100,8 @@ def test_bts7960_motor_driver_uses_lpwm_for_reverse_motion() -> None:
 
     driver.set_speed(-0.5)
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 0), (13, 20000, 500000)]
+    assert pi.hardware_pwm_calls == []
+    assert pi.duty_calls[-2:] == [(18, 0), (13, 127)]
 
 
 def test_bts7960_motor_driver_can_invert_direction_logic() -> None:
@@ -108,7 +110,8 @@ def test_bts7960_motor_driver_can_invert_direction_logic() -> None:
 
     driver.set_speed(0.5)
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 0), (13, 20000, 500000)]
+    assert pi.hardware_pwm_calls == []
+    assert pi.duty_calls[-2:] == [(18, 0), (13, 127)]
 
 
 def test_bts7960_motor_driver_stop_disables_both_pwm_channels() -> None:
@@ -117,7 +120,8 @@ def test_bts7960_motor_driver_stop_disables_both_pwm_channels() -> None:
 
     driver.stop()
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 0), (13, 20000, 0)]
+    assert pi.hardware_pwm_calls == []
+    assert pi.duty_calls[-2:] == [(18, 0), (13, 0)]
 
 
 def test_bts7960_motor_driver_supports_shared_enable_pin() -> None:

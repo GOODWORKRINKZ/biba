@@ -64,8 +64,10 @@ class BTS7960MotorDriver:
         for pin in self._unique_pins(self.ren_pin, self.len_pin):
             self.pi.write(pin, 1)
 
-        self.pi.hardware_PWM(self.rpwm_pin, config.PWM_FREQUENCY_HZ, 0)
-        self.pi.hardware_PWM(self.lpwm_pin, config.PWM_FREQUENCY_HZ, 0)
+        self.pi.set_PWM_frequency(self.rpwm_pin, config.PWM_FREQUENCY_HZ)
+        self.pi.set_PWM_frequency(self.lpwm_pin, config.PWM_FREQUENCY_HZ)
+        self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
+        self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
 
     @staticmethod
     def _unique_pins(*pins: int) -> list[int]:
@@ -83,20 +85,20 @@ class BTS7960MotorDriver:
         if self.inverted:
             clamped *= -1.0
 
-        duty_cycle = int(abs(clamped) * 1_000_000)
+        duty_cycle = int(abs(clamped) * 255)
         if clamped > 0.0:
-            self.pi.hardware_PWM(self.rpwm_pin, config.PWM_FREQUENCY_HZ, duty_cycle)
-            self.pi.hardware_PWM(self.lpwm_pin, config.PWM_FREQUENCY_HZ, 0)
+            self.pi.set_PWM_dutycycle(self.rpwm_pin, duty_cycle)
+            self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
         elif clamped < 0.0:
-            self.pi.hardware_PWM(self.rpwm_pin, config.PWM_FREQUENCY_HZ, 0)
-            self.pi.hardware_PWM(self.lpwm_pin, config.PWM_FREQUENCY_HZ, duty_cycle)
+            self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
+            self.pi.set_PWM_dutycycle(self.lpwm_pin, duty_cycle)
         else:
             self.stop()
 
     def stop(self) -> None:
         """Stop the motor immediately."""
-        self.pi.hardware_PWM(self.rpwm_pin, config.PWM_FREQUENCY_HZ, 0)
-        self.pi.hardware_PWM(self.lpwm_pin, config.PWM_FREQUENCY_HZ, 0)
+        self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
+        self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
 
 
 class DifferentialDrive:
