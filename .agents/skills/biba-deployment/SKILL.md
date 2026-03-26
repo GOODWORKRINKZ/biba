@@ -39,9 +39,20 @@ If the deploy depends on a newly built GHCR image, wait for the GitHub Actions r
 Preferred commands with GitHub CLI:
 
 ```bash
+run_id=$(gh workflow run <workflow> --repo GOODWORKRINKZ/biba --ref <ref> --json id --jq .id)
+gh run watch "$run_id" --repo GOODWORKRINKZ/biba --exit-status
+
 gh run view <run-id> --repo GOODWORKRINKZ/biba
 gh run watch <run-id> --repo GOODWORKRINKZ/biba --exit-status
 ```
+
+Recommended flow:
+
+1. Trigger the workflow and capture the returned run id.
+2. Wait for completion with `gh run watch "$run_id" --exit-status`.
+3. Proceed with post-processing only if the watch command exits successfully.
+
+If `gh workflow run` does not return the id directly in the current CLI version, discover it with `gh run list` or `gh run view` before waiting.
 
 Prefer `gh run watch` as the default waiting mechanism when the terminal supports it.
 Use polling or API-based fallbacks only when `gh run watch` output is unusable in the current session.
