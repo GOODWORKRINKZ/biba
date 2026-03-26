@@ -244,6 +244,12 @@ def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) 
 
 def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
     if state is None:
+        telemetry.send_battery(
+            voltage_v=0.0,
+            current_a=0.0,
+            capacity_mah=0,
+            remaining_pct=0,
+        )
         return
 
     telemetry.send_battery(
@@ -321,6 +327,7 @@ def main() -> int:
     last_drive_update_at: float | None = None
     last_telemetry_send = 0.0
     last_battery_telemetry_log = 0.0
+    battery_telemetry_cleared = False
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
     throttle_filter = _create_throttle_filter()
@@ -477,8 +484,13 @@ def main() -> int:
                 battery_state = bms_poller.latest_state if bms_poller else None
 
                 try:
-                    _send_battery_telemetry(telemetry, battery_state)
-                    if battery_state is not None:
+                    if battery_state is None:
+                        if not battery_telemetry_cleared:
+                            _send_battery_telemetry(telemetry, battery_state)
+                            battery_telemetry_cleared = True
+                    else:
+                        _send_battery_telemetry(telemetry, battery_state)
+                        battery_telemetry_cleared = False
                         last_battery_telemetry_log = _log_battery_telemetry(
                             battery_state,
                             now=loop_started_at,

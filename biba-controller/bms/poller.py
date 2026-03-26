@@ -49,5 +49,7 @@ class BMSPoller:
                 with self._lock:
                     self._state = state
             except Exception as exc:
+                with self._lock:
+                    self._state = None
                 LOGGER.warning("BMS poll failed: %s", exc)
             self._stop_event.wait(self._interval)

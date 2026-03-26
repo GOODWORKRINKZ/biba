@@ -91,3 +91,37 @@ def test_poller_stop_is_idempotent() -> None:
     poller.start()
     poller.stop()
     poller.stop()  # must not raise
+
+
+def test_poller_clears_latest_state_after_read_exception() -> None:
+    state = _make_state(25.5)
+
+    class FlakyBMS:
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def read_state(self) -> Optional[BatteryState]:
+            self.call_count += 1
+            if self.call_count == 1:
+                return state
+            raise OSError("BLE timeout")
+
+    poller = BMSPoller(FlakyBMS(), interval_s=0.01)
+    poller.start()
+
+    deadline = time.monotonic() + 2.0
+    observed_state = False
+    observed_clear = False
+    while time.monotonic() < deadline:
+        latest_state = poller.latest_state
+        if latest_state is not None and latest_state.voltage == 25.5:
+            observed_state = True
+        if observed_state and latest_state is None:
+            observed_clear = True
+            break
+        time.sleep(0.01)
+
+    poller.stop()
+
+    assert observed_state is True
+    assert observed_clear is True

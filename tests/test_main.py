@@ -1756,7 +1756,7 @@ def test_main_sets_control_priority_when_drive_input_is_active(
     assert control_active_calls == [True, False]
 
 
-def test_main_does_not_send_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_clears_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     sent_packets: list[tuple[float, float, int, int]] = []
 
@@ -1779,7 +1779,8 @@ def test_main_does_not_send_battery_telemetry_when_bms_is_unavailable(monkeypatc
 
         def get_channels(self):
             self._read_count += 1
-            main.RUNNING = False
+            if self._read_count >= 2:
+                main.RUNNING = False
             return [0.0, 0.0, 0.0, 0.0, -1.0, 0.0]
 
     class FakeTelemetry:
@@ -1808,10 +1809,11 @@ def test_main_does_not_send_battery_telemetry_when_bms_is_unavailable(monkeypatc
     monkeypatch.setattr(main, "DalyBMS", FakeBMS)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 0.0)
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 1000)
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert sent_packets == []
+    assert sent_packets == [(0.0, 0.0, 0, 0)]
 
 
 def test_connect_pigpio_retries_on_initial_failure(monkeypatch: pytest.MonkeyPatch) -> None:
