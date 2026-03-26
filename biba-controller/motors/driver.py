@@ -42,7 +42,13 @@ class MotorDriver:
 
 
 class BTS7960MotorDriver:
-    """Control one motor through BTS7960 RPWM/LPWM and enable pins."""
+    """Control one motor through BTS7960 RPWM/LPWM and enable pins.
+
+    Uses hardware PWM for precise frequency control (20 kHz, inaudible)
+    and fine duty-cycle resolution (1 000 000 steps).
+    """
+
+    _HW_PWM_RANGE = 1_000_000  # hardware_PWM duty range 0..1 000 000
 
     def __init__(
         self,
@@ -59,20 +65,16 @@ class BTS7960MotorDriver:
         self.ren_pin = ren_pin
         self.len_pin = len_pin
         self.inverted = inverted
+        self._frequency = config.PWM_FREQUENCY_HZ
 
-        for pin in self._unique_pins(self.rpwm_pin, self.lpwm_pin, self.ren_pin, self.len_pin):
+        for pin in self._unique_pins(self.ren_pin, self.len_pin):
             self.pi.set_mode(pin, pigpio.OUTPUT)
 
         for pin in self._unique_pins(self.ren_pin, self.len_pin):
             self.pi.write(pin, 1)
 
-        self.pi.set_PWM_frequency(self.rpwm_pin, config.PWM_FREQUENCY_HZ)
-        self.pi.set_PWM_frequency(self.lpwm_pin, config.PWM_FREQUENCY_HZ)
-        self._pwm_range = self.pi.get_PWM_real_range(self.rpwm_pin)
-        self.pi.set_PWM_range(self.rpwm_pin, self._pwm_range)
-        self.pi.set_PWM_range(self.lpwm_pin, self._pwm_range)
-        self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
-        self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
+        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
+        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
 
     @staticmethod
     def _unique_pins(*pins: int) -> list[int]:
@@ -90,20 +92,20 @@ class BTS7960MotorDriver:
         if self.inverted:
             clamped *= -1.0
 
-        duty_cycle = int(abs(clamped) * self._pwm_range)
+        duty = int(abs(clamped) * self._HW_PWM_RANGE)
         if clamped > 0.0:
-            self.pi.set_PWM_dutycycle(self.rpwm_pin, duty_cycle)
-            self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
+            self.pi.hardware_PWM(self.rpwm_pin, self._frequency, duty)
+            self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
         elif clamped < 0.0:
-            self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
-            self.pi.set_PWM_dutycycle(self.lpwm_pin, duty_cycle)
+            self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
+            self.pi.hardware_PWM(self.lpwm_pin, self._frequency, duty)
         else:
             self.stop()
 
     def stop(self) -> None:
         """Stop the motor immediately."""
-        self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
-        self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
+        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
+        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
 
 
 class DifferentialDrive:
