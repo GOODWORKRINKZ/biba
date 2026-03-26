@@ -181,38 +181,47 @@ def test_differential_drive_can_disable_left_motor() -> None:
     assert right_motor.speed_calls[0] == pytest.approx(0.04)
 
 
-def test_differential_drive_logs_large_output_jump(caplog: pytest.LogCaptureFixture) -> None:
+def test_differential_drive_logs_pwm_rate_spike_using_actual_send_interval(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     left_motor = FakeMotor()
     right_motor = FakeMotor()
     drive = DifferentialDrive(left_motor, right_motor)
+
+    monotonic_values = iter((10.0, 10.03))
+    monkeypatch.setattr("motors.driver.time.monotonic", lambda: next(monotonic_values))
 
     drive.drive(1.0, 0.0, dt=0.02)
 
     with caplog.at_level(logging.WARNING, logger="biba-controller"):
         drive.drive(1.0, 0.0, dt=0.30)
 
-    assert "Large PWM jump" in caplog.text
+    assert "Large PWM rate" in caplog.text
     assert "motor=left" in caplog.text
     assert "previous=0.040" in caplog.text
     assert "current=0.640" in caplog.text
+    assert "elapsed=0.030" in caplog.text
+    assert "rate=20.000" in caplog.text
 
 
-def test_differential_drive_logs_medium_output_jump_at_lower_threshold(
+def test_differential_drive_does_not_log_pwm_rate_when_change_matches_elapsed_interval(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     left_motor = FakeMotor()
     right_motor = FakeMotor()
     drive = DifferentialDrive(left_motor, right_motor)
 
+    monotonic_values = iter((20.0, 20.30))
+    monkeypatch.setattr("motors.driver.time.monotonic", lambda: next(monotonic_values))
+
     drive.drive(1.0, 0.0, dt=0.02)
 
     with caplog.at_level(logging.WARNING, logger="biba-controller"):
-        drive.drive(1.0, 0.0, dt=0.07)
+        drive.drive(1.0, 0.0, dt=0.30)
 
-    assert "Large PWM jump" in caplog.text
-    assert "motor=left" in caplog.text
-    assert "previous=0.040" in caplog.text
-    assert "current=0.180" in caplog.text
+    assert "Large PWM rate" not in caplog.text
 
 
 def test_check_failsafe_stops_platform_when_frame_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -115,7 +115,11 @@ class BTS7960MotorDriver:
 class DifferentialDrive:
     """Apply arcade mixing for a two-wheel robot."""
 
-    _PWM_JUMP_WARN_THRESHOLD = 0.10
+    _PWM_RATE_WARN_THRESHOLD = max(
+        config.RAMP_ACCEL_RATE,
+        config.RAMP_DECEL_RATE,
+        config.RAMP_REVERSE_DECEL_RATE,
+    ) + 0.05
 
     def __init__(
         self,
@@ -144,27 +148,38 @@ class DifferentialDrive:
         )
         self._last_left_duty: float | None = None
         self._last_right_duty: float | None = None
+        self._last_left_sent_at: float | None = None
+        self._last_right_sent_at: float | None = None
 
     @staticmethod
     def _clamp(value: float) -> float:
         return max(-1.0, min(1.0, value))
 
-    def _log_large_jump(
+    def _log_large_rate(
         self,
         motor: str,
         previous: float | None,
+        previous_sent_at: float | None,
         current: float,
         target: float,
         throttle: float,
         steering: float,
         dt: float,
+        sent_at: float,
     ) -> None:
-        if previous is None:
+        if previous is None or previous_sent_at is None:
             return
-        if abs(current - previous) < self._PWM_JUMP_WARN_THRESHOLD:
+
+        elapsed = sent_at - previous_sent_at
+        if elapsed <= 0.0:
             return
+
+        rate = abs(current - previous) / elapsed
+        if rate <= self._PWM_RATE_WARN_THRESHOLD:
+            return
+
         LOGGER.warning(
-            "Large PWM jump motor=%s previous=%.3f current=%.3f target=%.3f throttle=%.3f steering=%.3f dt=%.3f",
+            "Large PWM rate motor=%s previous=%.3f current=%.3f target=%.3f throttle=%.3f steering=%.3f dt=%.3f elapsed=%.3f rate=%.3f threshold=%.3f",
             motor,
             previous,
             current,
@@ -172,6 +187,9 @@ class DifferentialDrive:
             throttle,
             steering,
             dt,
+            elapsed,
+            rate,
+            self._PWM_RATE_WARN_THRESHOLD,
         )
 
     def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
@@ -181,25 +199,50 @@ class DifferentialDrive:
         """
         left = self._clamp(throttle + steering)
         right = self._clamp(throttle - steering)
+        sent_at = time.monotonic()
         if self.left_enabled:
             left_duty = self._left_ramp.update(left, dt)
-            self._log_large_jump("left", self._last_left_duty, left_duty, left, throttle, steering, dt)
+            self._log_large_rate(
+                "left",
+                self._last_left_duty,
+                self._last_left_sent_at,
+                left_duty,
+                left,
+                throttle,
+                steering,
+                dt,
+                sent_at,
+            )
             self.left_motor.set_speed(left_duty)
             self._last_left_duty = left_duty
+            self._last_left_sent_at = sent_at
         else:
             self._left_ramp.reset()
             left_duty = 0.0
             self._last_left_duty = 0.0
+            self._last_left_sent_at = sent_at
 
         if self.right_enabled:
             right_duty = self._right_ramp.update(right, dt)
-            self._log_large_jump("right", self._last_right_duty, right_duty, right, throttle, steering, dt)
+            self._log_large_rate(
+                "right",
+                self._last_right_duty,
+                self._last_right_sent_at,
+                right_duty,
+                right,
+                throttle,
+                steering,
+                dt,
+                sent_at,
+            )
             self.right_motor.set_speed(right_duty)
             self._last_right_duty = right_duty
+            self._last_right_sent_at = sent_at
         else:
             self._right_ramp.reset()
             right_duty = 0.0
             self._last_right_duty = 0.0
+            self._last_right_sent_at = sent_at
         return left_duty, right_duty
 
     def emergency_stop(self) -> None:
@@ -208,6 +251,8 @@ class DifferentialDrive:
         self._right_ramp.reset()
         self._last_left_duty = 0.0
         self._last_right_duty = 0.0
+        self._last_left_sent_at = None
+        self._last_right_sent_at = None
         self.left_motor.stop()
         self.right_motor.stop()
 
@@ -215,6 +260,8 @@ class DifferentialDrive:
         """Stop both drive motors immediately (legacy, no ramp)."""
         self._last_left_duty = 0.0
         self._last_right_duty = 0.0
+        self._last_left_sent_at = None
+        self._last_right_sent_at = None
         self.left_motor.stop()
         self.right_motor.stop()
 
