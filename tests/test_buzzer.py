@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from buzzer import melodies
 from buzzer.beacon import BeaconManager
 
@@ -154,3 +156,32 @@ class TestBlheliMelodyCatalog:
         for name in melodies.FUN_PLAYLIST:
             assert name not in system, f"{name} is a system melody"
             assert name in melodies.BLHELI_CATALOG, f"{name} not in catalog"
+
+
+# ── Buzzer BLHeli playback ─────────────────────────────────────────
+
+class TestBuzzerBlheli:
+    def _make_buzzer(self):
+        pi = MagicMock()
+        from buzzer.buzzer import Buzzer
+        return Buzzer(pi, 17), pi
+
+    @patch("time.sleep")
+    def test_play_blheli_calls_tone_sequence(self, mock_sleep):
+        buzzer, pi = self._make_buzzer()
+        buzzer.play_blheli("A4 1/4 P 1/8 C5 1/4", tempo_bpm=120)
+        freq_calls = [c.args[1] for c in pi.set_PWM_frequency.call_args_list]
+        assert len(freq_calls) == 2  # two audible notes (pause skipped)
+        assert freq_calls[0] == pytest.approx(440, abs=1)
+
+    @patch("time.sleep")
+    def test_play_named_plays_arm(self, mock_sleep):
+        buzzer, pi = self._make_buzzer()
+        buzzer.play_named("arm")
+        assert pi.set_PWM_frequency.called
+
+    @patch("time.sleep")
+    def test_play_named_unknown_does_nothing(self, mock_sleep):
+        buzzer, pi = self._make_buzzer()
+        buzzer.play_named("nonexistent_melody_xyz")
+        pi.set_PWM_frequency.assert_not_called()

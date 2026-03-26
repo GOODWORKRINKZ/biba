@@ -8,6 +8,7 @@ import time
 import pigpio
 
 from buzzer import melodies
+from buzzer.blheli_parser import parse_blheli
 
 
 class Buzzer:
@@ -53,6 +54,30 @@ class Buzzer:
     def play_async(self, sequence: list[tuple[int, int, int]]) -> None:
         """Play a melody in a background thread (non-blocking)."""
         t = threading.Thread(target=self.play, args=(sequence,), daemon=True)
+        t.start()
+
+    # ------------------------------------------------------------------
+    # BLHeli melody player
+    # ------------------------------------------------------------------
+
+    def play_blheli(self, melody_str: str, tempo_bpm: int = 120) -> None:
+        """Play a BLHeli32 format melody string (blocking). Thread-safe."""
+        notes = parse_blheli(melody_str, tempo_bpm=tempo_bpm)
+        with self._lock:
+            for freq, duration_s in notes:
+                self._tone(int(freq), int(duration_s * 1000))
+
+    def play_named(self, name: str) -> None:
+        """Play a melody from BLHELI_CATALOG by name (blocking)."""
+        entry = melodies.BLHELI_CATALOG.get(name)
+        if entry is None:
+            return
+        melody_str, tempo = entry
+        self.play_blheli(melody_str, tempo_bpm=tempo)
+
+    def play_named_async(self, name: str) -> None:
+        """Play a named melody in a background thread."""
+        t = threading.Thread(target=self.play_named, args=(name,), daemon=True)
         t.start()
 
     # ------------------------------------------------------------------
