@@ -123,3 +123,34 @@ class TestBuzzerMelodies:
         buzzer.sos_beacon()
         audible = [n for n in melodies.SOS if n[0] > 0]
         assert pi.set_PWM_frequency.call_count == len(audible)
+
+
+# ── BLHeli melody catalog ─────────────────────────────────────────
+
+class TestBlheliMelodyCatalog:
+    def test_blheli_catalog_has_all_system_entries(self):
+        expected = {
+            "startup", "arm", "disarm", "low_voltage",
+            "failsafe", "sos", "connected", "disconnected", "shutdown",
+        }
+        assert expected.issubset(set(melodies.BLHELI_CATALOG.keys()))
+
+    def test_blheli_catalog_has_fun_melodies(self):
+        fun = {"imperial_march", "katyusha", "korobeiniki", "nokia_tune", "pacman"}
+        assert fun.issubset(set(melodies.BLHELI_CATALOG.keys()))
+
+    def test_all_blheli_melodies_parseable(self):
+        from buzzer.blheli_parser import parse_blheli
+        for name, (melody_str, tempo) in melodies.BLHELI_CATALOG.items():
+            notes = parse_blheli(melody_str, tempo_bpm=tempo)
+            assert len(notes) > 0, f"{name} parsed to empty"
+            for freq, dur in notes:
+                assert freq >= 0, f"{name}: negative freq {freq}"
+                assert dur > 0, f"{name}: non-positive duration {dur}"
+
+    def test_fun_playlist_only_has_fun_melodies(self):
+        system = {"startup", "arm", "disarm", "low_voltage", "failsafe",
+                  "sos", "connected", "disconnected", "shutdown"}
+        for name in melodies.FUN_PLAYLIST:
+            assert name not in system, f"{name} is a system melody"
+            assert name in melodies.BLHELI_CATALOG, f"{name} not in catalog"

@@ -88,3 +88,101 @@ CATALOG: dict[str, list[tuple[int, int, int]]] = {
     "disconnected": DISCONNECTED,
     "shutdown": SHUTDOWN,
 }
+
+
+# ── BLHeli32 format melodies ──────────────────────────────────────
+# Each entry: (melody_string, tempo_bpm)
+
+BLHELI_CATALOG: dict[str, tuple[str, int]] = {
+    # ── System melodies ────────────────────────────
+    "startup": (
+        "C5 1/16 E5 1/16 E5 1/8 D5 1/8 C5 1/8",
+        150,
+    ),
+    "arm": (
+        "C5 1/16 E5 1/16 G5 1/16 C6 1/8",
+        180,
+    ),
+    "disarm": (
+        "G5 1/8 D5 1/4",
+        120,
+    ),
+    "low_voltage": (
+        "A5 1/8 P 1/16 A5 1/8 P 1/16 A5 1/8",
+        160,
+    ),
+    "failsafe": (
+        "D4 1/2",
+        120,
+    ),
+    "sos": (
+        "E6 1/16 E6 1/16 E6 1/16 P 1/8 E6 1/4 E6 1/4 E6 1/4 P 1/8 E6 1/16 E6 1/16 E6 1/16",
+        100,
+    ),
+    "connected": (
+        "E5 1/16 A5 1/16",
+        160,
+    ),
+    "disconnected": (
+        "E5 1/16 C5 1/8 A4 1/8",
+        140,
+    ),
+    "shutdown": (
+        "C5 1/8 D5 1/8 E5 1/16 C5 1/16 A4 1/4",
+        140,
+    ),
+    # ── Fun melodies ───────────────────────────────
+    "imperial_march": (
+        "G4 1/4 G4 1/4 G4 1/4 D#4 1/8 A#4 1/16 G4 1/4 D#4 1/8 A#4 1/16 G4 1/2 "
+        "D5 1/4 D5 1/4 D5 1/4 D#5 1/8 A#4 1/16 F#4 1/4 D#4 1/8 A#4 1/16 G4 1/2",
+        104,
+    ),
+    "katyusha": (
+        "D5 1/4 E5 1/8 F5 1/8 G5 1/4 G5 1/8 F5 1/8 E5 1/4 E5 1/4 "
+        "A4 1/4 D5 1/8 C5 1/8 A4 1/4 A4 1/8 G4 1/8 F4 1/2",
+        120,
+    ),
+    "korobeiniki": (
+        "E5 1/4 B4 1/8 C5 1/8 D5 1/4 C5 1/8 B4 1/8 A4 1/4 A4 1/8 C5 1/8 "
+        "E5 1/4 D5 1/8 C5 1/8 B4 1/4 B4 1/8 C5 1/8 D5 1/4 E5 1/4 "
+        "C5 1/4 A4 1/4 A4 1/2",
+        140,
+    ),
+    "axel_f": (
+        "F5 1/8 G#5 1/4 F5 1/16 F5 1/16 A#5 1/8 F5 1/8 D#5 1/8 "
+        "F5 1/8 C6 1/4 F5 1/16 F5 1/16 C#6 1/8 C6 1/8 G#5 1/8 "
+        "F5 1/8 C6 1/8 F6 1/8 F5 1/16 D#5 1/16 D#5 1/8 C5 1/8 G5 1/8 F5 1/4",
+        108,
+    ),
+    "nokia_tune": (
+        "E6 1/8 D6 1/8 F#5 1/4 G#5 1/4 C#6 1/8 B5 1/8 D5 1/4 E5 1/4 "
+        "B5 1/8 A5 1/8 C#5 1/4 E5 1/4 A5 1/2",
+        180,
+    ),
+    "pacman": (
+        "B4 1/16 B5 1/16 F#5 1/16 D#5 1/16 B5 1/16 F#5 1/8 D#5 1/8 "
+        "C5 1/16 C6 1/16 G5 1/16 E5 1/16 C6 1/16 G5 1/8 E5 1/8",
+        160,
+    ),
+    "mario": (
+        "E5 1/8 E5 1/8 P 1/8 E5 1/8 P 1/8 C5 1/8 E5 1/4 G5 1/4 P 1/4 G4 1/4",
+        200,
+    ),
+    "take_on_me": (
+        "F#4 1/8 F#4 1/8 D4 1/8 B3 1/8 P 1/8 B3 1/8 P 1/8 E4 1/8 "
+        "P 1/8 E4 1/8 P 1/8 E4 1/8 G#4 1/8 G#4 1/8 A4 1/8 B4 1/8",
+        160,
+    ),
+}
+
+# Fun playlist — selectable from RC transmitter; order = zone mapping
+FUN_PLAYLIST: list[str] = [
+    "imperial_march",
+    "katyusha",
+    "korobeiniki",
+    "axel_f",
+    "nokia_tune",
+    "pacman",
+    "mario",
+    "take_on_me",
+]
