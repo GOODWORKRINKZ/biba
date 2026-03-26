@@ -14,8 +14,8 @@ import config
 from bms.daly import BatteryState, DalyBMS
 from bms.poller import BMSPoller
 from buzzer.beacon import BeaconManager
-from buzzer.buzzer import Buzzer
 from buzzer.melodies import FUN_PLAYLIST
+from buzzer.motor_synth import MotorSynth
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -199,7 +199,15 @@ def main() -> int:
     if pi.connected:
         left_motor, right_motor = _create_motor_pair(pi)
         drive = DifferentialDrive(left_motor, right_motor)
-        buzzer = Buzzer(pi, config.BUZZER_PIN)
+        buzzer = MotorSynth(
+            pi,
+            [
+                config.LEFT_MOTOR_RPWM,
+                config.LEFT_MOTOR_LPWM,
+                config.RIGHT_MOTOR_RPWM,
+                config.RIGHT_MOTOR_LPWM,
+            ],
+        )
     else:
         LOGGER.warning("Could not connect to pigpio daemon, starting in telemetry-only mode")
         drive = _NullDrive()

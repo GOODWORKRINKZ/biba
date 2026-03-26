@@ -170,7 +170,7 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
         def emergency_stop(self) -> None:
             pass
 
-    class FakeBuzzer:
+    class FakeMotorSynth:
         def __init__(self, *args, **kwargs) -> None:
             pass
 
@@ -208,7 +208,7 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(main, "DalyBMS", FakeBMS)
     monkeypatch.setattr(main, "MotorDriver", FakeMotorDriver)
     monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
-    monkeypatch.setattr(main, "Buzzer", FakeBuzzer)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.config, "MOTOR_DRIVER_TYPE", "PWM_DIR")
@@ -280,9 +280,11 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         def emergency_stop(self) -> None:
             pass
 
-    class FakeBuzzer:
+    synth_created: list[tuple[int, ...]] = []
+
+    class FakeMotorSynth:
         def __init__(self, *args, **kwargs) -> None:
-            pass
+            synth_created.append(tuple(args[1]))
 
         def off(self) -> None:
             pass
@@ -318,7 +320,7 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(main, "DalyBMS", FakeBMS)
     monkeypatch.setattr(main, "BTS7960MotorDriver", FakeBTS7960MotorDriver)
     monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
-    monkeypatch.setattr(main, "Buzzer", FakeBuzzer)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.config, "MOTOR_DRIVER_TYPE", "BTS7960")
@@ -327,7 +329,7 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(main.config, "LEFT_MOTOR_REN", 23)
     monkeypatch.setattr(main.config, "LEFT_MOTOR_LEN", 24)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 12)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 16)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 19)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_REN", 20)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_LEN", 21)
     monkeypatch.setattr(main.config, "MOTOR1_INVERTED", 1)
@@ -337,8 +339,9 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
     assert main.main() == 0
     assert created == [
         (18, 13, 23, 24, True),
-        (12, 16, 20, 21, False),
+        (12, 19, 20, 21, False),
     ]
+    assert synth_created == [(18, 13, 12, 19)]
 
 
 def test_main_sends_test_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
