@@ -622,6 +622,7 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.config, "MOTOR_DRIVER_TYPE", "PWM_DIR")
     monkeypatch.setattr(main.config, "STARTUP_MELODY", "imperial_march")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0
