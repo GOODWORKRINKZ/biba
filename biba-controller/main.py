@@ -89,6 +89,9 @@ class _NullBuzzer:
     def play_wav(self, path: str) -> None:
         del path
 
+    def play_spectral(self, path: str) -> None:
+        del path
+
 
 def _setup_logging() -> None:
     logging.basicConfig(
@@ -313,7 +316,7 @@ def main() -> int:
 
     LOGGER.info("BiBa controller started")
     if config.STARTUP_VOICE_ENABLED:
-        buzzer.play_wav(config.STARTUP_VOICE)
+        buzzer.play_spectral(config.STARTUP_VOICE)
     elif config.STARTUP_MELODY:
         buzzer.play_named(config.STARTUP_MELODY)
     else:
@@ -347,7 +350,7 @@ def main() -> int:
                     if armed:
                         LOGGER.info("Platform armed")
                         if config.ARM_VOICE_ENABLED:
-                            buzzer.play_wav(config.ARM_VOICE)
+                            buzzer.play_spectral(config.ARM_VOICE)
                         else:
                             buzzer.arm_tone()
                     else:

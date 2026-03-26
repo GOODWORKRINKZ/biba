@@ -7,11 +7,20 @@ import struct
 import threading
 import wave
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from buzzer.wav_player import load_wav, play_samples, DEFAULT_CARRIER_HZ
+from buzzer.wav_player import (
+    DEFAULT_CARRIER_HZ,
+    _fft,
+    _next_pow2,
+    _SPECTRAL_DUTY_MAX,
+    load_wav,
+    play_samples,
+    play_tone_sequence,
+    wav_to_tones,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -273,3 +282,188 @@ class TestMotorSynthPlayWav:
         t.join(timeout=2.0)
 
         assert not t.is_alive()
+
+
+# ---------------------------------------------------------------------------
+# FFT helper tests
+# ---------------------------------------------------------------------------
+
+class TestFFT:
+    def test_next_pow2(self):
+        assert _next_pow2(1) == 1
+        assert _next_pow2(3) == 4
+        assert _next_pow2(120) == 128
+        assert _next_pow2(256) == 256
+
+    def test_fft_single_element(self):
+        result = _fft([complex(5.0)])
+        assert len(result) == 1
+        assert abs(result[0] - 5.0) < 1e-9
+
+    def test_fft_dc_signal(self):
+        # All-ones → DC bin has amplitude N, all others zero
+        n = 8
+        result = _fft([complex(1.0)] * n)
+        assert abs(result[0] - n) < 1e-9
+        for k in range(1, n):
+            assert abs(result[k]) < 1e-9
+
+    def test_fft_pure_tone_peak_at_correct_bin(self):
+        import cmath
+        n = 64
+        freq_bin = 8  # 8 cycles in 64 samples
+        signal = [cmath.exp(2j * cmath.pi * freq_bin * i / n) for i in range(n)]
+        result = _fft(signal)
+        magnitudes = [abs(result[k]) for k in range(n)]
+        peak = magnitudes.index(max(magnitudes))
+        assert peak == freq_bin
+
+
+# ---------------------------------------------------------------------------
+# wav_to_tones tests
+# ---------------------------------------------------------------------------
+
+class TestWavToTones:
+    def test_returns_tone_tuples(self, tmp_path):
+        # 400 samples of a 1kHz sine at 8kHz → 50ms → several frames
+        import math
+        n = 400
+        samples = [int(32767 * math.sin(2 * math.pi * 1000 * i / 8000)) for i in range(n)]
+        wav_path = tmp_path / "tone.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        tones = wav_to_tones(str(wav_path), frame_ms=20)
+
+        assert len(tones) > 0
+        for freq, duty, dur in tones:
+            assert isinstance(freq, int)
+            assert isinstance(duty, int)
+            assert dur == 20
+            assert 0 <= duty <= _SPECTRAL_DUTY_MAX
+
+    def test_detects_frequency_of_pure_tone(self, tmp_path):
+        import math
+        n = 800  # 100ms at 8kHz
+        target_freq = 500
+        samples = [int(32767 * math.sin(2 * math.pi * target_freq * i / 8000)) for i in range(n)]
+        wav_path = tmp_path / "tone.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        tones = wav_to_tones(str(wav_path), frame_ms=20)
+
+        # All voiced frames should detect ~500 Hz (within FFT bin resolution)
+        voiced = [f for f, d, _ in tones if f > 0]
+        assert len(voiced) > 0
+        for f in voiced:
+            assert abs(f - target_freq) < 100  # within ~100 Hz tolerance
+
+    def test_silence_produces_zero_freq(self, tmp_path):
+        samples = [0] * 400
+        wav_path = tmp_path / "silence.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        tones = wav_to_tones(str(wav_path), frame_ms=20)
+
+        for freq, duty, _ in tones:
+            assert freq == 0
+            assert duty == 0
+
+    def test_raises_on_missing_file(self):
+        with pytest.raises(FileNotFoundError):
+            wav_to_tones("/nonexistent/path.wav")
+
+
+# ---------------------------------------------------------------------------
+# play_tone_sequence tests
+# ---------------------------------------------------------------------------
+
+class TestPlayToneSequence:
+    def test_plays_tones_and_cleans_up(self):
+        pi = MagicMock()
+        pins = [18, 13]
+        tones = [(440, 200000, 10)]
+
+        with patch("buzzer.wav_player.time.sleep"):
+            play_tone_sequence(pi, pins, tones)
+
+        # Should have set freq on both pins, then cleanup
+        calls = pi.hardware_PWM.call_args_list
+        assert call(18, 440, 200000) in calls
+        assert call(13, 440, 200000) in calls
+        # Cleanup at end
+        assert calls[-1] == call(13, 0, 0) or calls[-2] == call(13, 0, 0)
+
+    def test_silence_frame_turns_off_pins(self):
+        pi = MagicMock()
+        pins = [18]
+        tones = [(0, 0, 10)]
+
+        with patch("buzzer.wav_player.time.sleep"):
+            play_tone_sequence(pi, pins, tones)
+
+        # All calls should be (pin, 0, 0)
+        for c in pi.hardware_PWM.call_args_list:
+            assert c == call(18, 0, 0)
+
+    def test_interrupt_stops_early(self):
+        pi = MagicMock()
+        pins = [18]
+        tones = [(440, 200000, 10)] * 100
+        stop = threading.Event()
+        stop.set()
+
+        play_tone_sequence(pi, pins, tones, interrupt_event=stop)
+
+        # Should barely play any tones
+        # Just cleanup calls
+        assert pi.hardware_PWM.call_count <= 2
+
+    def test_empty_tones_just_cleans_up(self):
+        pi = MagicMock()
+        pins = [18, 13]
+
+        play_tone_sequence(pi, pins, [])
+
+        assert call(18, 0, 0) in pi.hardware_PWM.call_args_list
+        assert call(13, 0, 0) in pi.hardware_PWM.call_args_list
+
+
+# ---------------------------------------------------------------------------
+# MotorSynth.play_spectral integration tests
+# ---------------------------------------------------------------------------
+
+class TestMotorSynthPlaySpectral:
+    def _make_synth(self):
+        pi = MagicMock()
+        from buzzer.motor_synth import MotorSynth
+        synth = MotorSynth(pi, [18, 13])
+        return synth, pi
+
+    def test_play_spectral_calls_hardware_pwm(self, tmp_path):
+        synth, pi = self._make_synth()
+        import math
+        samples = [int(32767 * math.sin(2 * math.pi * 500 * i / 8000)) for i in range(400)]
+        wav_path = tmp_path / "test.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+        pi.hardware_PWM.reset_mock()
+
+        with patch("buzzer.wav_player.time.sleep"):
+            synth.play_spectral(str(wav_path))
+
+        assert pi.hardware_PWM.called
+
+    def test_play_spectral_respects_control_active(self, tmp_path):
+        synth, pi = self._make_synth()
+        wav_path = tmp_path / "test.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 32767], sample_rate=8000))
+
+        synth.set_control_active(True)
+        pi.hardware_PWM.reset_mock()
+
+        synth.play_spectral(str(wav_path))
+
+        pi.hardware_PWM.assert_not_called()
+
+    def test_play_spectral_missing_file_logs_not_crashes(self):
+        synth, _ = self._make_synth()
+        synth.play_spectral("/nonexistent/startup.wav")

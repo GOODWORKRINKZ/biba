@@ -9,7 +9,13 @@ import pigpio
 
 from buzzer import melodies
 from buzzer.blheli_parser import parse_blheli
-from buzzer.wav_player import load_wav, play_samples, DEFAULT_CARRIER_HZ
+from buzzer.wav_player import (
+    DEFAULT_CARRIER_HZ,
+    load_wav,
+    play_samples,
+    play_tone_sequence,
+    wav_to_tones,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,5 +169,34 @@ class MotorSynth:
     def play_wav_async(self, path: str) -> threading.Thread:
         """Play a WAV file in a background thread. Returns the thread."""
         t = threading.Thread(target=self.play_wav, args=(path,), daemon=True)
+        t.start()
+        return t
+
+    # ------------------------------------------------------------------
+    # Spectral / vocoder playback
+    # ------------------------------------------------------------------
+
+    def play_spectral(self, path: str) -> None:
+        """Play a WAV as an FFT-derived tone sequence (blocking)."""
+        if self._control_active:
+            return
+        try:
+            tones = wav_to_tones(path)
+        except Exception:
+            LOGGER.warning("Failed to load WAV for spectral: %s", path, exc_info=True)
+            return
+        with self._lock:
+            if self._control_active:
+                return
+            play_tone_sequence(
+                self.pi,
+                self.pwm_pins + self.comp_pins,
+                tones,
+                interrupt_event=self._interrupt_event,
+            )
+
+    def play_spectral_async(self, path: str) -> threading.Thread:
+        """Play spectral in a background thread. Returns the thread."""
+        t = threading.Thread(target=self.play_spectral, args=(path,), daemon=True)
         t.start()
         return t

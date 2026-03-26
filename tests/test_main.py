@@ -131,6 +131,9 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
         def play_wav(self, path: str) -> None:
             del path
 
+        def play_spectral(self, path: str) -> None:
+            del path
+
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
             pass
@@ -274,6 +277,9 @@ def test_main_uses_elapsed_time_between_drive_updates(monkeypatch: pytest.Monkey
             del name
 
         def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
             del path
 
     class FakeBeacon:
@@ -591,6 +597,9 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
         def play_wav(self, path: str) -> None:
             del path
 
+        def play_spectral(self, path: str) -> None:
+            del path
+
         def set_control_active(self, active: bool) -> None:
             del active
 
@@ -762,6 +771,9 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         def play_wav(self, path: str) -> None:
             del path
 
+        def play_spectral(self, path: str) -> None:
+            del path
+
         def set_control_active(self, active: bool) -> None:
             del active
 
@@ -884,6 +896,9 @@ def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.
             del name
 
         def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
             del path
 
         def set_control_active(self, active: bool) -> None:
@@ -1035,6 +1050,9 @@ def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_r
             del name
 
         def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
             del path
 
         def set_control_active(self, active: bool) -> None:
@@ -1199,6 +1217,9 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
             playlist_calls.append(name)
 
         def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
             if "arm" in path:
                 tone_calls.append("arm")
 
@@ -1351,6 +1372,9 @@ def test_main_does_not_start_playlist_melody_when_rc_melodies_disabled(
             playlist_calls.append(name)
 
         def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
             del path
 
         def set_control_active(self, active: bool) -> None:
@@ -1524,6 +1548,9 @@ def test_main_only_plays_low_voltage_alarm_once_per_low_battery_episode(
         def play_wav(self, path: str) -> None:
             del path
 
+        def play_spectral(self, path: str) -> None:
+            del path
+
         def set_control_active(self, active: bool) -> None:
             del active
 
@@ -1682,6 +1709,9 @@ def test_main_sets_control_priority_when_drive_input_is_active(
             del name
 
         def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
             del path
 
         def set_control_active(self, active: bool) -> None:
