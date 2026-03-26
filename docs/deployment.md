@@ -6,7 +6,7 @@
 
 - Raspberry Pi Zero 2W (или другая плата с arm64 и GPIO)
 - ELRS-приемник, подключенный к UART (`/dev/ttyAMA0`)
-- Daly BMS с USB-UART адаптером (`/dev/ttyUSB0`)
+- Daly BMS по BLE или через USB-UART адаптер (`/dev/ttyUSB0`)
 - Двухканальный драйвер моторов (PWM + DIR)
 - Буззер на GPIO17
 - 6S LiPo аккумулятор
@@ -100,7 +100,13 @@ bash ~/biba/scripts/diagnostics.sh
 | Переменная | По умолчанию | Описание |
 |------------|-------------|---------|
 | `CRSF_PORT` | `/dev/ttyAMA0` | UART-порт ELRS |
+| `BMS_TRANSPORT` | `UART` | Транспорт BMS: `UART` или `BLE` |
 | `BMS_PORT` | `/dev/ttyUSB0` | USB-UART порт Daly BMS |
+| `BMS_BLE_ADDRESS` | `` | MAC-адрес BLE-модуля Daly |
+| `BMS_BLE_SERVICE_UUID` | `0000fff0-0000-1000-8000-00805f9b34fb` | BLE service UUID Daly |
+| `BMS_BLE_WRITE_UUID` | `0000fff2-0000-1000-8000-00805f9b34fb` | BLE characteristic для команд |
+| `BMS_BLE_NOTIFY_UUID` | `0000fff1-0000-1000-8000-00805f9b34fb` | BLE characteristic для ответов |
+| `BMS_BLE_TIMEOUT_S` | `1.5` | Таймаут ответа BMS по BLE |
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
 | `MOTOR_DRIVER_TYPE` | `BTS7960` | Тип драйвера моторов: штатный `BTS7960` или старый `PWM_DIR` |
 | `CH_STEERING` | `0` | Номер канала руления |
@@ -127,11 +133,24 @@ bash ~/biba/scripts/diagnostics.sh
 
 ```
 BIBA_IMAGE_TAG=latest
+BMS_TRANSPORT=UART
+BMS_BLE_ADDRESS=
 MOTOR_DRIVER_TYPE=BTS7960
 BEACON_ENABLED=1
 BEACON_DELAY_S=300
 CH_BEACON=5
 ```
+
+### BLE BMS
+
+Чтобы перевести BMS на Bluetooth, задайте в `.env` или `/etc/default/biba-controller`:
+
+```bash
+BMS_TRANSPORT=BLE
+BMS_BLE_ADDRESS=71:C1:46:20:25:4F
+```
+
+Остальные BLE UUID можно не менять, если используется стандартный Daly BLE bridge.
 
 ### Звуковая индикация
 
@@ -157,6 +176,21 @@ dmesg | tail -20                # лог ядра
 
 Убедитесь, что USB-UART адаптер подключен. Если порт отличается от `/dev/ttyUSB0`, обновите `BMS_PORT` в `docker-compose.yml`.
 
+### Нет BLE-соединения с BMS
+
+```bash
+bluetoothctl scan on
+bluetoothctl connect 71:C1:46:20:25:4F
+docker compose logs --tail 50 biba-controller
+```
+
+Проверьте, что:
+
+- `BMS_TRANSPORT=BLE`
+- `BMS_BLE_ADDRESS` совпадает с MAC-адресом BMS
+- на хосте активна служба `bluetooth`
+- в контейнер примонтирован `/run/dbus/system_bus_socket`
+
 ### Нет CRSF-сигнала
 
 ```bash
@@ -166,7 +200,6 @@ ls -la /dev/ttyAMA0             # проверить UART
 
 Убедитесь, что:
 - UART включен в config.txt (`enable_uart=1`)
-- Bluetooth отключен (`dtoverlay=disable-bt`)
 - Pi перезагружен после изменений
 
 ### Docker permission denied
