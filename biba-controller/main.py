@@ -348,7 +348,10 @@ def main() -> int:
                     armed = requested_armed
                     if armed:
                         LOGGER.info("Platform armed")
-                        buzzer.arm_tone()
+                        if config.ARM_VOICE_ENABLED:
+                            buzzer.play_wav(config.ARM_VOICE)
+                        else:
+                            buzzer.arm_tone()
                     else:
                         LOGGER.info("Platform disarmed")
                         buzzer.disarm_tone()
