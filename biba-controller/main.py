@@ -257,19 +257,17 @@ def main() -> int:
         left_motor, right_motor = _create_motor_pair(pi)
         drive = DifferentialDrive(left_motor, right_motor)
         synth_pwm_pins: list[int] = []
+        synth_comp_pins: list[int] = []
         if config.LEFT_MOTOR_ENABLED:
-            synth_pwm_pins.extend([
-                config.LEFT_MOTOR_RPWM,
-                config.LEFT_MOTOR_LPWM,
-            ])
+            synth_pwm_pins.append(config.LEFT_MOTOR_RPWM)
+            synth_comp_pins.append(config.LEFT_MOTOR_LPWM)
         if config.RIGHT_MOTOR_ENABLED:
-            synth_pwm_pins.extend([
-                config.RIGHT_MOTOR_RPWM,
-                config.RIGHT_MOTOR_LPWM,
-            ])
+            synth_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
+            synth_comp_pins.append(config.RIGHT_MOTOR_LPWM)
         buzzer = MotorSynth(
             pi,
             synth_pwm_pins,
+            comp_pins=synth_comp_pins,
         )
     else:
         LOGGER.warning("Could not connect to pigpio daemon, starting in telemetry-only mode")

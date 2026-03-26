@@ -76,14 +76,20 @@ def play_samples(
     sample_rate: int,
     carrier_freq: int = DEFAULT_CARRIER_HZ,
     interrupt_event: threading.Event | None = None,
+    comp_pins: list[int] | None = None,
 ) -> None:
     """Play 8-bit unsigned PCM samples via hardware PWM duty-cycle modulation.
+
+    When *comp_pins* is provided, those pins receive the complementary duty
+    cycle (1 − D), creating a push-pull H-bridge drive that doubles the
+    voltage swing across the motor coil.
 
     When hardware_PWM calls are slower than the sample period (common with
     multiple pins over the pigpio socket), samples are skipped to maintain
     real-time playback speed.
     """
     n_samples = len(samples)
+    _comp = comp_pins or []
     start = time.monotonic()
     i = 0
 
@@ -95,6 +101,10 @@ def play_samples(
         duty = samples[i] * _DUTY_MAX // 255
         for pin in pins:
             pi.hardware_PWM(pin, carrier_freq, duty)
+        if _comp:
+            anti_duty = _DUTY_MAX - duty
+            for pin in _comp:
+                pi.hardware_PWM(pin, carrier_freq, anti_duty)
 
         # Advance index to where we should be in real time
         elapsed = time.monotonic() - start
@@ -102,4 +112,6 @@ def play_samples(
 
     # Cleanup: silence all pins
     for pin in pins:
+        pi.hardware_PWM(pin, 0, 0)
+    for pin in _comp:
         pi.hardware_PWM(pin, 0, 0)

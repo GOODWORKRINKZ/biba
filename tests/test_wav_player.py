@@ -188,6 +188,41 @@ class TestPlaySamples:
     def test_default_carrier_frequency_is_25khz(self):
         assert DEFAULT_CARRIER_HZ == 16000
 
+    def test_comp_pins_receive_complementary_duty(self):
+        pi = MagicMock()
+        pins = [18]
+        comp_pins = [13]
+        # Sample 255 → duty 1_000_000, comp duty 0
+        samples = bytes([255])
+        stop = threading.Event()
+
+        play_samples(pi, pins, samples, sample_rate=8000,
+                     carrier_freq=25000, interrupt_event=stop,
+                     comp_pins=comp_pins)
+
+        calls = pi.hardware_PWM.call_args_list
+        # First: pin 18 gets full duty
+        assert call(18, 25000, 1_000_000) in calls
+        # Complementary pin 13 gets zero duty
+        assert call(13, 25000, 0) in calls
+        # Cleanup for both
+        assert call(18, 0, 0) in calls
+        assert call(13, 0, 0) in calls
+
+    def test_comp_pins_cleanup_on_empty_samples(self):
+        pi = MagicMock()
+        pins = [18]
+        comp_pins = [13]
+        samples = bytes()
+        stop = threading.Event()
+
+        play_samples(pi, pins, samples, sample_rate=8000,
+                     carrier_freq=25000, interrupt_event=stop,
+                     comp_pins=comp_pins)
+
+        assert call(18, 0, 0) in pi.hardware_PWM.call_args_list
+        assert call(13, 0, 0) in pi.hardware_PWM.call_args_list
+
 
 # ---------------------------------------------------------------------------
 # MotorSynth.play_wav integration tests

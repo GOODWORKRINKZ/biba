@@ -17,14 +17,21 @@ LOGGER = logging.getLogger(__name__)
 class MotorSynth:
     """Play melodies through the motor PWM pins using hardware PWM."""
 
-    def __init__(self, pi: pigpio.pi, pwm_pins: list[int], duty_cycle: int = 50000) -> None:
+    def __init__(
+        self,
+        pi: pigpio.pi,
+        pwm_pins: list[int],
+        duty_cycle: int = 50000,
+        comp_pins: list[int] | None = None,
+    ) -> None:
         self.pi = pi
         self.pwm_pins = list(dict.fromkeys(pwm_pins))
+        self.comp_pins = list(dict.fromkeys(comp_pins)) if comp_pins else []
         self.duty_cycle = duty_cycle
         self._lock = threading.Lock()
         self._interrupt_event = threading.Event()
         self._control_active = False
-        for pin in self.pwm_pins:
+        for pin in self.pwm_pins + self.comp_pins:
             self.pi.set_mode(pin, pigpio.OUTPUT)
         self.off()
 
@@ -40,7 +47,7 @@ class MotorSynth:
             self._interrupt_event.clear()
 
     def _apply(self, frequency: int, duty_cycle: int) -> None:
-        for pin in self.pwm_pins:
+        for pin in self.pwm_pins + self.comp_pins:
             self.pi.hardware_PWM(pin, frequency, duty_cycle)
 
     def _wait_or_interrupted(self, duration_s: float) -> bool:
@@ -150,6 +157,7 @@ class MotorSynth:
                 sample_rate,
                 carrier_freq=DEFAULT_CARRIER_HZ,
                 interrupt_event=self._interrupt_event,
+                comp_pins=self.comp_pins,
             )
 
     def play_wav_async(self, path: str) -> threading.Thread:
