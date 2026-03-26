@@ -35,6 +35,11 @@ def _get_env_choice(name: str, default: str, choices: set[str]) -> str:
     return default
 
 
+def _get_env_list(name: str, default: str) -> list[str]:
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
 MOTOR_DRIVER_TYPE = _get_env_choice("MOTOR_DRIVER_TYPE", "BTS7960", {"PWM_DIR", "BTS7960"})
 MOTOR1_PWM = _get_env_int("MOTOR1_PWM", 18)
 MOTOR1_DIR = _get_env_int("MOTOR1_DIR", 23)
@@ -105,7 +110,40 @@ CH_MELODY = _get_env_int("CH_MELODY", 8)
 STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")
 
 # Voice (WAV playback through motor coils)
-STARTUP_VOICE = os.getenv("STARTUP_VOICE", "/app/voice/startup.wav")
+VOICE_SELECTION_MODE = _get_env_choice("VOICE_SELECTION_MODE", "ROUND_ROBIN", {"ROUND_ROBIN", "RANDOM"})
+STARTUP_VOICES = _get_env_list(
+    "STARTUP_VOICES",
+    "/app/voice/startup_returned.wav;/app/voice/startup_useful.wav;/app/voice/startup_needed.wav",
+)
 STARTUP_VOICE_ENABLED = bool(_get_env_int("STARTUP_VOICE_ENABLED", 1))
-ARM_VOICE = os.getenv("ARM_VOICE", "/app/voice/arm.wav")
+STARTUP_VOICE = STARTUP_VOICES[0] if STARTUP_VOICES else ""
+ARM_VOICES = _get_env_list(
+    "ARM_VOICES",
+    "/app/voice/arm_begin.wav;/app/voice/arm_confirm.wav;/app/voice/arm_deploy.wav",
+)
 ARM_VOICE_ENABLED = bool(_get_env_int("ARM_VOICE_ENABLED", 1))
+ARM_VOICE = ARM_VOICES[0] if ARM_VOICES else ""
+DISARM_VOICES = _get_env_list(
+    "DISARM_VOICES",
+    "/app/voice/disarm_waiting.wav;/app/voice/disarm_orders.wav",
+)
+CONNECTED_VOICES = _get_env_list(
+    "CONNECTED_VOICES",
+    "/app/voice/connected_online.wav;/app/voice/connected_signal.wav",
+)
+DISCONNECTED_VOICES = _get_env_list(
+    "DISCONNECTED_VOICES",
+    "/app/voice/disconnected_protocol.wav",
+)
+FAILSAFE_VOICES = _get_env_list(
+    "FAILSAFE_VOICES",
+    "/app/voice/failsafe_intruder.wav;/app/voice/failsafe_drop_weapons.wav",
+)
+LOW_VOLTAGE_VOICES = _get_env_list(
+    "LOW_VOLTAGE_VOICES",
+    "/app/voice/low_voltage_retribution.wav",
+)
+SOS_VOICES = _get_env_list(
+    "SOS_VOICES",
+    "/app/voice/sos_comply.wav",
+)

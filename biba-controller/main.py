@@ -16,6 +16,7 @@ from bms.poller import BMSPoller
 from buzzer.beacon import BeaconManager
 from buzzer.melodies import FUN_PLAYLIST
 from buzzer.motor_synth import MotorSynth
+from buzzer.voice_selector import VoiceSelector
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -91,6 +92,19 @@ class _NullBuzzer:
 
     def play_spectral(self, path: str) -> None:
         del path
+
+
+def _play_grouped_voice(
+    selector: VoiceSelector,
+    event: str,
+    voices: list[str],
+    player,
+) -> bool:
+    path = selector.choose(event, voices)
+    if path is None:
+        return False
+    player(path)
+    return True
 
 
 def _setup_logging() -> None:
@@ -313,10 +327,16 @@ def main() -> int:
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
     throttle_filter = _create_throttle_filter()
+    voice_selector = VoiceSelector(config.VOICE_SELECTION_MODE)
 
     LOGGER.info("BiBa controller started")
-    if config.STARTUP_VOICE_ENABLED:
-        buzzer.play_spectral(config.STARTUP_VOICE)
+    if config.STARTUP_VOICE_ENABLED and _play_grouped_voice(
+        voice_selector,
+        "startup",
+        config.STARTUP_VOICES,
+        buzzer.play_spectral,
+    ):
+        pass
     elif config.STARTUP_MELODY:
         buzzer.play_named(config.STARTUP_MELODY)
     else:
@@ -340,7 +360,13 @@ def main() -> int:
 
                 if not had_connection:
                     had_connection = True
-                    buzzer.connected_tone()
+                    if not _play_grouped_voice(
+                        voice_selector,
+                        "connected",
+                        config.CONNECTED_VOICES,
+                        buzzer.play_spectral,
+                    ):
+                        buzzer.connected_tone()
                 beacon.on_connected()
 
                 requested_armed = _is_armed(channels)
@@ -349,13 +375,24 @@ def main() -> int:
                     armed = requested_armed
                     if armed:
                         LOGGER.info("Platform armed")
-                        if config.ARM_VOICE_ENABLED:
-                            buzzer.play_spectral(config.ARM_VOICE)
+                        if config.ARM_VOICE_ENABLED and _play_grouped_voice(
+                            voice_selector,
+                            "arm",
+                            config.ARM_VOICES,
+                            buzzer.play_spectral,
+                        ):
+                            pass
                         else:
                             buzzer.arm_tone()
                     else:
                         LOGGER.info("Platform disarmed")
-                        buzzer.disarm_tone()
+                        if not _play_grouped_voice(
+                            voice_selector,
+                            "disarm",
+                            config.DISARM_VOICES,
+                            buzzer.play_spectral,
+                        ):
+                            buzzer.disarm_tone()
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
 
@@ -405,7 +442,13 @@ def main() -> int:
             if not received_frame and drive.check_failsafe(last_frame_time):
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
-                    buzzer.failsafe_tone()
+                    if not _play_grouped_voice(
+                        voice_selector,
+                        "failsafe",
+                        config.FAILSAFE_VOICES,
+                        buzzer.play_spectral,
+                    ):
+                        buzzer.failsafe_tone()
                 if throttle_filter is not None:
                     throttle_filter.reset()
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
@@ -413,12 +456,24 @@ def main() -> int:
                 last_drive_update_at = loop_started_at
                 if had_connection:
                     had_connection = False
-                    buzzer.disconnected_tone()
+                    if not _play_grouped_voice(
+                        voice_selector,
+                        "disconnected",
+                        config.DISCONNECTED_VOICES,
+                        buzzer.play_spectral,
+                    ):
+                        buzzer.disconnected_tone()
                 armed = False
                 beacon.on_failsafe(loop_started_at)
 
             if beacon.should_sos(loop_started_at):
-                buzzer.sos_beacon()
+                if not _play_grouped_voice(
+                    voice_selector,
+                    "sos",
+                    config.SOS_VOICES,
+                    buzzer.play_spectral,
+                ):
+                    buzzer.sos_beacon()
 
             if loop_started_at - last_telemetry_send >= config.BMS_POLL_INTERVAL_S:
                 last_telemetry_send = loop_started_at
@@ -445,7 +500,13 @@ def main() -> int:
                     if is_low_voltage and not low_voltage_active:
                         low_voltage_active = True
                         LOGGER.warning("Low battery warning: %.2fV", battery_state.voltage)
-                        buzzer.low_voltage_alarm()
+                        if not _play_grouped_voice(
+                            voice_selector,
+                            "low_voltage",
+                            config.LOW_VOLTAGE_VOICES,
+                            buzzer.play_spectral,
+                        ):
+                            buzzer.low_voltage_alarm()
                     elif not is_low_voltage:
                         low_voltage_active = False
                 else:

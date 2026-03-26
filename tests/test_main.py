@@ -1255,6 +1255,7 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
     monkeypatch.setattr(main.config, "CH_ARM", 4)
     monkeypatch.setattr(main.config, "CH_MELODY", 8)
     monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "DISARM_VOICES", [])
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
@@ -1594,6 +1595,7 @@ def test_main_only_plays_low_voltage_alarm_once_per_low_battery_episode(
     monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 0.0)
     monkeypatch.setattr(main.config, "LOW_CELL_VOLTAGE", 3.5)
     monkeypatch.setattr(main.config, "LOW_PACK_VOLTAGE", 21.0)
+    monkeypatch.setattr(main.config, "LOW_VOLTAGE_VOICES", [])
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
