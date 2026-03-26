@@ -11,7 +11,7 @@ from typing import Optional
 import pigpio
 
 import config
-from bms.daly import BatteryState, DalyBMS
+from bms.daly import BatteryState, DalyBMS, DalyBMSBle
 from bms.poller import BMSPoller
 from buzzer.beacon import BeaconManager
 from buzzer.melodies import FUN_PLAYLIST
@@ -126,6 +126,18 @@ def _connect_pigpio(retries: int = 5, delay: float = 1.0) -> pigpio.pi:
     return pigpio.pi()
 
 
+def _create_bms() -> DalyBMS:
+    if config.BMS_TRANSPORT == "BLE":
+        return DalyBMSBle(
+            config.BMS_BLE_ADDRESS,
+            config.BMS_BLE_SERVICE_UUID,
+            config.BMS_BLE_WRITE_UUID,
+            config.BMS_BLE_NOTIFY_UUID,
+            config.BMS_BLE_TIMEOUT_S,
+        )
+    return DalyBMS(config.BMS_PORT, config.BMS_BAUD)
+
+
 def _create_motor_pair(pi: pigpio.pi) -> tuple[object, object]:
     if config.MOTOR_DRIVER_TYPE == "BTS7960":
         left_motor = BTS7960MotorDriver(
@@ -192,7 +204,7 @@ def main() -> int:
 
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
-    bms = DalyBMS(config.BMS_PORT, config.BMS_BAUD)
+    bms = _create_bms()
     bms_poller: Optional[BMSPoller] = None
     stats = SystemStats()
     pi = _connect_pigpio()
@@ -256,6 +268,7 @@ def main() -> int:
     try:
         while RUNNING:
             loop_started_at = time.monotonic()
+            received_frame = False
 
             try:
                 channels = receiver.get_channels()
@@ -264,7 +277,9 @@ def main() -> int:
                 channels = None
 
             if channels is not None:
+                received_frame = True
                 last_frame_time = loop_started_at
+                arm_state_changed = False
 
                 if not had_connection:
                     had_connection = True
@@ -273,6 +288,7 @@ def main() -> int:
 
                 requested_armed = _is_armed(channels)
                 if requested_armed != armed:
+                    arm_state_changed = True
                     armed = requested_armed
                     if armed:
                         LOGGER.info("Platform armed")
@@ -305,11 +321,14 @@ def main() -> int:
                 num_melodies = len(FUN_PLAYLIST)
                 raw_val = (melody_ch + 1.0) / 2.0  # -1..1 → 0..1
                 new_zone = min(int(raw_val * num_melodies), num_melodies - 1)
-                if new_zone != melody_zone:
+                if melody_zone == -1:
                     melody_zone = new_zone
-                    buzzer.play_named_async(FUN_PLAYLIST[melody_zone])
+                elif new_zone != melody_zone:
+                    melody_zone = new_zone
+                    if not arm_state_changed:
+                        buzzer.play_named_async(FUN_PLAYLIST[melody_zone])
 
-            if drive.check_failsafe(last_frame_time):
+            if not received_frame and drive.check_failsafe(last_frame_time):
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
                     buzzer.failsafe_tone()

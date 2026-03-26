@@ -16,6 +16,8 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     monkeypatch.delenv("MOTOR_DRIVER_TYPE", raising=False)
     monkeypatch.delenv("MOTOR1_INVERTED", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
+    monkeypatch.delenv("BMS_TRANSPORT", raising=False)
+    monkeypatch.delenv("BMS_BLE_ADDRESS", raising=False)
 
     module = importlib.reload(config_module)
 
@@ -32,6 +34,8 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.RIGHT_MOTOR_REN == 20
     assert module.RIGHT_MOTOR_LEN == 21
     assert module.CRSF_PORT == "/dev/ttyS0"
+    assert module.BMS_TRANSPORT == "UART"
+    assert module.BMS_BLE_ADDRESS == ""
     assert module.TEST_BATTERY_VOLTAGE == pytest.approx(25.0)
     assert module.TEST_BATTERY_CURRENT == pytest.approx(1.2)
     assert module.TEST_BATTERY_CAPACITY_MAH == 0
@@ -48,6 +52,8 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("RIGHT_MOTOR_LEN", "6")
     monkeypatch.setenv("FAILSAFE_TIMEOUT_S", "0.75")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("BMS_TRANSPORT", "ble")
+    monkeypatch.setenv("BMS_BLE_ADDRESS", "71:C1:46:20:25:4F")
 
     module = importlib.reload(config_module)
 
@@ -59,6 +65,8 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.RIGHT_MOTOR_LEN == 6
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.75)
     assert module.LOG_LEVEL == "DEBUG"
+    assert module.BMS_TRANSPORT == "BLE"
+    assert module.BMS_BLE_ADDRESS == "71:C1:46:20:25:4F"
 
 
 def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -71,6 +79,14 @@ def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.M
     assert module.MOTOR1_PWM == 18
     assert module.MOTOR1_INVERTED == 0
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.5)
+
+
+def test_config_falls_back_to_uart_for_invalid_bms_transport(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.setenv("BMS_TRANSPORT", "zigbee")
+
+    module = importlib.reload(config_module)
+
+    assert module.BMS_TRANSPORT == "UART"
 
 
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
@@ -99,6 +115,17 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
     assert "RIGHT_MOTOR_LPWM:" in compose
     assert "RIGHT_MOTOR_REN:" in compose
     assert "RIGHT_MOTOR_LEN:" in compose
+
+
+def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "BMS_TRANSPORT:" in compose
+    assert "BMS_BLE_ADDRESS:" in compose
+    assert "BMS_BLE_SERVICE_UUID:" in compose
+    assert "BMS_BLE_WRITE_UUID:" in compose
+    assert "BMS_BLE_NOTIFY_UUID:" in compose
 
 
 def test_docker_compose_exposes_pigpio_device_mappings() -> None:

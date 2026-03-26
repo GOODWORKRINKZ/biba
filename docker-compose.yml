@@ -12,6 +12,8 @@ services:
       - /dev/gpiomem:/dev/gpiomem
       - /dev/vcio:/dev/vcio
       - /dev/mem:/dev/mem
+    volumes:
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python.*main' || exit 1"]
       interval: 30s
@@ -21,6 +23,12 @@ services:
     environment:
       CRSF_PORT: /dev/ttyS0
       BMS_PORT: /dev/ttyUSB0
+      BMS_TRANSPORT: ${BMS_TRANSPORT:-UART}
+      BMS_BLE_ADDRESS: ${BMS_BLE_ADDRESS:-}
+      BMS_BLE_SERVICE_UUID: ${BMS_BLE_SERVICE_UUID:-0000fff0-0000-1000-8000-00805f9b34fb}
+      BMS_BLE_WRITE_UUID: ${BMS_BLE_WRITE_UUID:-0000fff2-0000-1000-8000-00805f9b34fb}
+      BMS_BLE_NOTIFY_UUID: ${BMS_BLE_NOTIFY_UUID:-0000fff1-0000-1000-8000-00805f9b34fb}
+      BMS_BLE_TIMEOUT_S: ${BMS_BLE_TIMEOUT_S:-1.5}
       LOG_LEVEL: INFO
       MOTOR_DRIVER_TYPE: ${MOTOR_DRIVER_TYPE:-BTS7960}
       CH_STEERING: 3

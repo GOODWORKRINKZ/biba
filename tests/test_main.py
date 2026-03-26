@@ -110,6 +110,68 @@ def test_main_continues_when_pigpio_is_unavailable(monkeypatch: pytest.MonkeyPat
     assert main.main() == 0
 
 
+def test_create_bms_returns_uart_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    created: list[tuple[str, tuple[object, ...]]] = []
+
+    class FakeUartBMS:
+        def __init__(self, *args) -> None:
+            created.append(("uart", args))
+
+    class FakeBleBMS:
+        def __init__(self, *args) -> None:
+            created.append(("ble", args))
+
+    monkeypatch.setattr(main, "DalyBMS", FakeUartBMS)
+    monkeypatch.setattr(main, "DalyBMSBle", FakeBleBMS)
+    monkeypatch.setattr(main.config, "BMS_TRANSPORT", "UART")
+    monkeypatch.setattr(main.config, "BMS_PORT", "/dev/ttyUSB0")
+    monkeypatch.setattr(main.config, "BMS_BAUD", 9600)
+
+    bms = main._create_bms()
+
+    assert isinstance(bms, FakeUartBMS)
+    assert created == [("uart", ("/dev/ttyUSB0", 9600))]
+
+
+def test_create_bms_returns_ble_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    created: list[tuple[str, tuple[object, ...]]] = []
+
+    class FakeUartBMS:
+        def __init__(self, *args) -> None:
+            created.append(("uart", args))
+
+    class FakeBleBMS:
+        def __init__(self, *args) -> None:
+            created.append(("ble", args))
+
+    monkeypatch.setattr(main, "DalyBMS", FakeUartBMS)
+    monkeypatch.setattr(main, "DalyBMSBle", FakeBleBMS)
+    monkeypatch.setattr(main.config, "BMS_TRANSPORT", "BLE")
+    monkeypatch.setattr(main.config, "BMS_BLE_ADDRESS", "71:C1:46:20:25:4F")
+    monkeypatch.setattr(main.config, "BMS_BLE_SERVICE_UUID", "0000fff0-0000-1000-8000-00805f9b34fb")
+    monkeypatch.setattr(main.config, "BMS_BLE_WRITE_UUID", "0000fff2-0000-1000-8000-00805f9b34fb")
+    monkeypatch.setattr(main.config, "BMS_BLE_NOTIFY_UUID", "0000fff1-0000-1000-8000-00805f9b34fb")
+    monkeypatch.setattr(main.config, "BMS_BLE_TIMEOUT_S", 1.5)
+
+    bms = main._create_bms()
+
+    assert isinstance(bms, FakeBleBMS)
+    assert created == [(
+        "ble",
+        (
+            "71:C1:46:20:25:4F",
+            "0000fff0-0000-1000-8000-00805f9b34fb",
+            "0000fff2-0000-1000-8000-00805f9b34fb",
+            "0000fff1-0000-1000-8000-00805f9b34fb",
+            1.5,
+        ),
+    )]
+
+
 def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     played: list[str] = []
@@ -207,6 +269,7 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
     monkeypatch.setattr(main, "DalyBMS", FakeBMS)
     monkeypatch.setattr(main, "MotorDriver", FakeMotorDriver)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
     monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
     monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
@@ -217,6 +280,57 @@ def test_main_continues_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch)
 
     assert main.main() == 0
     assert played == ["imperial_march"]
+
+
+def test_main_continues_when_ble_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    class FakePi:
+        connected = False
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            return None
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBleBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise RuntimeError("ble unavailable")
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMSBle", FakeBleBMS)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "BMS_TRANSPORT", "BLE")
+    monkeypatch.setattr(main.config, "BMS_BLE_ADDRESS", "71:C1:46:20:25:4F")
+    monkeypatch.setattr(main, "RUNNING", False)
+
+    assert main.main() == 0
 
 
 def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -342,6 +456,307 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         (12, 19, 20, 21, False),
     ]
     assert synth_created == [(18, 13, 12, 19)]
+
+
+def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_received(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    fake_time = [0.0]
+    failsafe_calls: list[str] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._read_count = 0
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            self._read_count += 1
+            return [0.0, 0.0, 0.0, 0.0, 0.98, 0.0, 0.0, 0.0, 0.0]
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> None:
+            main.RUNNING = False
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            return main.time.monotonic() - last_frame_time > main.config.FAILSAFE_TIMEOUT_S
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            fake_time[0] += 1.0
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            failsafe_calls.append("failsafe")
+
+        def sos_beacon(self) -> None:
+            pass
+
+        def low_voltage_alarm(self) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeStats:
+        def cpu_percent(self) -> float:
+            return 0.0
+
+        def memory_percent(self) -> float:
+            return 0.0
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "SystemStats", FakeStats)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
+    monkeypatch.setattr(main.config, "FAILSAFE_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert failsafe_calls == []
+
+
+def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    tone_calls: list[str] = []
+    playlist_calls: list[str] = []
+    frames = iter(
+        [
+            [0.0, 0.0, 0.0, 0.0, 0.98, 0.0, 0.0, 0.0, 0.98],
+            [0.0, 0.0, 0.0, 0.0, -0.98, 0.0, 0.0, 0.0, -0.98],
+        ]
+    )
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            try:
+                channels = next(frames)
+            except StopIteration:
+                main.RUNNING = False
+                return None
+            if channels[main.config.CH_ARM] < 0:
+                main.RUNNING = False
+            return channels
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> None:
+            pass
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            tone_calls.append("arm")
+
+        def disarm_tone(self) -> None:
+            tone_calls.append("disarm")
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def sos_beacon(self) -> None:
+            pass
+
+        def low_voltage_alarm(self) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            playlist_calls.append(name)
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_MELODY", 8)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert tone_calls == ["arm", "disarm"]
+    assert playlist_calls == []
 
 
 def test_main_sends_test_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
