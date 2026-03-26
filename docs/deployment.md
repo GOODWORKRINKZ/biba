@@ -103,7 +103,7 @@ bash ~/biba/scripts/diagnostics.sh
 | Переменная | По умолчанию | Описание |
 |------------|-------------|---------|
 | `CRSF_PORT` | `/dev/ttyAMA0` | UART-порт ELRS |
-| `BMS_TRANSPORT` | `UART` | Транспорт BMS: `UART` или `BLE` |
+| `BMS_TRANSPORT` | `BLE` | Транспорт BMS: `BLE` или явный fallback `UART` |
 | `BMS_PORT` | `/dev/ttyUSB0` | USB-UART порт Daly BMS |
 | `BMS_BLE_ADDRESS` | `` | MAC-адрес BLE-модуля Daly |
 | `BMS_BLE_SERVICE_UUID` | `0000fff0-0000-1000-8000-00805f9b34fb` | BLE service UUID Daly |
@@ -141,7 +141,7 @@ bash ~/biba/scripts/diagnostics.sh
 
 ```
 BIBA_IMAGE_TAG=latest
-BMS_TRANSPORT=UART
+BMS_TRANSPORT=BLE
 BMS_BLE_ADDRESS=
 MOTOR_DRIVER_TYPE=BTS7960
 BEACON_ENABLED=1
@@ -151,7 +151,7 @@ CH_BEACON=5
 
 ### BLE BMS
 
-Чтобы перевести BMS на Bluetooth, задайте в `.env` или `/etc/default/biba-controller`:
+BLE теперь используется по умолчанию. Для явной настройки BMS задайте в `.env` или `/etc/default/biba-controller`:
 
 ```bash
 BMS_TRANSPORT=BLE
@@ -159,6 +159,12 @@ BMS_BLE_ADDRESS=71:C1:46:20:25:4F
 ```
 
 Остальные BLE UUID можно не менять, если используется стандартный Daly BLE bridge.
+
+Если нужен старый USB-UART путь, задайте:
+
+```bash
+BMS_TRANSPORT=UART
+```
 
 ### Звуковая индикация
 

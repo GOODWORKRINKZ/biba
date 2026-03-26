@@ -61,7 +61,7 @@ BUZZER_PIN = _get_env_int("BUZZER_PIN", 17)
 
 CRSF_PORT = os.getenv("CRSF_PORT", "/dev/ttyS0")
 CRSF_BAUD = _get_env_int("CRSF_BAUD", 420000)
-BMS_TRANSPORT = _get_env_choice("BMS_TRANSPORT", "UART", {"UART", "BLE"})
+BMS_TRANSPORT = _get_env_choice("BMS_TRANSPORT", "BLE", {"UART", "BLE"})
 BMS_PORT = os.getenv("BMS_PORT", "/dev/ttyUSB0")
 BMS_BAUD = _get_env_int("BMS_BAUD", 9600)
 BMS_BLE_ADDRESS = os.getenv("BMS_BLE_ADDRESS", "")

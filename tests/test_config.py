@@ -36,7 +36,7 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.RIGHT_MOTOR_LEN == 21
     assert module.RIGHT_MOTOR_ENABLED is True
     assert module.CRSF_PORT == "/dev/ttyS0"
-    assert module.BMS_TRANSPORT == "UART"
+    assert module.BMS_TRANSPORT == "BLE"
     assert module.BMS_BLE_ADDRESS == ""
     assert module.TEST_BATTERY_VOLTAGE == pytest.approx(25.0)
     assert module.TEST_BATTERY_CURRENT == pytest.approx(1.2)
@@ -106,12 +106,12 @@ def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.M
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.5)
 
 
-def test_config_falls_back_to_uart_for_invalid_bms_transport(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+def test_config_falls_back_to_ble_for_invalid_bms_transport(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.setenv("BMS_TRANSPORT", "zigbee")
 
     module = importlib.reload(config_module)
 
-    assert module.BMS_TRANSPORT == "UART"
+    assert module.BMS_TRANSPORT == "BLE"
 
 
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
@@ -149,6 +149,7 @@ def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
         compose = compose_file.read()
 
     assert "BMS_TRANSPORT:" in compose
+    assert "BMS_TRANSPORT: ${BMS_TRANSPORT:-BLE}" in compose
     assert "BMS_BLE_ADDRESS:" in compose
     assert "BMS_BLE_SERVICE_UUID:" in compose
     assert "BMS_BLE_WRITE_UUID:" in compose
@@ -168,6 +169,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     with open(".env.example", encoding="utf-8") as env_file:
         env_example = env_file.read()
 
+    assert "BMS_TRANSPORT=BLE" in env_example
     assert "BEACON_ENABLED=" in env_example
     assert "BEACON_DELAY_S=" in env_example
     assert "CH_BEACON=" in env_example
