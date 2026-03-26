@@ -43,6 +43,9 @@ gh run view <run-id> --repo GOODWORKRINKZ/biba
 gh run watch <run-id> --repo GOODWORKRINKZ/biba --exit-status
 ```
 
+Prefer `gh run watch` as the default waiting mechanism when the terminal supports it.
+Use polling or API-based fallbacks only when `gh run watch` output is unusable in the current session.
+
 Useful fallback discovery commands:
 
 ```bash
