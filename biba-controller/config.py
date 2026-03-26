@@ -103,3 +103,7 @@ CH_BEACON = _get_env_int("CH_BEACON", 7)
 ENABLE_RC_MELODIES = bool(_get_env_int("ENABLE_RC_MELODIES", 0))
 CH_MELODY = _get_env_int("CH_MELODY", 8)
 STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")
+
+# Voice (WAV playback through motor coils)
+STARTUP_VOICE = os.getenv("STARTUP_VOICE", "/app/voice/startup.wav")
+STARTUP_VOICE_ENABLED = bool(_get_env_int("STARTUP_VOICE_ENABLED", 1))

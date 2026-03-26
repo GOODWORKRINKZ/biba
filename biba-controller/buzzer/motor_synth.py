@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 
 import pigpio
 
 from buzzer import melodies
 from buzzer.blheli_parser import parse_blheli
+from buzzer.wav_player import load_wav, play_samples, DEFAULT_CARRIER_HZ
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MotorSynth:
@@ -122,3 +126,34 @@ class MotorSynth:
 
     def disconnected_tone(self) -> None:
         self.play_named_async("disconnected")
+
+    # ------------------------------------------------------------------
+    # WAV playback (PCM-over-PWM)
+    # ------------------------------------------------------------------
+
+    def play_wav(self, path: str) -> None:
+        """Play a WAV file through motor coils (blocking)."""
+        if self._control_active:
+            return
+        try:
+            samples, sample_rate = load_wav(path)
+        except Exception:
+            LOGGER.warning("Failed to load WAV: %s", path, exc_info=True)
+            return
+        with self._lock:
+            if self._control_active:
+                return
+            play_samples(
+                self.pi,
+                self.pwm_pins,
+                samples,
+                sample_rate,
+                carrier_freq=DEFAULT_CARRIER_HZ,
+                interrupt_event=self._interrupt_event,
+            )
+
+    def play_wav_async(self, path: str) -> threading.Thread:
+        """Play a WAV file in a background thread. Returns the thread."""
+        t = threading.Thread(target=self.play_wav, args=(path,), daemon=True)
+        t.start()
+        return t

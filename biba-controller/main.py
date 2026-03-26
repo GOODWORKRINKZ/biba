@@ -311,6 +311,8 @@ def main() -> int:
     throttle_filter = _create_throttle_filter()
 
     LOGGER.info("BiBa controller started")
+    if config.STARTUP_VOICE_ENABLED:
+        buzzer.play_wav(config.STARTUP_VOICE)
     if config.STARTUP_MELODY:
         buzzer.play_named(config.STARTUP_MELODY)
     else:
