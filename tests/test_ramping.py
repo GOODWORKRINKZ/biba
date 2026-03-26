@@ -1,10 +1,10 @@
-"""Tests for the SpeedRamp slew rate limiter."""
+"""Tests for motor command ramping and signal filtering."""
 
 from __future__ import annotations
 
 import pytest
 
-from motors.ramping import SpeedRamp
+from motors.ramping import ScalarKalmanFilter, SpeedRamp
 
 
 DT = 0.02  # 50 Hz control loop tick
@@ -187,3 +187,35 @@ class TestEdgeCases:
         ramp.update(0.5, DT)
         result = ramp.update(0.5, DT)
         assert result == pytest.approx(0.5)
+
+
+class TestScalarKalmanFilter:
+    def test_smooths_single_reverse_spike_after_forward_motion(self) -> None:
+        filt = ScalarKalmanFilter(process_noise=0.02, measurement_noise=0.5)
+
+        for _ in range(3):
+            filt.update(1.0)
+
+        result = filt.update(-1.0)
+
+        assert result > 0.0
+
+    def test_converges_to_new_direction_over_multiple_updates(self) -> None:
+        filt = ScalarKalmanFilter(process_noise=0.02, measurement_noise=0.5)
+
+        for _ in range(5):
+            filt.update(1.0)
+
+        for _ in range(20):
+            result = filt.update(-1.0)
+
+        assert result < -0.9
+
+    def test_reset_clears_estimate_and_covariance(self) -> None:
+        filt = ScalarKalmanFilter(process_noise=0.02, measurement_noise=0.5)
+        filt.update(1.0)
+
+        filt.reset()
+
+        assert filt.current == 0.0
+        assert filt.update(0.0) == pytest.approx(0.0)

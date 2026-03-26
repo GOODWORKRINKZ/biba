@@ -5,6 +5,39 @@ from __future__ import annotations
 import math
 
 
+class ScalarKalmanFilter:
+    """Filter a single control signal with a lightweight Kalman estimator."""
+
+    def __init__(
+        self,
+        process_noise: float,
+        measurement_noise: float,
+        initial_estimate: float = 0.0,
+        initial_covariance: float = 1.0,
+    ) -> None:
+        self.process_noise = max(process_noise, 1e-9)
+        self.measurement_noise = max(measurement_noise, 1e-9)
+        self._initial_covariance = max(initial_covariance, 1e-9)
+        self._current = initial_estimate
+        self._covariance = self._initial_covariance
+
+    @property
+    def current(self) -> float:
+        return self._current
+
+    def reset(self, value: float = 0.0) -> None:
+        self._current = value
+        self._covariance = self._initial_covariance
+
+    def update(self, measurement: float) -> float:
+        predicted_covariance = self._covariance + self.process_noise
+        kalman_gain = predicted_covariance / (predicted_covariance + self.measurement_noise)
+        self._current += kalman_gain * (measurement - self._current)
+        self._covariance = (1.0 - kalman_gain) * predicted_covariance
+        self._current = max(-1.0, min(1.0, self._current))
+        return self._current
+
+
 class SpeedRamp:
     """Limit the rate of change of a motor speed signal.
 

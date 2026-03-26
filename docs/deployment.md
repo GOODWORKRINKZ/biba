@@ -112,6 +112,9 @@ bash ~/biba/scripts/diagnostics.sh
 | `CH_STEERING` | `0` | Номер канала руления |
 | `CH_THROTTLE` | `1` | Номер канала газа |
 | `CH_ARM` | `4` | Номер канала арма |
+| `THROTTLE_FILTER_MODE` | `KALMAN` | Фильтрация газа до wheel-mix; `NONE` отключает, `KALMAN` сглаживает выбросы канала |
+| `THROTTLE_KALMAN_PROCESS_NOISE` | `0.02` | Насколько быстро фильтр принимает изменение реального газа |
+| `THROTTLE_KALMAN_MEASUREMENT_NOISE` | `0.5` | Насколько сильно фильтр подавляет шум и ложные выбросы канала |
 | `BEACON_ENABLED` | `1` | Включить звуковой маяк/SOS на роботе |
 | `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
 | `CH_BEACON` | `5` | Канал тумблера для ручного включения маяка |

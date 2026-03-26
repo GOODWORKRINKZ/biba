@@ -19,6 +19,7 @@ from buzzer.motor_synth import MotorSynth
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
+from motors.ramping import ScalarKalmanFilter
 from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
@@ -114,6 +115,15 @@ def _battery_is_low(state: BatteryState) -> bool:
     if state.cells and state.min_cell > 0:
         return state.min_cell <= config.LOW_CELL_VOLTAGE
     return state.voltage <= config.LOW_PACK_VOLTAGE
+
+
+def _create_throttle_filter() -> Optional[ScalarKalmanFilter]:
+    if config.THROTTLE_FILTER_MODE != "KALMAN":
+        return None
+    return ScalarKalmanFilter(
+        process_noise=config.THROTTLE_KALMAN_PROCESS_NOISE,
+        measurement_noise=config.THROTTLE_KALMAN_MEASUREMENT_NOISE,
+    )
 
 
 def _connect_pigpio(retries: int = 5, delay: float = 1.0) -> pigpio.pi:
@@ -296,6 +306,7 @@ def main() -> int:
     last_battery_telemetry_log = 0.0
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
+    throttle_filter = _create_throttle_filter()
 
     LOGGER.info("BiBa controller started")
     if config.STARTUP_MELODY:
@@ -335,23 +346,28 @@ def main() -> int:
                         LOGGER.info("Platform disarmed")
                         buzzer.disarm_tone()
 
-                throttle = _get_channel(channels, config.CH_THROTTLE)
+                raw_throttle = _get_channel(channels, config.CH_THROTTLE)
+                throttle = raw_throttle
+                if throttle_filter is not None:
+                    throttle = throttle_filter.update(raw_throttle)
                 steering = _get_channel(channels, config.CH_STEERING)
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
-                    abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
+                    abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
                 )
                 buzzer.set_control_active(control_active)
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]
                     LOGGER.info(
-                        "CH[%s] thr=%.2f str=%.2f arm_ch=%.2f armed=%s",
-                        ",".join(ch_vals), throttle, steering, arm_ch, armed,
+                        "CH[%s] raw_thr=%.2f thr=%.2f str=%.2f arm_ch=%.2f armed=%s",
+                        ",".join(ch_vals), raw_throttle, throttle, steering, arm_ch, armed,
                     )
                 if armed:
                     drive.drive(throttle, steering, loop_period)
                 else:
+                    if throttle_filter is not None:
+                        throttle_filter.reset()
                     drive.drive(0.0, 0.0, loop_period)
 
                 # Manual beacon toggle via RC channel
@@ -375,6 +391,8 @@ def main() -> int:
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
                     buzzer.failsafe_tone()
+                if throttle_filter is not None:
+                    throttle_filter.reset()
                 drive.drive(0.0, 0.0, loop_period)
                 if had_connection:
                     had_connection = False

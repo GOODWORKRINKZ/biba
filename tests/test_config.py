@@ -42,6 +42,9 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.TEST_BATTERY_CURRENT == pytest.approx(1.2)
     assert module.TEST_BATTERY_CAPACITY_MAH == 0
     assert module.TEST_BATTERY_REMAINING_PCT == 55
+    assert module.THROTTLE_FILTER_MODE == "KALMAN"
+    assert module.THROTTLE_KALMAN_PROCESS_NOISE == pytest.approx(0.02)
+    assert module.THROTTLE_KALMAN_MEASUREMENT_NOISE == pytest.approx(0.5)
     assert module.RAMP_ACCEL_RATE == pytest.approx(2.0)
     assert module.RAMP_DECEL_RATE == pytest.approx(2.0)
     assert module.LOG_LEVEL == "INFO"
@@ -56,6 +59,9 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("RIGHT_MOTOR_LEN", "6")
     monkeypatch.setenv("LEFT_MOTOR_ENABLED", "0")
     monkeypatch.setenv("RIGHT_MOTOR_ENABLED", "0")
+    monkeypatch.setenv("THROTTLE_FILTER_MODE", "none")
+    monkeypatch.setenv("THROTTLE_KALMAN_PROCESS_NOISE", "0.15")
+    monkeypatch.setenv("THROTTLE_KALMAN_MEASUREMENT_NOISE", "0.8")
     monkeypatch.setenv("RAMP_ACCEL_RATE", "1.75")
     monkeypatch.setenv("RAMP_DECEL_RATE", "2.5")
     monkeypatch.setenv("FAILSAFE_TIMEOUT_S", "0.75")
@@ -73,6 +79,9 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.RIGHT_MOTOR_LEN == 6
     assert module.LEFT_MOTOR_ENABLED is False
     assert module.RIGHT_MOTOR_ENABLED is False
+    assert module.THROTTLE_FILTER_MODE == "NONE"
+    assert module.THROTTLE_KALMAN_PROCESS_NOISE == pytest.approx(0.15)
+    assert module.THROTTLE_KALMAN_MEASUREMENT_NOISE == pytest.approx(0.8)
     assert module.RAMP_ACCEL_RATE == pytest.approx(1.75)
     assert module.RAMP_DECEL_RATE == pytest.approx(2.5)
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.75)
@@ -159,6 +168,9 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "BEACON_DELAY_S=" in env_example
     assert "CH_BEACON=" in env_example
     assert "MOTOR_DRIVER_TYPE=BTS7960" in env_example
+    assert "THROTTLE_FILTER_MODE=KALMAN" in env_example
+    assert "THROTTLE_KALMAN_PROCESS_NOISE=0.02" in env_example
+    assert "THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5" in env_example
     assert "RAMP_ACCEL_RATE=2.0" in env_example
     assert "RAMP_DECEL_RATE=2.0" in env_example
     assert "LEFT_MOTOR_RPWM=" in env_example
@@ -176,3 +188,12 @@ def test_docker_compose_uses_matching_default_ramp_rates() -> None:
 
     assert "RAMP_ACCEL_RATE: ${RAMP_ACCEL_RATE:-2.0}" in compose
     assert "RAMP_DECEL_RATE: ${RAMP_DECEL_RATE:-2.0}" in compose
+
+
+def test_docker_compose_exposes_throttle_filter_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "THROTTLE_FILTER_MODE:" in compose
+    assert "THROTTLE_KALMAN_PROCESS_NOISE:" in compose
+    assert "THROTTLE_KALMAN_MEASUREMENT_NOISE:" in compose
