@@ -21,6 +21,9 @@ Do not hand-edit the cloned repo on the robot and do not replace `bbupdate` with
 
 Use the robot's own `bbupdate` workflow.
 
+Before running `bbupdate` for a freshly pushed change, verify the relevant GitHub Actions build is green.
+Prefer `gh` over web polling when the GitHub CLI is available.
+
 Expected behavior of `bbupdate`:
 
 1. `git pull --ff-only`
@@ -28,6 +31,32 @@ Expected behavior of `bbupdate`:
 3. `docker compose up -d`
 
 This preserves the intended deployment path: GitHub repo + GHCR image + robot-side update command.
+
+## CI Gate
+
+If the deploy depends on a newly built GHCR image, wait for the GitHub Actions run to finish successfully before updating the robot.
+
+Preferred commands with GitHub CLI:
+
+```bash
+gh run view <run-id> --repo GOODWORKRINKZ/biba
+gh run watch <run-id> --repo GOODWORKRINKZ/biba --exit-status
+```
+
+Useful fallback discovery commands:
+
+```bash
+gh run list --repo GOODWORKRINKZ/biba --limit 10
+gh run view <run-id> --repo GOODWORKRINKZ/biba --json status,conclusion,jobs
+```
+
+Confirm before deploy:
+
+- the workflow run finished
+- the image build job succeeded
+- the pushed revision matches the run you are about to deploy
+
+Do not start `bbupdate` while the image build is still running unless the user explicitly asks to deploy a possibly stale image.
 
 ## SSH Invocation
 
