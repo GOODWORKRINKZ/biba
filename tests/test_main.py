@@ -741,11 +741,11 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         def emergency_stop(self) -> None:
             pass
 
-    synth_created: list[tuple[int, ...]] = []
+    synth_created: list[dict] = []
 
     class FakeMotorSynth:
         def __init__(self, *args, **kwargs) -> None:
-            synth_created.append(tuple(args[1]))
+            synth_created.append({"pins": tuple(args[1]), "comp": tuple(kwargs.get("comp_pins") or [])})
 
         def off(self) -> None:
             pass
@@ -808,12 +808,12 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
         (18, 13, 23, 24, True),
         (12, 19, 20, 21, False),
     ]
-    assert synth_created == [(18, 13, 12, 19)]
+    assert synth_created == [{"pins": (18, 12), "comp": (13, 19)}]
 
 
 def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
-    synth_created: list[tuple[int, ...]] = []
+    synth_created: list[dict] = []
 
     class FakePi:
         connected = True
@@ -869,7 +869,7 @@ def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.
 
     class FakeMotorSynth:
         def __init__(self, *args, **kwargs) -> None:
-            synth_created.append(tuple(args[1]))
+            synth_created.append({"pins": tuple(args[1]), "comp": tuple(kwargs.get("comp_pins") or [])})
 
         def off(self) -> None:
             pass
@@ -923,7 +923,7 @@ def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0
-    assert synth_created == [(18, 13)]
+    assert synth_created == [{"pins": (18,), "comp": (13,)}]
 
 
 def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_received(
