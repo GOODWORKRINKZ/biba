@@ -46,7 +46,7 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.THROTTLE_KALMAN_PROCESS_NOISE == pytest.approx(0.02)
     assert module.THROTTLE_KALMAN_MEASUREMENT_NOISE == pytest.approx(0.5)
     assert module.RAMP_ACCEL_RATE == pytest.approx(2.0)
-    assert module.RAMP_DECEL_RATE == pytest.approx(1.0)
+    assert module.RAMP_DECEL_RATE == pytest.approx(0.5)
     assert module.RAMP_REVERSE_DECEL_RATE == pytest.approx(1.0)
     assert module.RAMP_ZERO_HOLD_S == pytest.approx(0.15)
     assert module.LOG_LEVEL == "INFO"
@@ -177,7 +177,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5" in env_example
     assert "RAMP_ZERO_HOLD_S=0.15" in env_example
     assert "RAMP_ACCEL_RATE=2.0" in env_example
-    assert "RAMP_DECEL_RATE=1.0" in env_example
+    assert "RAMP_DECEL_RATE=0.5" in env_example
     assert "RAMP_REVERSE_DECEL_RATE=1.0" in env_example
     assert "LEFT_MOTOR_RPWM=" in env_example
     assert "LEFT_MOTOR_LEN=24" in env_example
@@ -193,7 +193,7 @@ def test_docker_compose_uses_matching_default_ramp_rates() -> None:
         compose = compose_file.read()
 
     assert "RAMP_ACCEL_RATE: ${RAMP_ACCEL_RATE:-2.0}" in compose
-    assert "RAMP_DECEL_RATE: ${RAMP_DECEL_RATE:-1.0}" in compose
+    assert "RAMP_DECEL_RATE: ${RAMP_DECEL_RATE:-0.5}" in compose
     assert "RAMP_REVERSE_DECEL_RATE: ${RAMP_REVERSE_DECEL_RATE:-1.0}" in compose
 
 
