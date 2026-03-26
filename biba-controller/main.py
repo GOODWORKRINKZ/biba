@@ -23,6 +23,7 @@ from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
 RUNNING = True
+_BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
 
 
 class _NullDrive:
@@ -183,6 +184,33 @@ def _send_system_telemetry(telemetry: CRSFTelemetry, stats: SystemStats) -> None
     )
 
 
+def _clamp_battery_current_a(current_a: float) -> float:
+    return max(0.0, current_a)
+
+
+def _encode_crsf_current_da(current_a: float) -> int:
+    return max(0, int(round(current_a * 10)))
+
+
+def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) -> float:
+    if now - last_log_at < _BATTERY_TELEMETRY_LOG_INTERVAL_S:
+        return last_log_at
+
+    clamped_current_a = _clamp_battery_current_a(state.current)
+    LOGGER.info(
+        (
+            "Battery telemetry raw_current_a=%.2f clamped_current_a=%.2f "
+            "crsf_current_da=%d voltage_v=%.2f soc_pct=%d"
+        ),
+        state.current,
+        clamped_current_a,
+        _encode_crsf_current_da(clamped_current_a),
+        state.voltage,
+        int(round(state.soc)),
+    )
+    return now
+
+
 def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
     if state is None:
         telemetry.send_battery(
@@ -195,7 +223,7 @@ def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatterySta
 
     telemetry.send_battery(
         voltage_v=state.voltage,
-        current_a=max(0.0, state.current),
+        current_a=_clamp_battery_current_a(state.current),
         capacity_mah=0,
         remaining_pct=int(round(state.soc)),
     )
@@ -259,6 +287,7 @@ def main() -> int:
     melody_zone = -1
     last_frame_time = time.monotonic()
     last_telemetry_send = 0.0
+    last_battery_telemetry_log = 0.0
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
 
@@ -324,16 +353,17 @@ def main() -> int:
                 beacon.set_manual(beacon_ch > config.ARM_THRESHOLD)
 
                 # Melody selection via RC channel
-                melody_ch = _get_channel(channels, config.CH_MELODY)
-                num_melodies = len(FUN_PLAYLIST)
-                raw_val = (melody_ch + 1.0) / 2.0  # -1..1 → 0..1
-                new_zone = min(int(raw_val * num_melodies), num_melodies - 1)
-                if melody_zone == -1:
-                    melody_zone = new_zone
-                elif new_zone != melody_zone:
-                    melody_zone = new_zone
-                    if not arm_state_changed:
-                        buzzer.play_named_async(FUN_PLAYLIST[melody_zone])
+                if config.ENABLE_RC_MELODIES:
+                    melody_ch = _get_channel(channels, config.CH_MELODY)
+                    num_melodies = len(FUN_PLAYLIST)
+                    raw_val = (melody_ch + 1.0) / 2.0  # -1..1 → 0..1
+                    new_zone = min(int(raw_val * num_melodies), num_melodies - 1)
+                    if melody_zone == -1:
+                        melody_zone = new_zone
+                    elif new_zone != melody_zone:
+                        melody_zone = new_zone
+                        if not arm_state_changed:
+                            buzzer.play_named_async(FUN_PLAYLIST[melody_zone])
 
             if not received_frame and drive.check_failsafe(last_frame_time):
                 if armed:
@@ -355,6 +385,12 @@ def main() -> int:
 
                 try:
                     _send_battery_telemetry(telemetry, battery_state)
+                    if battery_state is not None:
+                        last_battery_telemetry_log = _log_battery_telemetry(
+                            battery_state,
+                            now=loop_started_at,
+                            last_log_at=last_battery_telemetry_log,
+                        )
                 except Exception as exc:
                     LOGGER.warning("Failed to send CRSF battery telemetry: %s", exc)
 
