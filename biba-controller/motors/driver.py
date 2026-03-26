@@ -115,7 +115,7 @@ class BTS7960MotorDriver:
 class DifferentialDrive:
     """Apply arcade mixing for a two-wheel robot."""
 
-    _PWM_JUMP_WARN_THRESHOLD = 0.25
+    _PWM_JUMP_WARN_THRESHOLD = 0.10
 
     def __init__(
         self,

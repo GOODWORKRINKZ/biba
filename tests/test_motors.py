@@ -197,6 +197,24 @@ def test_differential_drive_logs_large_output_jump(caplog: pytest.LogCaptureFixt
     assert "current=0.640" in caplog.text
 
 
+def test_differential_drive_logs_medium_output_jump_at_lower_threshold(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    left_motor = FakeMotor()
+    right_motor = FakeMotor()
+    drive = DifferentialDrive(left_motor, right_motor)
+
+    drive.drive(1.0, 0.0, dt=0.02)
+
+    with caplog.at_level(logging.WARNING, logger="biba-controller"):
+        drive.drive(1.0, 0.0, dt=0.07)
+
+    assert "Large PWM jump" in caplog.text
+    assert "motor=left" in caplog.text
+    assert "previous=0.040" in caplog.text
+    assert "current=0.180" in caplog.text
+
+
 def test_check_failsafe_stops_platform_when_frame_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:
     left_motor = FakeMotor()
     right_motor = FakeMotor()
