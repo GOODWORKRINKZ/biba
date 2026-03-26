@@ -118,11 +118,13 @@ class DifferentialDrive:
         self._left_ramp = SpeedRamp(
             accel_rate=config.RAMP_ACCEL_RATE,
             decel_rate=config.RAMP_DECEL_RATE,
+            reverse_decel_rate=config.RAMP_REVERSE_DECEL_RATE,
             deadband=config.MOTOR_DEADBAND,
         )
         self._right_ramp = SpeedRamp(
             accel_rate=config.RAMP_ACCEL_RATE,
             decel_rate=config.RAMP_DECEL_RATE,
+            reverse_decel_rate=config.RAMP_REVERSE_DECEL_RATE,
             deadband=config.MOTOR_DEADBAND,
         )
 

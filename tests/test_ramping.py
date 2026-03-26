@@ -88,12 +88,12 @@ class TestDeceleration:
 
 class TestDirectionChange:
     def test_forces_decel_to_zero_before_reversing(self) -> None:
-        ramp = SpeedRamp(accel_rate=100.0, decel_rate=3.0, deadband=0.0)
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=3.0, reverse_decel_rate=1.0, deadband=0.0)
         ramp.update(1.0, DT)  # Now at 1.0
         # Request reverse: must decel toward 0 first
         result = ramp.update(-1.0, DT)
-        # Should decel by 0.06, not cross zero
-        assert result == pytest.approx(1.0 - 0.06)
+        # Should decel by reverse rate 0.02, not the normal 0.06
+        assert result == pytest.approx(1.0 - 0.02)
         assert result > 0.0  # Still positive, haven't crossed zero
 
     def test_reaches_zero_then_accelerates_in_new_direction(self) -> None:
@@ -128,12 +128,20 @@ class TestDirectionChange:
         assert any(v == 0.0 for v in values)
 
     def test_negative_to_positive_direction_change(self) -> None:
-        ramp = SpeedRamp(accel_rate=100.0, decel_rate=3.0, deadband=0.0)
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=3.0, reverse_decel_rate=1.0, deadband=0.0)
         ramp.update(-1.0, DT)  # Now at -1.0
         result = ramp.update(1.0, DT)
         # Must decel toward 0 (increase toward 0 from negative)
-        assert result == pytest.approx(-1.0 + 0.06)
+        assert result == pytest.approx(-1.0 + 0.02)
         assert result < 0.0  # Still negative
+
+    def test_direction_change_uses_normal_decel_when_reverse_rate_not_set(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=3.0, deadband=0.0)
+        ramp.update(1.0, DT)
+
+        result = ramp.update(-1.0, DT)
+
+        assert result == pytest.approx(1.0 - 0.06)
 
 
 class TestReset:

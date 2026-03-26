@@ -45,9 +45,16 @@ class SpeedRamp:
     that the output passes through zero before reversing direction.
     """
 
-    def __init__(self, accel_rate: float, decel_rate: float, deadband: float = 0.0) -> None:
+    def __init__(
+        self,
+        accel_rate: float,
+        decel_rate: float,
+        reverse_decel_rate: float | None = None,
+        deadband: float = 0.0,
+    ) -> None:
         self.accel_rate = accel_rate
         self.decel_rate = decel_rate
+        self.reverse_decel_rate = decel_rate if reverse_decel_rate is None else reverse_decel_rate
         self.deadband = deadband
         self._current: float = 0.0
 
@@ -110,7 +117,7 @@ class SpeedRamp:
 
     def _decel_toward_zero(self, dt: float) -> float:
         """Decelerate toward zero without crossing it."""
-        max_step = self.decel_rate * dt
+        max_step = self.reverse_decel_rate * dt
         if abs(self._current) <= max_step:
             self._current = 0.0
         elif self._current > 0.0:
