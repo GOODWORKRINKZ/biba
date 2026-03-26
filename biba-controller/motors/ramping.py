@@ -51,12 +51,15 @@ class SpeedRamp:
         decel_rate: float,
         reverse_decel_rate: float | None = None,
         deadband: float = 0.0,
+        zero_hold_s: float = 0.0,
     ) -> None:
         self.accel_rate = accel_rate
         self.decel_rate = decel_rate
         self.reverse_decel_rate = decel_rate if reverse_decel_rate is None else reverse_decel_rate
         self.deadband = deadband
+        self.zero_hold_s = zero_hold_s
         self._current: float = 0.0
+        self._hold_remaining: float = 0.0
 
     @property
     def current(self) -> float:
@@ -65,6 +68,7 @@ class SpeedRamp:
     def reset(self) -> None:
         """Hard-reset to zero (emergency stop)."""
         self._current = 0.0
+        self._hold_remaining = 0.0
 
     def update(self, target: float, dt: float) -> float:
         """Compute the next ramped speed value.
@@ -90,6 +94,13 @@ class SpeedRamp:
 
         # Clamp target
         target = max(-1.0, min(1.0, target))
+
+        # Zero-hold: stay at zero until hold timer expires
+        if self._hold_remaining > 0.0:
+            self._hold_remaining -= dt
+            if self._hold_remaining > 0.0:
+                return self._current  # still 0.0
+            self._hold_remaining = 0.0
 
         # Direction change: decel toward zero first, do NOT cross zero
         if self._current > 0.0 and target < 0.0:
@@ -120,6 +131,8 @@ class SpeedRamp:
         max_step = self.reverse_decel_rate * dt
         if abs(self._current) <= max_step:
             self._current = 0.0
+            if self.zero_hold_s > 0.0:
+                self._hold_remaining = self.zero_hold_s
         elif self._current > 0.0:
             self._current -= max_step
         else:

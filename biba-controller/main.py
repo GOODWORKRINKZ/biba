@@ -27,35 +27,6 @@ RUNNING = True
 _BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
 
 
-class _ThrottleDirectionGuard:
-    def __init__(self, deadband: float) -> None:
-        self.deadband = deadband
-        self._last_sign = 0
-        self._neutral_seen = True
-
-    def reset(self) -> None:
-        self._last_sign = 0
-        self._neutral_seen = True
-
-    def update(self, value: float) -> float:
-        if abs(value) <= self.deadband:
-            self._neutral_seen = True
-            return 0.0
-
-        sign = -1 if value < 0.0 else 1
-        if self._last_sign == 0 or sign == self._last_sign:
-            self._last_sign = sign
-            self._neutral_seen = False
-            return value
-
-        if not self._neutral_seen:
-            return 0.0
-
-        self._last_sign = sign
-        self._neutral_seen = False
-        return value
-
-
 class _NullDrive:
     def drive(self, throttle: float, steering: float, dt: float = 0.02) -> None:
         del throttle, steering, dt
@@ -153,12 +124,6 @@ def _create_throttle_filter() -> Optional[ScalarKalmanFilter]:
         process_noise=config.THROTTLE_KALMAN_PROCESS_NOISE,
         measurement_noise=config.THROTTLE_KALMAN_MEASUREMENT_NOISE,
     )
-
-
-def _create_throttle_direction_guard() -> Optional[_ThrottleDirectionGuard]:
-    if not config.THROTTLE_REQUIRES_NEUTRAL_BEFORE_REVERSE:
-        return None
-    return _ThrottleDirectionGuard(deadband=config.MOTOR_DEADBAND)
 
 
 def _connect_pigpio(retries: int = 5, delay: float = 1.0) -> pigpio.pi:
@@ -341,7 +306,6 @@ def main() -> int:
     last_battery_telemetry_log = 0.0
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
-    throttle_direction_guard = _create_throttle_direction_guard()
     throttle_filter = _create_throttle_filter()
 
     LOGGER.info("BiBa controller started")
@@ -383,13 +347,10 @@ def main() -> int:
                         buzzer.disarm_tone()
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
-                guarded_throttle = raw_throttle
-                if throttle_direction_guard is not None:
-                    guarded_throttle = throttle_direction_guard.update(raw_throttle)
 
-                throttle = guarded_throttle
+                throttle = raw_throttle
                 if throttle_filter is not None:
-                    throttle = throttle_filter.update(guarded_throttle)
+                    throttle = throttle_filter.update(raw_throttle)
                 steering = _get_channel(channels, config.CH_STEERING)
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
@@ -400,14 +361,12 @@ def main() -> int:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]
                     LOGGER.info(
-                        "CH[%s] raw_thr=%.2f guard_thr=%.2f thr=%.2f str=%.2f arm_ch=%.2f armed=%s",
-                        ",".join(ch_vals), raw_throttle, guarded_throttle, throttle, steering, arm_ch, armed,
+                        "CH[%s] raw_thr=%.2f thr=%.2f str=%.2f arm_ch=%.2f armed=%s",
+                        ",".join(ch_vals), raw_throttle, throttle, steering, arm_ch, armed,
                     )
                 if armed:
                     drive.drive(throttle, steering, loop_period)
                 else:
-                    if throttle_direction_guard is not None:
-                        throttle_direction_guard.reset()
                     if throttle_filter is not None:
                         throttle_filter.reset()
                     drive.drive(0.0, 0.0, loop_period)
@@ -433,8 +392,6 @@ def main() -> int:
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
                     buzzer.failsafe_tone()
-                if throttle_direction_guard is not None:
-                    throttle_direction_guard.reset()
                 if throttle_filter is not None:
                     throttle_filter.reset()
                 drive.drive(0.0, 0.0, loop_period)

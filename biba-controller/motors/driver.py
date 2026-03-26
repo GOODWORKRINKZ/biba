@@ -120,12 +120,14 @@ class DifferentialDrive:
             decel_rate=config.RAMP_DECEL_RATE,
             reverse_decel_rate=config.RAMP_REVERSE_DECEL_RATE,
             deadband=config.MOTOR_DEADBAND,
+            zero_hold_s=config.RAMP_ZERO_HOLD_S,
         )
         self._right_ramp = SpeedRamp(
             accel_rate=config.RAMP_ACCEL_RATE,
             decel_rate=config.RAMP_DECEL_RATE,
             reverse_decel_rate=config.RAMP_REVERSE_DECEL_RATE,
             deadband=config.MOTOR_DEADBAND,
+            zero_hold_s=config.RAMP_ZERO_HOLD_S,
         )
 
     @staticmethod

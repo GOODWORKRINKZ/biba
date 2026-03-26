@@ -144,6 +144,68 @@ class TestDirectionChange:
         assert result == pytest.approx(1.0 - 0.06)
 
 
+class TestZeroHold:
+    """SpeedRamp holds at zero for a configured duration after a direction change."""
+
+    def test_holds_at_zero_after_direction_change(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, zero_hold_s=0.10, deadband=0.0)
+        ramp.update(1.0, DT)  # Jump to 1.0
+        ramp.update(-1.0, DT)  # Decel to 0 (rate=100 overshoots)
+
+        # Now at 0.0 with hold active.  Next updates should stay at 0.0
+        for _ in range(4):  # 4 * 0.02 = 0.08s, still within 0.10s hold
+            result = ramp.update(-1.0, DT)
+            assert result == 0.0
+
+    def test_releases_after_hold_expires(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, zero_hold_s=0.06, deadband=0.0)
+        ramp.update(1.0, DT)  # at 1.0
+        ramp.update(-1.0, DT)  # decel→0, hold starts (0.06s)
+        ramp.update(-1.0, DT)  # 0.02→ hold remaining 0.04
+        ramp.update(-1.0, DT)  # 0.04→ hold remaining 0.02
+        ramp.update(-1.0, DT)  # 0.06→ hold remaining 0.00
+
+        # Hold should now be expired, accel in new direction
+        result = ramp.update(-1.0, DT)
+        assert result < 0.0
+
+    def test_no_hold_when_decelerating_same_direction(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, zero_hold_s=0.10, deadband=0.0)
+        ramp.update(1.0, DT)  # at 1.0
+        # Decel to zero, same direction (target=0)
+        ramp.update(0.0, DT)  # at 0.0
+        # No hold — immediately allow re-acceleration
+        result = ramp.update(1.0, DT)
+        assert result > 0.0
+
+    def test_hold_defaults_to_zero(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, deadband=0.0)
+        ramp.update(1.0, DT)
+        ramp.update(-1.0, DT)  # decel to 0
+        # Immediately accelerate in new direction (no hold by default)
+        result = ramp.update(-1.0, DT)
+        assert result < 0.0
+
+    def test_reset_clears_hold(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, zero_hold_s=1.0, deadband=0.0)
+        ramp.update(1.0, DT)
+        ramp.update(-1.0, DT)  # hold active
+        ramp.reset()
+        # After reset, no hold — can go immediately
+        result = ramp.update(-1.0, DT)
+        assert result < 0.0
+
+    def test_hold_negative_to_positive(self) -> None:
+        ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, zero_hold_s=0.06, deadband=0.0)
+        ramp.update(-1.0, DT)  # at -1.0
+        ramp.update(1.0, DT)  # decel→0, hold starts
+        ramp.update(1.0, DT)  # hold 0.02
+        ramp.update(1.0, DT)  # hold 0.04
+        ramp.update(1.0, DT)  # hold 0.06 → expired
+        result = ramp.update(1.0, DT)
+        assert result > 0.0
+
+
 class TestReset:
     def test_reset_sets_current_to_zero(self) -> None:
         ramp = SpeedRamp(accel_rate=100.0, decel_rate=100.0, deadband=0.0)
