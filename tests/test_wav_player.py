@@ -165,8 +165,6 @@ class TestPlaySamples:
         samples = bytes([128] * 10000)
         stop = threading.Event()
 
-        call_count_at_interrupt = []
-
         original_hw_pwm = pi.hardware_PWM
 
         def counting_hwpwm(*args):
