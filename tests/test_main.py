@@ -1199,7 +1199,8 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
             playlist_calls.append(name)
 
         def play_wav(self, path: str) -> None:
-            del path
+            if "arm" in path:
+                tone_calls.append("arm")
 
         def set_control_active(self, active: bool) -> None:
             del active
