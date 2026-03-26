@@ -26,6 +26,12 @@ class TestDeadband:
         result = ramp.update(0.1, DT)
         assert result > 0.0
 
+    def test_value_effectively_on_deadband_boundary_is_not_zeroed(self) -> None:
+        ramp = SpeedRamp(accel_rate=2.0, decel_rate=3.0, deadband=0.05)
+        target = 0.25 - 0.20  # float result may be 0.04999999999999999
+        result = ramp.update(target, DT)
+        assert result > 0.0
+
 
 class TestAcceleration:
     def test_ramps_up_from_zero(self) -> None:

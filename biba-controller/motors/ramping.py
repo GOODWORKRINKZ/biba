@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 
 class SpeedRamp:
     """Limit the rate of change of a motor speed signal.
@@ -38,7 +40,12 @@ class SpeedRamp:
             return self._current
 
         # Apply deadband
-        if abs(target) < self.deadband:
+        if abs(target) < self.deadband and not math.isclose(
+            abs(target),
+            self.deadband,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
             target = 0.0
 
         # Clamp target
