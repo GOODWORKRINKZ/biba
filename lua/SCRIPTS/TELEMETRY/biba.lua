@@ -3,10 +3,12 @@
 
 local CELL_COUNT = 6
 local LOW_CELL_VOLTAGE = 3.5
+local BATTERY_HOLDOFF_CS = 1200
 
 -- Sound state tracking
 local prev_connected = nil  -- nil = first run, true/false after
 local low_bat_sound_at = 0  -- getTime() of last low-bat alert
+local battery_holdoff_until = 0
 
 -- ──────────────────────────────────────────────────
 -- Utility helpers
@@ -372,6 +374,7 @@ local function run(event)
   lcd.clear()
 
   local connected = is_connected()
+  local now = getTime()
 
   -- Connection state change sounds
   if prev_connected ~= nil then
@@ -381,6 +384,11 @@ local function run(event)
       snd_disconnected()
     end
   end
+
+  if connected and (prev_connected == nil or not prev_connected) then
+    battery_holdoff_until = now + BATTERY_HOLDOFF_CS
+  end
+
   prev_connected = connected
 
   if not connected then
@@ -398,6 +406,17 @@ local function run(event)
   local left_spd, right_spd = read_drive()
   local cpu, ram = read_system()
 
+  if now < battery_holdoff_until then
+    voltage = 0
+    current = 0
+    pct = 0
+    cells = {}
+    cell_src = ""
+    mn = 0
+    mx = 0
+    delta = 0
+  end
+
   if sw() >= 212 and sh() >= 128 then
     draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
   else
@@ -406,7 +425,6 @@ local function run(event)
 
   -- Low battery sound (every ~10 seconds)
   if mn > 0 and mn < LOW_CELL_VOLTAGE then
-    local now = getTime()
     if now - low_bat_sound_at >= 1000 then  -- 1000 = 10s in centiseconds
       low_bat_sound_at = now
       snd_low_battery()

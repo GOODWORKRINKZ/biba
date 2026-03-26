@@ -90,3 +90,20 @@ def test_run_reads_rqly() -> None:
     body = _extract_function(_lua_source(), "run")
 
     assert "RQly" in body, "run() should read RQly sensor"
+
+
+def test_lua_declares_battery_holdoff_state() -> None:
+    source = _lua_source()
+
+    assert "local BATTERY_HOLDOFF_CS" in source
+    assert "local battery_holdoff_until = 0" in source
+
+
+def test_run_applies_battery_holdoff_on_startup_and_reconnect() -> None:
+    body = _extract_function(_lua_source(), "run")
+
+    assert "battery_holdoff_until" in body
+    assert "prev_connected == nil" in body
+    assert "connected and not prev_connected" in body
+    assert "now + BATTERY_HOLDOFF_CS" in body
+    assert "if now < battery_holdoff_until then" in body
