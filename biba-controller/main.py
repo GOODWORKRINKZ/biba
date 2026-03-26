@@ -86,6 +86,9 @@ class _NullBuzzer:
     def play_blheli(self, melody_str: str, tempo_bpm: int = 120) -> None:
         del melody_str, tempo_bpm
 
+    def play_wav(self, path: str) -> None:
+        del path
+
 
 def _setup_logging() -> None:
     logging.basicConfig(
