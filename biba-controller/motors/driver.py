@@ -136,13 +136,11 @@ class DifferentialDrive:
             self.left_motor.set_speed(self._left_ramp.update(left, dt))
         else:
             self._left_ramp.reset()
-            self.left_motor.stop()
 
         if self.right_enabled:
             self.right_motor.set_speed(self._right_ramp.update(right, dt))
         else:
             self._right_ramp.reset()
-            self.right_motor.stop()
 
     def emergency_stop(self) -> None:
         """Bypass ramp and stop motors immediately (shutdown only)."""

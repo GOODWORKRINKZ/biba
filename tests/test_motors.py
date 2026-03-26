@@ -155,7 +155,7 @@ def test_differential_drive_can_disable_right_motor() -> None:
     assert len(left_motor.speed_calls) == 1
     assert left_motor.speed_calls[0] == pytest.approx(0.04)
     assert right_motor.speed_calls == []
-    assert right_motor.stop_calls == 1
+    assert right_motor.stop_calls == 0
 
 
 def test_differential_drive_can_disable_left_motor() -> None:
@@ -166,7 +166,7 @@ def test_differential_drive_can_disable_left_motor() -> None:
     drive.drive(0.75, 0.5)
 
     assert left_motor.speed_calls == []
-    assert left_motor.stop_calls == 1
+    assert left_motor.stop_calls == 0
     assert len(right_motor.speed_calls) == 1
     assert right_motor.speed_calls[0] == pytest.approx(0.04)
 
