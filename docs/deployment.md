@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/GOODWORKRINKZ/biba/main/scripts/set
 3. Клонирование репозитория в `~/biba`
 4. Настройку shell-алиасов для управления стеком
 5. Создание `/etc/default/biba-controller` с `BIBA_IMAGE_TAG=latest`
-6. Создание systemd unit `biba-controller.service` для автозапуска
+6. Создание systemd unit `biba-controller.service` для автозапуска без image pull на boot
 
 ## Авторизация в GHCR
 
@@ -55,6 +55,9 @@ cd ~/biba
 docker compose pull
 docker compose up -d
 ```
+
+`biba-controller.service` на старте системы выполняет только `docker compose up -d`.
+Pull новых образов остается в ручном обновлении и в `bbupdate`, чтобы не дергать сеть и GHCR во время boot.
 
 ## Управление стеком
 
