@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Callable, Optional, Protocol
 
@@ -285,16 +286,20 @@ def _build_ble_client(address: str, service_uuid: str) -> BleClientProtocol:
 
     class _BleakClientAdapter:
         def __init__(self, device_address: str) -> None:
+            self._device_address = device_address
             self._loop = asyncio.new_event_loop()
             self._thread = threading.Thread(target=self._run_loop, daemon=True)
             self._thread.start()
-            self._client = BleakClient(device_address)
+            self._client = self._run_coroutine(self._create_client())
 
         def _run_loop(self) -> None:
             asyncio.set_event_loop(self._loop)
             self._loop.run_forever()
 
-        def _run_coroutine(self, coroutine: asyncio.Future) -> object:
+        async def _create_client(self) -> object:
+            return BleakClient(self._device_address)
+
+        def _run_coroutine(self, coroutine: Awaitable[object]) -> object:
             future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
             return future.result(timeout=10.0)
 

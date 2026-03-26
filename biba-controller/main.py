@@ -244,12 +244,6 @@ def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) 
 
 def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
     if state is None:
-        telemetry.send_battery(
-            voltage_v=config.TEST_BATTERY_VOLTAGE,
-            current_a=config.TEST_BATTERY_CURRENT,
-            capacity_mah=config.TEST_BATTERY_CAPACITY_MAH,
-            remaining_pct=config.TEST_BATTERY_REMAINING_PCT,
-        )
         return
 
     telemetry.send_battery(
@@ -311,7 +305,10 @@ def main() -> int:
         bms_poller = BMSPoller(bms, interval_s=config.BMS_POLL_INTERVAL_S)
         bms_poller.start()
     except Exception as exc:
-        LOGGER.warning("Daly BMS unavailable on %s: %s", config.BMS_PORT, exc)
+        if config.BMS_TRANSPORT == "BLE":
+            LOGGER.warning("Daly BMS unavailable via BLE %s: %s", config.BMS_BLE_ADDRESS or "<unset>", exc)
+        else:
+            LOGGER.warning("Daly BMS unavailable on %s: %s", config.BMS_PORT, exc)
 
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)

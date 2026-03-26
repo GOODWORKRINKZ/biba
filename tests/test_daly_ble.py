@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import sys
+import threading
+import types
 from collections import deque
 
 import pytest
 
-from bms.daly import BatteryState, DalyBMSBle
+from bms.daly import BatteryState, DalyBMSBle, _build_ble_client
 
 
 def build_response(command: int, data: bytes) -> bytes:
@@ -144,3 +147,49 @@ def test_ble_close_stops_notifications_and_disconnects() -> None:
 
     assert client.stop_notify_calls == ["0000fff1-0000-1000-8000-00805f9b34fb"]
     assert client.disconnected is True
+
+
+def test_build_ble_client_creates_bleak_client_in_loop_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: dict[str, int] = {}
+
+    class FakeBleakClient:
+        def __init__(self, device_address: str) -> None:
+            observed["address"] = device_address
+            observed["init_thread"] = threading.get_ident()
+
+        async def connect(self) -> None:
+            observed["connect_thread"] = threading.get_ident()
+
+        async def disconnect(self) -> None:
+            observed["disconnect_thread"] = threading.get_ident()
+
+        async def start_notify(self, uuid: str, callback) -> None:
+            del callback
+            observed["notify_uuid"] = uuid
+            observed["notify_thread"] = threading.get_ident()
+
+        async def stop_notify(self, uuid: str) -> None:
+            observed["stop_notify_uuid"] = uuid
+            observed["stop_notify_thread"] = threading.get_ident()
+
+        async def write_gatt_char(self, uuid: str, data: bytes) -> None:
+            observed["write_uuid"] = uuid
+            observed["write_data"] = data
+            observed["write_thread"] = threading.get_ident()
+
+    fake_bleak_module = types.SimpleNamespace(BleakClient=FakeBleakClient)
+    monkeypatch.setitem(sys.modules, "bleak", fake_bleak_module)
+
+    client = _build_ble_client("71:C1:46:20:25:4F", "0000fff0-0000-1000-8000-00805f9b34fb")
+
+    client.connect()
+    client.start_notify("0000fff1-0000-1000-8000-00805f9b34fb", lambda data: None)
+    client.write_gatt_char("0000fff2-0000-1000-8000-00805f9b34fb", b"abc")
+    client.stop_notify("0000fff1-0000-1000-8000-00805f9b34fb")
+    client.disconnect()
+
+    assert observed["address"] == "71:C1:46:20:25:4F"
+    assert observed["init_thread"] == observed["connect_thread"]
+    assert observed["init_thread"] == observed["notify_thread"]
+    assert observed["init_thread"] == observed["write_thread"]
+    assert observed["init_thread"] == observed["stop_notify_thread"]
