@@ -12,6 +12,8 @@ class FakePi:
         self.hardware_pwm_calls: list[tuple[int, int, int]] = []
         self.write_calls: list[tuple[int, int]] = []
         self.duty_calls: list[tuple[int, int]] = []
+        self.range_calls: list[tuple[int, int]] = []
+        self._real_range = 255
 
     def set_mode(self, pin: int, mode: int) -> None:
         self.mode_calls.append((pin, mode))
@@ -27,6 +29,12 @@ class FakePi:
 
     def set_PWM_dutycycle(self, pin: int, duty_cycle: int) -> None:
         self.duty_calls.append((pin, duty_cycle))
+
+    def get_PWM_real_range(self, pin: int) -> int:
+        return self._real_range
+
+    def set_PWM_range(self, pin: int, range_val: int) -> None:
+        self.range_calls.append((pin, range_val))
 
 
 class FakeMotor:

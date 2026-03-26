@@ -21,6 +21,8 @@ class MotorDriver:
         self.pi.set_mode(self.pwm_pin, pigpio.OUTPUT)
         self.pi.set_mode(self.dir_pin, pigpio.OUTPUT)
         self.pi.set_PWM_frequency(self.pwm_pin, config.PWM_FREQUENCY_HZ)
+        self._pwm_range = self.pi.get_PWM_real_range(self.pwm_pin)
+        self.pi.set_PWM_range(self.pwm_pin, self._pwm_range)
         self.pi.write(self.dir_pin, 0)
         self.pi.set_PWM_dutycycle(self.pwm_pin, 0)
 
@@ -30,7 +32,7 @@ class MotorDriver:
         direction = 1 if clamped < 0 else 0
         if self.inverted:
             direction = 1 - direction
-        duty_cycle = int(abs(clamped) * 255)
+        duty_cycle = int(abs(clamped) * self._pwm_range)
         self.pi.write(self.dir_pin, direction)
         self.pi.set_PWM_dutycycle(self.pwm_pin, duty_cycle)
 
@@ -66,6 +68,9 @@ class BTS7960MotorDriver:
 
         self.pi.set_PWM_frequency(self.rpwm_pin, config.PWM_FREQUENCY_HZ)
         self.pi.set_PWM_frequency(self.lpwm_pin, config.PWM_FREQUENCY_HZ)
+        self._pwm_range = self.pi.get_PWM_real_range(self.rpwm_pin)
+        self.pi.set_PWM_range(self.rpwm_pin, self._pwm_range)
+        self.pi.set_PWM_range(self.lpwm_pin, self._pwm_range)
         self.pi.set_PWM_dutycycle(self.rpwm_pin, 0)
         self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
 
@@ -85,7 +90,7 @@ class BTS7960MotorDriver:
         if self.inverted:
             clamped *= -1.0
 
-        duty_cycle = int(abs(clamped) * 255)
+        duty_cycle = int(abs(clamped) * self._pwm_range)
         if clamped > 0.0:
             self.pi.set_PWM_dutycycle(self.rpwm_pin, duty_cycle)
             self.pi.set_PWM_dutycycle(self.lpwm_pin, 0)
