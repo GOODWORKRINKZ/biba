@@ -24,7 +24,7 @@ import wave
 
 import pigpio
 
-DEFAULT_CARRIER_HZ = 16000
+DEFAULT_CARRIER_HZ = 2000
 _DUTY_MAX = 1_000_000
 _INTERRUPT_CHECK_INTERVAL = 256  # check interrupt every N samples
 _SPECTRAL_DUTY_MAX = 500_000  # 50 % duty → max fundamental amplitude

@@ -100,11 +100,14 @@ def _play_grouped_voice(
     selector: VoiceSelector,
     event: str,
     voices: list[str],
-    player,
+    buzzer,
 ) -> bool:
     path = selector.choose(event, voices)
     if path is None:
         return False
+    player = getattr(buzzer, "play_wav", None)
+    if player is None:
+        player = buzzer.play_spectral
     player(path)
     return True
 
@@ -380,7 +383,7 @@ def main() -> int:
         voice_selector,
         "startup",
         config.STARTUP_VOICES,
-        buzzer.play_spectral,
+        buzzer,
     ):
         pass
     elif config.STARTUP_MELODY:
@@ -410,7 +413,7 @@ def main() -> int:
                         voice_selector,
                         "connected",
                         config.CONNECTED_VOICES,
-                        buzzer.play_spectral,
+                        buzzer,
                     ):
                         buzzer.connected_tone()
                 beacon.on_connected()
@@ -425,7 +428,7 @@ def main() -> int:
                             voice_selector,
                             "arm",
                             config.ARM_VOICES,
-                            buzzer.play_spectral,
+                            buzzer,
                         ):
                             pass
                         else:
@@ -436,7 +439,7 @@ def main() -> int:
                             voice_selector,
                             "disarm",
                             config.DISARM_VOICES,
-                            buzzer.play_spectral,
+                            buzzer,
                         ):
                             buzzer.disarm_tone()
 
@@ -492,7 +495,7 @@ def main() -> int:
                         voice_selector,
                         "failsafe",
                         config.FAILSAFE_VOICES,
-                        buzzer.play_spectral,
+                        buzzer,
                     ):
                         buzzer.failsafe_tone()
                 if throttle_filter is not None:
@@ -506,7 +509,7 @@ def main() -> int:
                         voice_selector,
                         "disconnected",
                         config.DISCONNECTED_VOICES,
-                        buzzer.play_spectral,
+                        buzzer,
                     ):
                         buzzer.disconnected_tone()
                 armed = False
@@ -549,7 +552,7 @@ def main() -> int:
                             voice_selector,
                             "low_voltage",
                             config.LOW_VOLTAGE_VOICES,
-                            buzzer.play_spectral,
+                            buzzer,
                         ):
                             buzzer.low_voltage_alarm()
                     elif not is_low_voltage:
