@@ -4,11 +4,11 @@ events:
     profiles:
       - command_slow
   arm:
-    text: боевой режим
+    text: режим боя
     profiles:
       - command_slow
   disarm:
-    text: ожидаю приказов
+    text: жду приказа
     profiles:
       - command_slow
   connected:
@@ -20,7 +20,7 @@ events:
     profiles:
       - command_slow
   failsafe:
-    text: аварийный протокол
+    text: аварийный режим
     profiles:
       - robot_harsh
   low_voltage:
@@ -28,6 +28,6 @@ events:
     profiles:
       - command_slow
   sos:
-    text: щиты пали, запрашиваю подкрепление
+    text: зову подмогу
     profiles:
       - robot_harsh

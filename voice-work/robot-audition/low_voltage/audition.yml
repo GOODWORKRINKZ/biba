@@ -1,0 +1,10 @@
+event: low_voltage
+profile: command_slow
+candidates:
+- voice-work/low_voltage/low_voltage__command_slow__v01.wav
+labels:
+- v01
+texts:
+- низкий заряд
+tts_texts:
+- низкий заряд

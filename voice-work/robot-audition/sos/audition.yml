@@ -1,0 +1,10 @@
+event: sos
+profile: robot_harsh
+candidates:
+- voice-work/sos/sos__robot_harsh__v01.wav
+labels:
+- v01
+texts:
+- зову подмогу
+tts_texts:
+- зову подмогу

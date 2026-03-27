@@ -1,0 +1,10 @@
+event: arm
+profile: command_slow
+candidates:
+- voice-work/arm/arm__command_slow__v01.wav
+labels:
+- v01
+texts:
+- режим боя
+tts_texts:
+- режим боя

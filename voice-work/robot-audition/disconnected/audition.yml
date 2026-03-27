@@ -1,0 +1,10 @@
+event: disconnected
+profile: command_slow
+candidates:
+- voice-work/disconnected/disconnected__command_slow__v01.wav
+labels:
+- v01
+texts:
+- связь потеряна
+tts_texts:
+- связь потеряна

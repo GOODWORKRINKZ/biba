@@ -1,0 +1,10 @@
+event: failsafe
+profile: robot_harsh
+candidates:
+- voice-work/failsafe/failsafe__robot_harsh__v01.wav
+labels:
+- v01
+texts:
+- аварийный режим
+tts_texts:
+- аварийный режим

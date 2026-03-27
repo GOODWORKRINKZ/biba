@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import argparse
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Sequence
 
 import yaml
 
@@ -24,7 +25,19 @@ _PROFILE_FILTERS: dict[str, list[str]] = {
 class PhraseEntry:
     text: str
     profiles: list[str]
+    tts_text: str | None = None
+    alternatives: list[str] = field(default_factory=list)
+    tts_alternatives: list[str] = field(default_factory=list)
     seed_wav: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditionCandidate:
+    path: Path
+    text: str
+    tts_text: str
+    profile: str
+    label: str
 
 
 def load_manifest(path: str | Path) -> dict[str, PhraseEntry]:
@@ -44,12 +57,30 @@ def load_manifest(path: str | Path) -> dict[str, PhraseEntry]:
         raw_profiles = raw_entry.get("profiles") or [_DEFAULT_PROFILE]
         if not isinstance(raw_profiles, list) or not all(isinstance(item, str) for item in raw_profiles):
             raise ValueError(f"event '{event}' profiles must be a list of strings")
+        raw_alternatives = raw_entry.get("alternatives") or []
+        if not isinstance(raw_alternatives, list) or not all(
+            isinstance(item, str) and item.strip() for item in raw_alternatives
+        ):
+            raise ValueError(f"event '{event}' alternatives must be a list of non-empty strings")
+        raw_tts_text = raw_entry.get("tts_text")
+        if raw_tts_text is not None and (not isinstance(raw_tts_text, str) or not raw_tts_text.strip()):
+            raise ValueError(f"event '{event}' tts_text must be a non-empty string when provided")
+        raw_tts_alternatives = raw_entry.get("tts_alternatives") or []
+        if not isinstance(raw_tts_alternatives, list) or not all(
+            isinstance(item, str) and item.strip() for item in raw_tts_alternatives
+        ):
+            raise ValueError(f"event '{event}' tts_alternatives must be a list of non-empty strings")
+        if raw_tts_alternatives and len(raw_tts_alternatives) != len(raw_alternatives):
+            raise ValueError(f"event '{event}' tts_alternatives must match alternatives length")
         seed_wav = raw_entry.get("seed_wav")
         if seed_wav is not None and not isinstance(seed_wav, str):
             raise ValueError(f"event '{event}' seed_wav must be a string when provided")
         manifest[event] = PhraseEntry(
             text=text.strip(),
             profiles=raw_profiles,
+            tts_text=raw_tts_text.strip() if isinstance(raw_tts_text, str) else None,
+            alternatives=[item.strip() for item in raw_alternatives],
+            tts_alternatives=[item.strip() for item in raw_tts_alternatives],
             seed_wav=seed_wav,
         )
     return manifest
@@ -59,8 +90,11 @@ def build_tts_command(text: str, output_path: str | Path, profile: str) -> list[
     normalized_text = text.strip()
     if not normalized_text:
         raise ValueError("text must be non-empty")
+    voice = _select_tts_voice(normalized_text)
     command = [
         "espeak-ng",
+        "-v",
+        voice,
         *_profile_args(profile),
         "-w",
         str(Path(output_path)),
@@ -83,6 +117,25 @@ def build_candidate_path(base_dir: str | Path, event: str, profile: str, variant
     return event_dir / f"{event}__{profile}__v{variant:02d}.wav"
 
 
+def build_audition_candidates(base_dir: str | Path, *, event: str, entry: PhraseEntry) -> list[AuditionCandidate]:
+    candidates: list[AuditionCandidate] = []
+    texts = [entry.text, *entry.alternatives]
+    tts_texts = [entry.tts_text or entry.text, *(entry.tts_alternatives or entry.alternatives)]
+    for profile in entry.profiles:
+        for variant, (text, tts_text) in enumerate(zip(texts, tts_texts), start=1):
+            path = build_candidate_path(base_dir, event, profile, variant)
+            candidates.append(
+                AuditionCandidate(
+                    path=path,
+                    text=text,
+                    tts_text=tts_text,
+                    profile=profile,
+                    label=f"v{variant:02d}",
+                )
+            )
+    return candidates
+
+
 def write_audition_manifest(
     base_dir: str | Path,
     *,
@@ -99,8 +152,56 @@ def write_audition_manifest(
         "candidates": [str(path) for path in candidates],
         "labels": [_candidate_label(path) for path in candidates],
     }
-    manifest_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    manifest_path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return manifest_path
+
+
+def write_event_audition_manifest(base_dir: str | Path, *, event: str, entry: PhraseEntry) -> Path:
+    candidates = build_audition_candidates(base_dir, event=event, entry=entry)
+    manifest_path = write_audition_manifest(
+        base_dir,
+        event=event,
+        candidates=[candidate.path for candidate in candidates],
+        profile=entry.profiles[0],
+    )
+    payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    payload["texts"] = [candidate.text for candidate in candidates]
+    payload["tts_texts"] = [candidate.tts_text for candidate in candidates]
+    manifest_path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return manifest_path
+
+
+def generate_audition_manifests(
+    manifest_path: str | Path,
+    base_dir: str | Path,
+    *,
+    events: Sequence[str] | None = None,
+) -> list[Path]:
+    manifest = load_manifest(manifest_path)
+    selected_events = list(events) if events else list(manifest.keys())
+    output_paths: list[Path] = []
+    for event in selected_events:
+        entry = manifest.get(event)
+        if entry is None:
+            raise ValueError(f"unknown event: {event}")
+        output_paths.append(write_event_audition_manifest(base_dir, event=event, entry=entry))
+    return output_paths
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="voice_prep")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    prepare_audition = subparsers.add_parser("prepare-audition")
+    prepare_audition.add_argument("--manifest", required=True)
+    prepare_audition.add_argument("--base-dir", required=True)
+    prepare_audition.add_argument("--event", action="append", dest="events")
+
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.command == "prepare-audition":
+        generate_audition_manifests(args.manifest, args.base_dir, events=args.events)
+        return 0
+    raise ValueError(f"unsupported command: {args.command}")
 
 
 def _profile_args(profile: str) -> list[str]:
@@ -113,3 +214,13 @@ def _profile_args(profile: str) -> list[str]:
 def _candidate_label(path: Path) -> str:
     parts = path.stem.split("__")
     return parts[-1] if parts else path.stem
+
+
+def _select_tts_voice(text: str) -> str:
+    if any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in text):
+        return "ru"
+    return "en"
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

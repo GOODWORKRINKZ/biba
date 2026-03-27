@@ -1,0 +1,10 @@
+event: disarm
+profile: command_slow
+candidates:
+- voice-work/disarm/disarm__command_slow__v01.wav
+labels:
+- v01
+texts:
+- жду приказа
+tts_texts:
+- жду приказа

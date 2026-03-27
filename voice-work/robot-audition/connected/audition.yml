@@ -1,0 +1,10 @@
+event: connected
+profile: command_slow
+candidates:
+- voice-work/connected/connected__command_slow__v01.wav
+labels:
+- v01
+texts:
+- связь установлена
+tts_texts:
+- связь установлена
