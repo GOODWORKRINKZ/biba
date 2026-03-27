@@ -100,7 +100,7 @@ $$
 - Включите основной UART на Raspberry Pi и освободите его от Bluetooth перед использованием CRSF на скорости 420000 бод.
 - Daly BMS подключается через USB-UART адаптер и обычно появляется как `/dev/ttyUSB0`.
 - Для BTS7960 каждый мотор использует две линии PWM (`RPWM` и `LPWM`) и две линии enable (`REN`, `LEN`).
-- Для ADS1115 включите I2C в Raspberry Pi OS (`raspi-config` -> Interface Options -> I2C).
+- Для Ubuntu на Raspberry Pi включите I2C через `/boot/firmware/config.txt` или `/boot/firmware/usercfg.txt`: добавьте строку `dtparam=i2c_arm=on`, перезагрузите плату и проверьте наличие `/dev/i2c-1`.
 - Для ухода от слышимого свиста PWM-линии должны быть подключены только к hardware-PWM GPIO: `12`, `13`, `18`, `19`.
 - Если на конкретной плате `REN` и `LEN` объединены, это можно переопределить одинаковыми значениями в env-конфигурации.
 - Если `IS` не выведен наружу на вашем BTS7960-модуле, текущая реализация current sense не заработает: нужен либо другой модуль, либо отдельный датчик тока.
@@ -117,3 +117,28 @@ dtoverlay=disable-bt
 ```
 
 После этого отключите serial console, если она включена, и перезагрузите плату.
+
+Для Ubuntu на Raspberry Pi I2C обычно включается так:
+
+```bash
+sudo apt update
+sudo apt install -y i2c-tools
+sudoedit /boot/firmware/config.txt
+```
+
+Добавьте строку:
+
+```ini
+dtparam=i2c_arm=on
+```
+
+Если в `config.txt` уже подключается `usercfg.txt`, можно положить эту строку туда вместо правки основного файла.
+
+После перезагрузки проверьте:
+
+```bash
+ls /dev/i2c-*
+sudo i2cdetect -y 1
+```
+
+Для ADS1115 по умолчанию ожидается адрес `0x48`, поэтому в выводе `i2cdetect` обычно должен появиться `48`.
