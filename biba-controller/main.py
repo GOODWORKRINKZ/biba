@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import signal
 import time
+from pathlib import Path
 from types import FrameType
 from typing import Optional
 
 import pigpio
+import yaml
 
 import config
 from bms.daly import BatteryState, DalyBMS, DalyBMSBle
@@ -105,6 +107,54 @@ def _play_grouped_voice(
         return False
     player(path)
     return True
+
+
+def _create_synth_pins() -> tuple[list[int], list[int]]:
+    synth_pwm_pins: list[int] = []
+    synth_comp_pins: list[int] = []
+    if config.LEFT_MOTOR_ENABLED:
+        synth_pwm_pins.append(config.LEFT_MOTOR_RPWM)
+        synth_comp_pins.append(config.LEFT_MOTOR_LPWM)
+    if config.RIGHT_MOTOR_ENABLED:
+        synth_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
+        synth_comp_pins.append(config.RIGHT_MOTOR_LPWM)
+    return synth_pwm_pins, synth_comp_pins
+
+
+def _create_buzzer(pi: pigpio.pi):
+    synth_pwm_pins, synth_comp_pins = _create_synth_pins()
+    return MotorSynth(
+        pi,
+        synth_pwm_pins,
+        comp_pins=synth_comp_pins,
+    )
+
+
+def _load_voice_audition_candidates(path: str) -> list[str]:
+    if not path:
+        raise ValueError("VOICE_AUDITION_MANIFEST must be set when audition mode is enabled")
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    candidates = data.get("candidates", [])
+    if not isinstance(candidates, list) or not all(isinstance(item, str) and item.strip() for item in candidates):
+        raise ValueError("audition manifest candidates must be a non-empty list of strings")
+    return [item.strip() for item in candidates]
+
+
+def _run_voice_audition_mode() -> int:
+    pi = _connect_pigpio()
+    if not pi.connected:
+        LOGGER.warning("Could not connect to pigpio daemon, voice audition mode cannot start")
+        return 1
+
+    buzzer = _create_buzzer(pi)
+    try:
+        for candidate in _load_voice_audition_candidates(config.VOICE_AUDITION_MANIFEST):
+            buzzer.play_spectral(candidate)
+    finally:
+        buzzer.off()
+        pi.stop()
+
+    return 0
 
 
 def _setup_logging() -> None:
@@ -264,6 +314,10 @@ def main() -> int:
     """Run the BiBa control loop until a shutdown signal is received."""
     _setup_logging()
 
+    if config.VOICE_AUDITION_ENABLED:
+        LOGGER.info("BiBa controller started in voice audition mode")
+        return _run_voice_audition_mode()
+
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = _create_bms()
@@ -273,19 +327,7 @@ def main() -> int:
     if pi.connected:
         left_motor, right_motor = _create_motor_pair(pi)
         drive = DifferentialDrive(left_motor, right_motor)
-        synth_pwm_pins: list[int] = []
-        synth_comp_pins: list[int] = []
-        if config.LEFT_MOTOR_ENABLED:
-            synth_pwm_pins.append(config.LEFT_MOTOR_RPWM)
-            synth_comp_pins.append(config.LEFT_MOTOR_LPWM)
-        if config.RIGHT_MOTOR_ENABLED:
-            synth_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
-            synth_comp_pins.append(config.RIGHT_MOTOR_LPWM)
-        buzzer = MotorSynth(
-            pi,
-            synth_pwm_pins,
-            comp_pins=synth_comp_pins,
-        )
+        buzzer = _create_buzzer(pi)
     else:
         LOGGER.warning("Could not connect to pigpio daemon, starting in telemetry-only mode")
         drive = _NullDrive()

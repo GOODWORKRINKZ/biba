@@ -1,3 +1,4 @@
 pigpio
 pyserial
 bleak
+PyYAML>=6,<7
