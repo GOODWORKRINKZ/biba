@@ -513,13 +513,7 @@ def main() -> int:
                 beacon.on_failsafe(loop_started_at)
 
             if beacon.should_sos(loop_started_at):
-                if not _play_grouped_voice(
-                    voice_selector,
-                    "sos",
-                    config.SOS_VOICES,
-                    buzzer.play_spectral,
-                ):
-                    buzzer.sos_beacon()
+                buzzer.sos_beacon()
 
             if loop_started_at - last_telemetry_send >= config.BMS_POLL_INTERVAL_S:
                 last_telemetry_send = loop_started_at
