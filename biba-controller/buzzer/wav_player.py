@@ -30,6 +30,45 @@ _INTERRUPT_CHECK_INTERVAL = 256  # check interrupt every N samples
 _SPECTRAL_DUTY_MAX = 500_000  # 50 % duty → max fundamental amplitude
 
 
+def _stabilize_peak_frames(
+    frames: list[tuple[list[tuple[int, int]], int]],
+    *,
+    freq_snap_hz: int = 80,
+    duty_blend: float = 0.35,
+) -> list[tuple[list[tuple[int, int]], int]]:
+    """Reduce frame-to-frame jitter in peak frequency and duty.
+
+    Peaks are matched by position within the frame. When a peak stays within
+    ``freq_snap_hz`` of the previous frame's peak, its frequency snaps to the
+    previous value and its duty is blended with the previous duty.
+    """
+    if not frames:
+        return []
+
+    stabilized: list[tuple[list[tuple[int, int]], int]] = []
+    previous_peaks: list[tuple[int, int]] = []
+
+    for peaks, duration_ms in frames:
+        if not peaks:
+            stabilized.append(([], duration_ms))
+            previous_peaks = []
+            continue
+
+        current: list[tuple[int, int]] = []
+        for index, (freq, duty) in enumerate(peaks):
+            if index < len(previous_peaks):
+                prev_freq, prev_duty = previous_peaks[index]
+                if abs(freq - prev_freq) <= freq_snap_hz:
+                    freq = prev_freq
+                    duty = int(prev_duty * (1.0 - duty_blend) + duty * duty_blend)
+            current.append((freq, duty))
+
+        stabilized.append((current, duration_ms))
+        previous_peaks = current
+
+    return stabilized
+
+
 def _select_peak_bins(
     magnitudes: list[float],
     *,
@@ -311,7 +350,7 @@ def wav_to_peak_frames(
         ]
         frames.append((peak_frame, hop_ms))
 
-    return frames
+    return _stabilize_peak_frames(frames)
 
 
 def play_tone_sequence(

@@ -16,6 +16,7 @@ from buzzer.wav_player import (
     _fft,
     _next_pow2,
     _SPECTRAL_DUTY_MAX,
+    _stabilize_peak_frames,
     load_wav,
     play_peak_frames,
     play_samples,
@@ -411,6 +412,30 @@ class TestWavToPeakFrames:
         with_overlap = wav_to_peak_frames(str(wav_path), frame_ms=10, hop_ms=5, n_peaks=2)
 
         assert len(with_overlap) > len(without_overlap)
+
+
+class TestStabilizePeakFrames:
+    def test_snaps_nearby_frequency_to_previous_frame(self):
+        frames = [
+            ([(1000, 200000)], 5),
+            ([(1060, 210000)], 5),
+        ]
+
+        stabilized = _stabilize_peak_frames(frames, freq_snap_hz=80, duty_blend=0.5)
+
+        assert stabilized[0][0][0][0] == 1000
+        assert stabilized[1][0][0][0] == 1000
+
+    def test_smooths_duty_between_frames(self):
+        frames = [
+            ([(1000, 100000)], 5),
+            ([(1030, 300000)], 5),
+        ]
+
+        stabilized = _stabilize_peak_frames(frames, freq_snap_hz=80, duty_blend=0.25)
+
+        assert stabilized[1][0][0][0] == 1000
+        assert stabilized[1][0][0][1] == 150000
 
 
 # ---------------------------------------------------------------------------
