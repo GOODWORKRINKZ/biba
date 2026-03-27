@@ -95,7 +95,7 @@ def test_repository_phrase_manifest_uses_russian_text() -> None:
     assert manifest["startup"].text == "я вернулся"
     assert manifest["arm"].text == "режим боя"
     assert manifest["disarm"].text == "жду приказа"
-    assert manifest["connected"].text == "связь установлена"
+    assert manifest["connected"].text == "принимаю сигнал"
     assert manifest["disconnected"].text == "связь потеряна"
     assert manifest["failsafe"].text == "аварийный режим"
     assert manifest["low_voltage"].text == "низкий заряд"
