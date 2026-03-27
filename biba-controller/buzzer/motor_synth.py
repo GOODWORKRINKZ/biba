@@ -12,9 +12,9 @@ from buzzer.blheli_parser import parse_blheli
 from buzzer.wav_player import (
     DEFAULT_CARRIER_HZ,
     load_wav,
+    play_peak_frames,
     play_samples,
-    play_tone_sequence,
-    wav_to_tones,
+    wav_to_peak_frames,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -181,17 +181,17 @@ class MotorSynth:
         if self._control_active:
             return
         try:
-            tones = wav_to_tones(path)
+            frames = wav_to_peak_frames(path)
         except Exception:
             LOGGER.warning("Failed to load WAV for spectral: %s", path, exc_info=True)
             return
         with self._lock:
             if self._control_active:
                 return
-            play_tone_sequence(
+            play_peak_frames(
                 self.pi,
                 self.pwm_pins + self.comp_pins,
-                tones,
+                frames,
                 interrupt_event=self._interrupt_event,
             )
 

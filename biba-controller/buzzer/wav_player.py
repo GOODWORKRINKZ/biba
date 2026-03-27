@@ -30,6 +30,43 @@ _INTERRUPT_CHECK_INTERVAL = 256  # check interrupt every N samples
 _SPECTRAL_DUTY_MAX = 500_000  # 50 % duty → max fundamental amplitude
 
 
+def _select_peak_bins(
+    magnitudes: list[float],
+    *,
+    min_bin: int,
+    sample_rate: int,
+    fft_size: int,
+    n_peaks: int,
+) -> list[tuple[int, float]]:
+    """Return up to *n_peaks* dominant bins as (freq_hz, magnitude)."""
+    if not magnitudes:
+        return []
+
+    top_mag = max(magnitudes)
+    if top_mag < 1:
+        return []
+
+    ranked = sorted(
+        enumerate(magnitudes, start=min_bin),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+    chosen: list[tuple[int, float]] = []
+    chosen_bins: list[int] = []
+    for bin_idx, magnitude in ranked:
+        if magnitude < top_mag * 0.25:
+            break
+        if any(abs(bin_idx - existing) <= 1 for existing in chosen_bins):
+            continue
+        freq = int(bin_idx * sample_rate / fft_size)
+        chosen.append((freq, magnitude))
+        chosen_bins.append(bin_idx)
+        if len(chosen) >= n_peaks:
+            break
+    return chosen
+
+
 def load_wav(path: str) -> tuple[bytes, int]:
     """Read a WAV file and return (8-bit unsigned mono samples, sample_rate).
 
@@ -215,6 +252,68 @@ def wav_to_tones(
     return tones
 
 
+def wav_to_peak_frames(
+    path: str,
+    frame_ms: int = 10,
+    hop_ms: int = 5,
+    n_peaks: int = 3,
+    min_freq: int = 60,
+    max_freq: int = 3500,
+) -> list[tuple[list[tuple[int, int]], int]]:
+    """Analyze a WAV into overlapping multi-peak spectral frames.
+
+    Returns a list of ``(peaks, duration_ms)`` where ``peaks`` is a list of
+    ``(freq_hz, duty)`` pairs for the strongest peaks in that frame.
+    """
+    samples_8, sample_rate = load_wav(path)
+    signed = [s - 128 for s in samples_8]
+
+    frame_size = max(1, int(sample_rate * frame_ms / 1000))
+    hop_size = max(1, int(sample_rate * hop_ms / 1000))
+    fft_size = _next_pow2(frame_size)
+    min_bin = max(1, int(min_freq * fft_size / sample_rate))
+    max_bin = min(fft_size // 2, int(max_freq * fft_size / sample_rate))
+    hamming = [
+        0.54 - 0.46 * math.cos(2 * math.pi * i / (fft_size - 1))
+        for i in range(fft_size)
+    ]
+
+    frames: list[tuple[list[tuple[int, int]], int]] = []
+    for start in range(0, len(signed), hop_size):
+        chunk = signed[start : start + frame_size]
+        if len(chunk) < frame_size // 4:
+            break
+
+        rms = math.sqrt(sum(s * s for s in chunk) / len(chunk))
+        if rms < 5.0:
+            frames.append(([], hop_ms))
+            continue
+
+        padded = chunk + [0] * (fft_size - len(chunk))
+        windowed = [complex(padded[i] * hamming[i]) for i in range(fft_size)]
+        spectrum = _fft(windowed)
+        magnitudes = [abs(spectrum[k]) for k in range(min_bin, max_bin + 1)]
+        peaks = _select_peak_bins(
+            magnitudes,
+            min_bin=min_bin,
+            sample_rate=sample_rate,
+            fft_size=fft_size,
+            n_peaks=n_peaks,
+        )
+        if not peaks:
+            frames.append(([], hop_ms))
+            continue
+
+        top_mag = max(magnitude for _, magnitude in peaks) or 1.0
+        peak_frame = [
+            (freq, int(magnitude / top_mag * _SPECTRAL_DUTY_MAX))
+            for freq, magnitude in peaks
+        ]
+        frames.append((peak_frame, hop_ms))
+
+    return frames
+
+
 def play_tone_sequence(
     pi: pigpio.pi,
     pins: list[int],
@@ -245,5 +344,45 @@ def play_tone_sequence(
             time.sleep(duration_ms / 1000.0)
 
     # Cleanup
+    for pin in all_pins:
+        pi.hardware_PWM(pin, 0, 0)
+
+
+def play_peak_frames(
+    pi: pigpio.pi,
+    pins: list[int],
+    frames: list[tuple[list[tuple[int, int]], int]],
+    interrupt_event: threading.Event | None = None,
+) -> None:
+    """Play overlapping-analysis frames as a deterministic sequence of peaks."""
+    all_pins = list(pins)
+
+    for peaks, duration_ms in frames:
+        if interrupt_event and interrupt_event.is_set():
+            break
+
+        if not peaks:
+            for pin in all_pins:
+                pi.hardware_PWM(pin, 0, 0)
+            delay_s = duration_ms / 1000.0
+            if interrupt_event:
+                if interrupt_event.wait(delay_s):
+                    break
+            else:
+                time.sleep(delay_s)
+            continue
+
+        slot_s = (duration_ms / 1000.0) / max(len(peaks), 1)
+        for freq, duty in peaks:
+            if interrupt_event and interrupt_event.is_set():
+                break
+            for pin in all_pins:
+                pi.hardware_PWM(pin, freq, duty)
+            if interrupt_event:
+                if interrupt_event.wait(slot_s):
+                    break
+            else:
+                time.sleep(slot_s)
+
     for pin in all_pins:
         pi.hardware_PWM(pin, 0, 0)

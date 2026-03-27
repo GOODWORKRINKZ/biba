@@ -17,8 +17,10 @@ from buzzer.wav_player import (
     _next_pow2,
     _SPECTRAL_DUTY_MAX,
     load_wav,
+    play_peak_frames,
     play_samples,
     play_tone_sequence,
+    wav_to_peak_frames,
     wav_to_tones,
 )
 
@@ -373,6 +375,44 @@ class TestWavToTones:
             wav_to_tones("/nonexistent/path.wav")
 
 
+class TestWavToPeakFrames:
+    def test_detects_multiple_peaks_in_same_frame(self, tmp_path):
+        import math
+
+        n = 800
+        samples = [
+            int(
+                16000 * math.sin(2 * math.pi * 500 * i / 8000)
+                + 12000 * math.sin(2 * math.pi * 1100 * i / 8000)
+            )
+            for i in range(n)
+        ]
+        wav_path = tmp_path / "dual-tone.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        frames = wav_to_peak_frames(str(wav_path), frame_ms=10, hop_ms=5, n_peaks=2)
+
+        voiced = [peaks for peaks, duration in frames if peaks]
+        assert voiced
+        peak_freqs = [freq for freq, _duty in voiced[0]]
+        assert len(peak_freqs) >= 2
+        assert any(abs(freq - 500) < 120 for freq in peak_freqs)
+        assert any(abs(freq - 1100) < 180 for freq in peak_freqs)
+
+    def test_overlap_increases_frame_count(self, tmp_path):
+        import math
+
+        n = 1600
+        samples = [int(32767 * math.sin(2 * math.pi * 700 * i / 8000)) for i in range(n)]
+        wav_path = tmp_path / "tone.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        without_overlap = wav_to_peak_frames(str(wav_path), frame_ms=10, hop_ms=10, n_peaks=2)
+        with_overlap = wav_to_peak_frames(str(wav_path), frame_ms=10, hop_ms=5, n_peaks=2)
+
+        assert len(with_overlap) > len(without_overlap)
+
+
 # ---------------------------------------------------------------------------
 # play_tone_sequence tests
 # ---------------------------------------------------------------------------
@@ -426,6 +466,21 @@ class TestPlayToneSequence:
 
         assert call(18, 0, 0) in pi.hardware_PWM.call_args_list
         assert call(13, 0, 0) in pi.hardware_PWM.call_args_list
+
+
+class TestPlayPeakFrames:
+    def test_plays_multiple_peaks_within_frame(self):
+        pi = MagicMock()
+        pins = [18]
+        frames = [([(500, 120000), (900, 80000)], 10)]
+
+        with patch("buzzer.wav_player.time.sleep"):
+            play_peak_frames(pi, pins, frames)
+
+        calls = pi.hardware_PWM.call_args_list
+        assert call(18, 500, 120000) in calls
+        assert call(18, 900, 80000) in calls
+        assert call(18, 0, 0) in calls
 
 
 # ---------------------------------------------------------------------------
