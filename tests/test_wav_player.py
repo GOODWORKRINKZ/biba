@@ -413,6 +413,71 @@ class TestWavToPeakFrames:
 
         assert len(with_overlap) > len(without_overlap)
 
+    def test_default_analysis_limits_frames_to_two_peaks(self, tmp_path):
+        import math
+
+        n = 800
+        samples = [
+            int(
+                12000 * math.sin(2 * math.pi * 350 * i / 8000)
+                + 9000 * math.sin(2 * math.pi * 800 * i / 8000)
+                + 7000 * math.sin(2 * math.pi * 1400 * i / 8000)
+            )
+            for i in range(n)
+        ]
+        wav_path = tmp_path / "triple-tone.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        frames = wav_to_peak_frames(str(wav_path))
+
+        voiced = [peaks for peaks, _duration in frames if peaks]
+        assert voiced
+        assert all(len(peaks) <= 2 for peaks in voiced)
+
+    def test_default_analysis_filters_peaks_above_speech_band(self, tmp_path):
+        import math
+
+        n = 800
+        samples = [
+            int(
+                16000 * math.sin(2 * math.pi * 600 * i / 8000)
+                + 16000 * math.sin(2 * math.pi * 2200 * i / 8000)
+            )
+            for i in range(n)
+        ]
+        wav_path = tmp_path / "band-limited.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+
+        frames = wav_to_peak_frames(str(wav_path))
+
+        voiced = [peaks for peaks, _duration in frames if peaks]
+        assert voiced
+        peak_freqs = [freq for freq, _duty in voiced[0]]
+        assert any(abs(freq - 600) < 120 for freq in peak_freqs)
+        assert all(abs(freq - 2200) >= 180 for freq in peak_freqs)
+
+    def test_duty_tracks_frame_rms_envelope(self, tmp_path):
+        import math
+
+        loud = [int(28000 * math.sin(2 * math.pi * 500 * i / 8000)) for i in range(160)]
+        quiet = [int(6000 * math.sin(2 * math.pi * 500 * i / 8000)) for i in range(160)]
+        wav_path = tmp_path / "envelope.wav"
+        wav_path.write_bytes(_make_wav(samples=loud + quiet, sample_rate=8000))
+
+        frames = wav_to_peak_frames(
+            str(wav_path),
+            frame_ms=20,
+            hop_ms=20,
+            n_peaks=1,
+            max_freq=1800,
+        )
+
+        voiced = [peaks for peaks, _duration in frames if peaks]
+        assert len(voiced) >= 2
+        loud_duty = voiced[0][0][1]
+        quiet_duty = voiced[1][0][1]
+        assert loud_duty > quiet_duty
+
 
 class TestStabilizePeakFrames:
     def test_snaps_nearby_frequency_to_previous_frame(self):
@@ -531,6 +596,34 @@ class TestMotorSynthPlaySpectral:
             synth.play_spectral(str(wav_path))
 
         assert pi.hardware_PWM.called
+
+    def test_play_spectral_default_path_emits_multiple_voiced_frequencies(self, tmp_path):
+        synth, pi = self._make_synth()
+        import math
+
+        samples = [
+            int(
+                14000 * math.sin(2 * math.pi * 500 * i / 8000)
+                + 12000 * math.sin(2 * math.pi * 1100 * i / 8000)
+            )
+            for i in range(800)
+        ]
+        wav_path = tmp_path / "dual-tone-defaults.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+        pi.hardware_PWM.reset_mock()
+
+        with patch("buzzer.wav_player.time.sleep"):
+            synth.play_spectral(str(wav_path))
+
+        voiced_frequencies = {
+            freq
+            for _pin, freq, duty in (call.args for call in pi.hardware_PWM.call_args_list)
+            if freq > 0 and duty > 0
+        }
+
+        assert len(voiced_frequencies) >= 2
+        assert any(abs(freq - 500) < 120 for freq in voiced_frequencies)
+        assert any(abs(freq - 1100) < 180 for freq in voiced_frequencies)
 
     def test_play_spectral_respects_control_active(self, tmp_path):
         synth, pi = self._make_synth()

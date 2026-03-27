@@ -28,6 +28,11 @@ DEFAULT_CARRIER_HZ = 16000
 _DUTY_MAX = 1_000_000
 _INTERRUPT_CHECK_INTERVAL = 256  # check interrupt every N samples
 _SPECTRAL_DUTY_MAX = 500_000  # 50 % duty → max fundamental amplitude
+_SPECTRAL_FRAME_MS = 18
+_SPECTRAL_HOP_MS = 9
+_SPECTRAL_N_PEAKS = 2
+_SPEECH_MIN_FREQ = 60
+_SPEECH_MAX_FREQ = 1800
 
 
 def _stabilize_peak_frames(
@@ -293,16 +298,20 @@ def wav_to_tones(
 
 def wav_to_peak_frames(
     path: str,
-    frame_ms: int = 10,
-    hop_ms: int = 5,
-    n_peaks: int = 3,
-    min_freq: int = 60,
-    max_freq: int = 3500,
+    frame_ms: int = _SPECTRAL_FRAME_MS,
+    hop_ms: int = _SPECTRAL_HOP_MS,
+    n_peaks: int = _SPECTRAL_N_PEAKS,
+    min_freq: int = _SPEECH_MIN_FREQ,
+    max_freq: int = _SPEECH_MAX_FREQ,
 ) -> list[tuple[list[tuple[int, int]], int]]:
     """Analyze a WAV into overlapping multi-peak spectral frames.
 
     Returns a list of ``(peaks, duration_ms)`` where ``peaks`` is a list of
     ``(freq_hz, duty)`` pairs for the strongest peaks in that frame.
+
+    Peak duty is scaled by both local peak prominence and the frame RMS
+    envelope so quieter syllables remain quieter across the whole phrase
+    instead of every voiced frame normalizing to the same duty ceiling.
     """
     samples_8, sample_rate = load_wav(path)
     signed = [s - 128 for s in samples_8]
@@ -317,7 +326,7 @@ def wav_to_peak_frames(
         for i in range(fft_size)
     ]
 
-    frames: list[tuple[list[tuple[int, int]], int]] = []
+    raw_frames: list[tuple[list[tuple[int, float]], float]] = []
     for start in range(0, len(signed), hop_size):
         chunk = signed[start : start + frame_size]
         if len(chunk) < frame_size // 4:
@@ -325,7 +334,7 @@ def wav_to_peak_frames(
 
         rms = math.sqrt(sum(s * s for s in chunk) / len(chunk))
         if rms < 5.0:
-            frames.append(([], hop_ms))
+            raw_frames.append(([], 0.0))
             continue
 
         padded = chunk + [0] * (fft_size - len(chunk))
@@ -340,12 +349,22 @@ def wav_to_peak_frames(
             n_peaks=n_peaks,
         )
         if not peaks:
+            raw_frames.append(([], 0.0))
+            continue
+
+        raw_frames.append((peaks, rms))
+
+    max_rms = max((rms for _peaks, rms in raw_frames), default=1.0) or 1.0
+    frames: list[tuple[list[tuple[int, int]], int]] = []
+    for peaks, rms in raw_frames:
+        if not peaks or rms <= 0.0:
             frames.append(([], hop_ms))
             continue
 
         top_mag = max(magnitude for _, magnitude in peaks) or 1.0
+        frame_scale = min(1.0, rms / max_rms)
         peak_frame = [
-            (freq, int(magnitude / top_mag * _SPECTRAL_DUTY_MAX))
+            (freq, int((magnitude / top_mag) * frame_scale * _SPECTRAL_DUTY_MAX))
             for freq, magnitude in peaks
         ]
         frames.append((peak_frame, hop_ms))
