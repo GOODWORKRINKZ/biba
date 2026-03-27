@@ -6,6 +6,7 @@ import logging
 import pytest
 
 from bms.daly import BatteryState
+from motors.current_control import MotorCurrentSample
 
 
 def test_is_armed_uses_configured_channel_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -405,6 +406,258 @@ def test_log_battery_telemetry_skips_until_interval_elapsed(caplog: pytest.LogCa
 
     assert next_log_at == 1.0
     assert caplog.text == ""
+
+
+def test_get_motor_supply_voltage_prefers_bms_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_LIMIT_FALLBACK_VOLTAGE", 22.2)
+
+    state = BatteryState(
+        voltage=25.4,
+        current=3.0,
+        soc=50.0,
+        cells=[],
+        temperatures=[],
+        min_cell=0.0,
+        max_cell=0.0,
+        delta=0.0,
+    )
+
+    assert main._get_motor_supply_voltage(state) == pytest.approx(25.4)
+
+
+def test_get_motor_supply_voltage_falls_back_to_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_LIMIT_FALLBACK_VOLTAGE", 22.2)
+
+    assert main._get_motor_supply_voltage(None) == pytest.approx(22.2)
+
+
+def test_limit_drive_outputs_returns_requested_when_limiter_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_LIMITING_ENABLED", False)
+
+    result = main._limit_drive_outputs(
+        requested_left=0.6,
+        requested_right=-0.3,
+        left_sample=MotorCurrentSample(current_a=30.0),
+        right_sample=MotorCurrentSample(current_a=30.0),
+        battery_state=None,
+    )
+
+    assert result.left_output == pytest.approx(0.6)
+    assert result.right_output == pytest.approx(-0.3)
+    assert result.left_limited is False
+    assert result.right_limited is False
+
+
+def test_limit_drive_outputs_uses_configured_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_LIMITING_ENABLED", True)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_MAX_CURRENT_A", 10.0)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_MAX_CURRENT_A", 20.0)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_MAX_POWER_W", 1000.0)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_MAX_POWER_W", 1000.0)
+    monkeypatch.setattr(main.config, "MOTOR_LIMIT_FALLBACK_VOLTAGE", 24.0)
+
+    result = main._limit_drive_outputs(
+        requested_left=0.8,
+        requested_right=0.5,
+        left_sample=MotorCurrentSample(current_a=20.0),
+        right_sample=MotorCurrentSample(current_a=5.0),
+        battery_state=None,
+    )
+
+    assert result.left_output == pytest.approx(0.4)
+    assert result.right_output == pytest.approx(0.5)
+    assert result.left_limited is True
+    assert result.right_limited is False
+
+
+def test_create_motor_current_reader_returns_null_reader_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_SENSE_ENABLED", False)
+
+    reader = main._create_motor_current_reader()
+    left_sample, right_sample = reader.read_currents()
+
+    assert left_sample.valid is False
+    assert right_sample.valid is False
+
+
+def test_main_applies_limited_outputs_when_current_limit_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    applied_outputs: list[tuple[float, float, float, float, float]] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                [0.0, 1.0, 0.0, 0.0, 0.98, 0.0],
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame = self._frames.pop(0)
+            main.RUNNING = False
+            return frame
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeCurrentReader:
+        def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+            return MotorCurrentSample(current_a=20.0), MotorCurrentSample(current_a=5.0)
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del throttle, steering, dt
+            return (0.8, 0.5)
+
+        def apply_output(
+            self,
+            left_duty: float,
+            right_duty: float,
+            *,
+            throttle: float = 0.0,
+            steering: float = 0.0,
+            dt: float = 0.02,
+        ) -> tuple[float, float]:
+            applied_outputs.append((left_duty, right_duty, throttle, steering, dt))
+            return (left_duty, right_duty)
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            applied_outputs.append((throttle, steering, throttle, steering, dt))
+            return (throttle, steering)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "_create_motor_current_reader", lambda: FakeCurrentReader())
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "THROTTLE_FILTER_MODE", "NONE")
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_LIMITING_ENABLED", True)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_MAX_CURRENT_A", 10.0)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_MAX_CURRENT_A", 20.0)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_MAX_POWER_W", 1000.0)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_MAX_POWER_W", 1000.0)
+    monkeypatch.setattr(main.config, "MOTOR_LIMIT_FALLBACK_VOLTAGE", 24.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert applied_outputs[-1][0] == pytest.approx(0.4)
+    assert applied_outputs[-1][1] == pytest.approx(0.5)
 
 
 def test_main_continues_when_pigpio_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

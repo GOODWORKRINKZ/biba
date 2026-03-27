@@ -107,3 +107,31 @@ def test_run_applies_battery_holdoff_on_startup_and_reconnect() -> None:
     assert "connected and not prev_connected" in body
     assert "now + BATTERY_HOLDOFF_CS" in body
     assert "if now < battery_holdoff_until then" in body
+
+
+def test_read_motor_currents_uses_gps_heading_and_altitude_sensors() -> None:
+    body = _extract_function(_lua_source(), "read_motor_currents")
+
+    assert 'sensor("Hdg", 0)' in body
+    assert 'sensor("Alt", 0)' in body
+
+
+def test_draw_compact_displays_motor_currents() -> None:
+    body = _extract_function(_lua_source(), "draw_compact")
+
+    assert "left_current" in body
+    assert "right_current" in body
+    assert "LA" in body or "L " in body
+
+
+def test_draw_wide_displays_motor_currents() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "left_current" in body
+    assert "right_current" in body
+
+
+def test_run_reads_motor_currents() -> None:
+    body = _extract_function(_lua_source(), "run")
+
+    assert "read_motor_currents()" in body

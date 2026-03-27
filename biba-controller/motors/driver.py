@@ -192,22 +192,44 @@ class DifferentialDrive:
             self._PWM_RATE_WARN_THRESHOLD,
         )
 
-    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
-        """Apply throttle and steering to the left and right motor outputs.
-
-        Returns (left_duty, right_duty) after ramping.
-        """
+    def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+        """Return left and right duties after mixing and ramping, without applying them."""
         left = self._clamp(throttle + steering)
         right = self._clamp(throttle - steering)
-        sent_at = time.monotonic()
+
         if self.left_enabled:
             left_duty = self._left_ramp.update(left, dt)
+        else:
+            self._left_ramp.reset()
+            left_duty = 0.0
+
+        if self.right_enabled:
+            right_duty = self._right_ramp.update(right, dt)
+        else:
+            self._right_ramp.reset()
+            right_duty = 0.0
+
+        return left_duty, right_duty
+
+    def apply_output(
+        self,
+        left_duty: float,
+        right_duty: float,
+        *,
+        throttle: float = 0.0,
+        steering: float = 0.0,
+        dt: float = 0.02,
+    ) -> tuple[float, float]:
+        """Apply precomputed duties to the motor outputs."""
+        sent_at = time.monotonic()
+
+        if self.left_enabled:
             self._log_large_rate(
                 "left",
                 self._last_left_duty,
                 self._last_left_sent_at,
                 left_duty,
-                left,
+                self._clamp(throttle + steering),
                 throttle,
                 steering,
                 dt,
@@ -217,19 +239,16 @@ class DifferentialDrive:
             self._last_left_duty = left_duty
             self._last_left_sent_at = sent_at
         else:
-            self._left_ramp.reset()
-            left_duty = 0.0
             self._last_left_duty = 0.0
             self._last_left_sent_at = sent_at
 
         if self.right_enabled:
-            right_duty = self._right_ramp.update(right, dt)
             self._log_large_rate(
                 "right",
                 self._last_right_duty,
                 self._last_right_sent_at,
                 right_duty,
-                right,
+                self._clamp(throttle - steering),
                 throttle,
                 steering,
                 dt,
@@ -239,11 +258,24 @@ class DifferentialDrive:
             self._last_right_duty = right_duty
             self._last_right_sent_at = sent_at
         else:
-            self._right_ramp.reset()
-            right_duty = 0.0
             self._last_right_duty = 0.0
             self._last_right_sent_at = sent_at
+
         return left_duty, right_duty
+
+    def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+        """Apply throttle and steering to the left and right motor outputs.
+
+        Returns (left_duty, right_duty) after ramping.
+        """
+        left_duty, right_duty = self.mix_and_ramp(throttle, steering, dt)
+        return self.apply_output(
+            left_duty,
+            right_duty,
+            throttle=throttle,
+            steering=steering,
+            dt=dt,
+        )
 
     def emergency_stop(self) -> None:
         """Bypass ramp and stop motors immediately (shutdown only)."""

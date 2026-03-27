@@ -21,6 +21,8 @@ from buzzer.motor_synth import MotorSynth
 from buzzer.voice_selector import VoiceSelector
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry
+from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLimitResult, apply_motor_limits
+from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 from motors.ramping import ScalarKalmanFilter
 from system_stats import SystemStats
@@ -31,6 +33,22 @@ _BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
 
 
 class _NullDrive:
+    def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+        del throttle, steering, dt
+        return (0.0, 0.0)
+
+    def apply_output(
+        self,
+        left_duty: float,
+        right_duty: float,
+        *,
+        throttle: float = 0.0,
+        steering: float = 0.0,
+        dt: float = 0.02,
+    ) -> tuple[float, float]:
+        del left_duty, right_duty, throttle, steering, dt
+        return (0.0, 0.0)
+
     def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
         del throttle, steering, dt
         return (0.0, 0.0)
@@ -261,10 +279,17 @@ def _create_motor_pair(pi: pigpio.pi) -> tuple[object, object]:
     return left_motor, right_motor
 
 
-def _send_system_telemetry(telemetry: CRSFTelemetry, stats: SystemStats) -> None:
+def _send_system_telemetry(
+    telemetry: CRSFTelemetry,
+    stats: SystemStats,
+    left_current_a: float = 0.0,
+    right_current_a: float = 0.0,
+) -> None:
     telemetry.send_system_stats(
         cpu_pct=stats.cpu_percent(),
         mem_pct=stats.memory_percent(),
+        left_motor_current_a=max(0.0, left_current_a),
+        right_motor_current_a=max(0.0, right_current_a),
     )
 
 
@@ -313,6 +338,78 @@ def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatterySta
     )
 
 
+def _get_motor_supply_voltage(state: Optional[BatteryState]) -> float:
+    if state is not None and state.voltage > 0.0:
+        return state.voltage
+    return config.MOTOR_LIMIT_FALLBACK_VOLTAGE
+
+
+def _limit_drive_outputs(
+    requested_left: float,
+    requested_right: float,
+    left_sample: MotorCurrentSample,
+    right_sample: MotorCurrentSample,
+    battery_state: Optional[BatteryState],
+) -> MotorLimitResult:
+    if not config.MOTOR_CURRENT_LIMITING_ENABLED:
+        return MotorLimitResult(
+            left_output=requested_left,
+            right_output=requested_right,
+            left_limited=False,
+            right_limited=False,
+        )
+
+    supply_voltage_v = _get_motor_supply_voltage(battery_state)
+    return apply_motor_limits(
+        requested_left=requested_left,
+        requested_right=requested_right,
+        left_sample=left_sample,
+        right_sample=right_sample,
+        left_config=MotorLimitConfig(
+            current_limit_a=config.LEFT_MOTOR_MAX_CURRENT_A,
+            power_limit_w=config.LEFT_MOTOR_MAX_POWER_W,
+            supply_voltage_v=supply_voltage_v,
+        ),
+        right_config=MotorLimitConfig(
+            current_limit_a=config.RIGHT_MOTOR_MAX_CURRENT_A,
+            power_limit_w=config.RIGHT_MOTOR_MAX_POWER_W,
+            supply_voltage_v=supply_voltage_v,
+        ),
+    )
+
+
+def _telemetry_motor_current_a(sample: MotorCurrentSample) -> float:
+    if not sample.valid or sample.current_a is None:
+        return 0.0
+    return max(0.0, sample.current_a)
+
+
+def _create_motor_current_reader():
+    if not config.MOTOR_CURRENT_SENSE_ENABLED:
+        return NullMotorCurrentReader()
+
+    sample_rate_sps = int(round(config.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ))
+    try:
+        return open_ads1115_current_reader(
+            address=config.MOTOR_CURRENT_SENSE_I2C_ADDRESS,
+            left_channel=config.MOTOR_CURRENT_SENSE_LEFT_CHANNEL,
+            right_channel=config.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL,
+            gain=config.MOTOR_CURRENT_SENSE_GAIN,
+            sample_rate_sps=sample_rate_sps,
+            left_calibration=MotorCurrentCalibration(
+                zero_offset_v=config.LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V,
+                amps_per_volt=config.LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT,
+            ),
+            right_calibration=MotorCurrentCalibration(
+                zero_offset_v=config.RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V,
+                amps_per_volt=config.RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT,
+            ),
+        )
+    except Exception as exc:
+        LOGGER.warning("Motor current sensing disabled: failed to initialize ADS1115 reader: %s", exc)
+        return NullMotorCurrentReader()
+
+
 def main() -> int:
     """Run the BiBa control loop until a shutdown signal is received."""
     _setup_logging()
@@ -325,6 +422,7 @@ def main() -> int:
     telemetry = CRSFTelemetry(None)
     bms = _create_bms()
     bms_poller: Optional[BMSPoller] = None
+    current_reader = _create_motor_current_reader()
     stats = SystemStats()
     pi = _connect_pigpio()
     if pi.connected:
@@ -368,6 +466,8 @@ def main() -> int:
     had_connection = False
     low_voltage_active = False
     melody_zone = -1
+    left_current_sample = MotorCurrentSample(current_a=None, valid=False)
+    right_current_sample = MotorCurrentSample(current_a=None, valid=False)
     last_frame_time = time.monotonic()
     last_drive_update_at: float | None = None
     last_telemetry_send = 0.0
@@ -455,12 +555,45 @@ def main() -> int:
                 )
                 buzzer.set_control_active(control_active)
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
+                battery_state = bms_poller.latest_state if bms_poller else None
                 if armed:
-                    left_duty, right_duty = drive.drive(throttle, steering, control_dt)
+                    if hasattr(drive, "mix_and_ramp") and hasattr(drive, "apply_output"):
+                        requested_left, requested_right = drive.mix_and_ramp(throttle, steering, control_dt)
+                        left_sample, right_sample = current_reader.read_currents()
+                        left_current_sample = left_sample
+                        right_current_sample = right_sample
+                        limited = _limit_drive_outputs(
+                            requested_left=requested_left,
+                            requested_right=requested_right,
+                            left_sample=left_sample,
+                            right_sample=right_sample,
+                            battery_state=battery_state,
+                        )
+                        left_duty, right_duty = drive.apply_output(
+                            limited.left_output,
+                            limited.right_output,
+                            throttle=throttle,
+                            steering=steering,
+                            dt=control_dt,
+                        )
+                    else:
+                        left_duty, right_duty = drive.drive(throttle, steering, control_dt)
                 else:
                     if throttle_filter is not None:
                         throttle_filter.reset()
-                    left_duty, right_duty = drive.drive(0.0, 0.0, control_dt)
+                    if hasattr(drive, "mix_and_ramp") and hasattr(drive, "apply_output"):
+                        requested_left, requested_right = drive.mix_and_ramp(0.0, 0.0, control_dt)
+                        left_current_sample = MotorCurrentSample(current_a=0.0)
+                        right_current_sample = MotorCurrentSample(current_a=0.0)
+                        left_duty, right_duty = drive.apply_output(
+                            requested_left,
+                            requested_right,
+                            throttle=0.0,
+                            steering=0.0,
+                            dt=control_dt,
+                        )
+                    else:
+                        left_duty, right_duty = drive.drive(0.0, 0.0, control_dt)
                 last_drive_update_at = loop_started_at
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
@@ -539,7 +672,12 @@ def main() -> int:
                     LOGGER.warning("Failed to send CRSF battery telemetry: %s", exc)
 
                 try:
-                    _send_system_telemetry(telemetry, stats)
+                    _send_system_telemetry(
+                        telemetry,
+                        stats,
+                        left_current_a=_telemetry_motor_current_a(left_current_sample),
+                        right_current_a=_telemetry_motor_current_a(right_current_sample),
+                    )
                 except Exception as exc:
                     LOGGER.warning("Failed to send CRSF system telemetry: %s", exc)
 
@@ -567,6 +705,7 @@ def main() -> int:
         LOGGER.info("Shutting down BiBa controller")
         if bms_poller:
             bms_poller.stop()
+        current_reader.close()
         drive.emergency_stop()
         buzzer.shutdown_tone()
         buzzer.off()

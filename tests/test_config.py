@@ -18,6 +18,17 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.delenv("BMS_TRANSPORT", raising=False)
     monkeypatch.delenv("BMS_BLE_ADDRESS", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_LIMITING_ENABLED", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_SENSE_ENABLED", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_SENSE_I2C_ADDRESS", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_SENSE_LEFT_CHANNEL", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_SENSE_RIGHT_CHANNEL", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_SENSE_SAMPLE_RATE", raising=False)
+    monkeypatch.delenv("LEFT_MOTOR_MAX_CURRENT_A", raising=False)
+    monkeypatch.delenv("RIGHT_MOTOR_MAX_CURRENT_A", raising=False)
+    monkeypatch.delenv("LEFT_MOTOR_MAX_POWER_W", raising=False)
+    monkeypatch.delenv("RIGHT_MOTOR_MAX_POWER_W", raising=False)
+    monkeypatch.delenv("MOTOR_LIMIT_FALLBACK_VOLTAGE", raising=False)
 
     module = importlib.reload(config_module)
 
@@ -49,6 +60,22 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.RAMP_DECEL_RATE == pytest.approx(0.5)
     assert module.RAMP_REVERSE_DECEL_RATE == pytest.approx(0.5)
     assert module.RAMP_ZERO_HOLD_S == pytest.approx(0.15)
+    assert module.MOTOR_CURRENT_LIMITING_ENABLED is False
+    assert module.MOTOR_CURRENT_SENSE_ENABLED is False
+    assert module.MOTOR_CURRENT_SENSE_I2C_ADDRESS == 0x48
+    assert module.MOTOR_CURRENT_SENSE_LEFT_CHANNEL == 0
+    assert module.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL == 1
+    assert module.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ == 25.0
+    assert module.MOTOR_CURRENT_SENSE_GAIN == "1"
+    assert module.LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.0)
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.0)
+    assert module.LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT == pytest.approx(1.0)
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT == pytest.approx(1.0)
+    assert module.LEFT_MOTOR_MAX_CURRENT_A == pytest.approx(18.0)
+    assert module.RIGHT_MOTOR_MAX_CURRENT_A == pytest.approx(18.0)
+    assert module.LEFT_MOTOR_MAX_POWER_W == pytest.approx(180.0)
+    assert module.RIGHT_MOTOR_MAX_POWER_W == pytest.approx(180.0)
+    assert module.MOTOR_LIMIT_FALLBACK_VOLTAGE == pytest.approx(24.0)
     assert module.LOG_LEVEL == "INFO"
 
 
@@ -101,6 +128,22 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("BMS_TRANSPORT", "ble")
     monkeypatch.setenv("BMS_BLE_ADDRESS", "71:C1:46:20:25:4F")
+    monkeypatch.setenv("MOTOR_CURRENT_LIMITING_ENABLED", "1")
+    monkeypatch.setenv("MOTOR_CURRENT_SENSE_ENABLED", "1")
+    monkeypatch.setenv("MOTOR_CURRENT_SENSE_I2C_ADDRESS", "73")
+    monkeypatch.setenv("MOTOR_CURRENT_SENSE_LEFT_CHANNEL", "2")
+    monkeypatch.setenv("MOTOR_CURRENT_SENSE_RIGHT_CHANNEL", "3")
+    monkeypatch.setenv("MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ", "40")
+    monkeypatch.setenv("MOTOR_CURRENT_SENSE_GAIN", "2")
+    monkeypatch.setenv("LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V", "0.15")
+    monkeypatch.setenv("RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V", "0.25")
+    monkeypatch.setenv("LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT", "11.0")
+    monkeypatch.setenv("RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT", "12.0")
+    monkeypatch.setenv("LEFT_MOTOR_MAX_CURRENT_A", "12.5")
+    monkeypatch.setenv("RIGHT_MOTOR_MAX_CURRENT_A", "13.5")
+    monkeypatch.setenv("LEFT_MOTOR_MAX_POWER_W", "110")
+    monkeypatch.setenv("RIGHT_MOTOR_MAX_POWER_W", "115")
+    monkeypatch.setenv("MOTOR_LIMIT_FALLBACK_VOLTAGE", "22.2")
 
     module = importlib.reload(config_module)
 
@@ -122,6 +165,22 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.LOG_LEVEL == "DEBUG"
     assert module.BMS_TRANSPORT == "BLE"
     assert module.BMS_BLE_ADDRESS == "71:C1:46:20:25:4F"
+    assert module.MOTOR_CURRENT_LIMITING_ENABLED is True
+    assert module.MOTOR_CURRENT_SENSE_ENABLED is True
+    assert module.MOTOR_CURRENT_SENSE_I2C_ADDRESS == 73
+    assert module.MOTOR_CURRENT_SENSE_LEFT_CHANNEL == 2
+    assert module.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL == 3
+    assert module.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ == pytest.approx(40.0)
+    assert module.MOTOR_CURRENT_SENSE_GAIN == "2"
+    assert module.LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.15)
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.25)
+    assert module.LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT == pytest.approx(11.0)
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT == pytest.approx(12.0)
+    assert module.LEFT_MOTOR_MAX_CURRENT_A == pytest.approx(12.5)
+    assert module.RIGHT_MOTOR_MAX_CURRENT_A == pytest.approx(13.5)
+    assert module.LEFT_MOTOR_MAX_POWER_W == pytest.approx(110.0)
+    assert module.RIGHT_MOTOR_MAX_POWER_W == pytest.approx(115.0)
+    assert module.MOTOR_LIMIT_FALLBACK_VOLTAGE == pytest.approx(22.2)
 
 
 def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -218,6 +277,15 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "RIGHT_MOTOR_REN=20" in env_example
     assert "RIGHT_MOTOR_LEN=21" in env_example
     assert "RIGHT_MOTOR_ENABLED=0" in env_example
+    assert "MOTOR_CURRENT_LIMITING_ENABLED=" in env_example
+    assert "MOTOR_CURRENT_SENSE_ENABLED=" in env_example
+    assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS=" in env_example
+    assert "MOTOR_CURRENT_SENSE_GAIN=" in env_example
+    assert "LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V=" in env_example
+    assert "RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT=" in env_example
+    assert "LEFT_MOTOR_MAX_CURRENT_A=" in env_example
+    assert "RIGHT_MOTOR_MAX_POWER_W=" in env_example
+
 
 
 def test_docker_compose_uses_matching_default_ramp_rates() -> None:

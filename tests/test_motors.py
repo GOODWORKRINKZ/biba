@@ -181,6 +181,30 @@ def test_differential_drive_can_disable_left_motor() -> None:
     assert right_motor.speed_calls[0] == pytest.approx(0.04)
 
 
+def test_differential_drive_can_mix_without_applying_outputs() -> None:
+    left_motor = FakeMotor()
+    right_motor = FakeMotor()
+    drive = DifferentialDrive(left_motor, right_motor)
+
+    left_duty, right_duty = drive.mix_and_ramp(0.75, 0.5)
+
+    assert left_duty == pytest.approx(0.04)
+    assert right_duty == pytest.approx(0.04)
+    assert left_motor.speed_calls == []
+    assert right_motor.speed_calls == []
+
+
+def test_differential_drive_can_apply_precomputed_outputs() -> None:
+    left_motor = FakeMotor()
+    right_motor = FakeMotor()
+    drive = DifferentialDrive(left_motor, right_motor)
+
+    drive.apply_output(0.3, -0.2)
+
+    assert left_motor.speed_calls == [0.3]
+    assert right_motor.speed_calls == [-0.2]
+
+
 def test_differential_drive_logs_pwm_rate_spike_using_actual_send_interval(
     caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,

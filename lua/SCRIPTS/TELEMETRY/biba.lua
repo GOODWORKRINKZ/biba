@@ -114,6 +114,12 @@ local function read_system()
   return math.floor(cpu_raw + 0.5), math.floor(ram)
 end
 
+local function read_motor_currents()
+  local left_current = sensor("Hdg", 0)
+  local right_current = sensor("Alt", 0)
+  return left_current, right_current
+end
+
 -- ──────────────────────────────────────────────────
 -- Drawing: disconnected screen
 -- ──────────────────────────────────────────────────
@@ -193,7 +199,7 @@ end
 -- Drawing: compact connected (128×64)
 -- ──────────────────────────────────────────────────
 
-local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
+local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
 
   -- Header with link quality and battery source
@@ -234,6 +240,7 @@ local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, 
   if cpu > 0 or ram > 0 then
     lcd.drawText(inner_x + 32, inner_y + 22, string.format("C%02d M%02d", cpu, ram), SMLSIZE)
   end
+  lcd.drawText(inner_x, inner_y + 29, string.format("LA%.1f RA%.1f", left_current, right_current), SMLSIZE)
 
   -- Bottom: cells + stats
   local cy = body_y + body_h + 4
@@ -262,7 +269,7 @@ end
 -- Drawing: wide connected (≥212×128)
 -- ──────────────────────────────────────────────────
 
-local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
+local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w, h = sw(), sh()
 
   -- Header with link quality and battery source
@@ -318,6 +325,7 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
   if cpu > 0 or ram > 0 then
     lcd.drawText(4, bottom_y + 10, string.format("CPU %02d%%  RAM %02d%%", cpu, ram), SMLSIZE)
   end
+  lcd.drawText(math.floor(w / 2), bottom_y + 10, string.format("LA %.1f  RA %.1f", left_current, right_current), SMLSIZE)
 
   -- Low warning
   if mn > 0 and mn < LOW_CELL_VOLTAGE and math.floor(getTime() / 50) % 2 == 0 then
@@ -405,18 +413,21 @@ local function run(event)
   local mn, mx, delta = cell_stats(cells)
   local left_spd, right_spd = read_drive()
   local cpu, ram = read_system()
+  local left_current, right_current = read_motor_currents()
 
   if now < battery_holdoff_until then
     voltage = 0
     current = 0
     pct = 0
     cells = {}
+    left_current = 0
+    right_current = 0
     cell_src = ""
     mn = 0
     mx = 0
-    delta = 0
+    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   end
-
+    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   if sw() >= 212 and sh() >= 128 then
     draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
   else

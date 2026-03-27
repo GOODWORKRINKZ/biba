@@ -80,3 +80,27 @@ def test_send_system_stats_clamps_values() -> None:
     assert payload[9] == 0xD0
     # mem clamped: satellites = max(0, -5) = 0
     assert payload[14] == 0
+
+
+def test_send_system_stats_encodes_motor_currents_in_heading_and_altitude() -> None:
+    serial_port = FakeSerial()
+    telemetry = CRSFTelemetry(serial_port)
+
+    telemetry.send_system_stats(
+        cpu_pct=12.0,
+        mem_pct=34.0,
+        left_motor_current_a=5.6,
+        right_motor_current_a=7.8,
+    )
+
+    parsed = parse_frame(serial_port.writes[-1])
+
+    assert parsed is not None
+    frame_type, payload = parsed
+    assert frame_type == FRAME_TYPE_GPS
+    # heading = left current in deci-amps = 56 = 0x0038
+    assert payload[10] == 0x00
+    assert payload[11] == 0x38
+    # altitude = 1000 offset + right current in deci-amps = 1000 + 78 = 1078 = 0x0436
+    assert payload[12] == 0x04
+    assert payload[13] == 0x36

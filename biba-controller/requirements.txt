@@ -1,4 +1,5 @@
 pigpio
 pyserial
 bleak
+smbus2
 PyYAML>=6,<7

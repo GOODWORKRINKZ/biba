@@ -6,6 +6,8 @@
 | --- | --- | --- |
 | ELRS TX (Pi -> RX приемника) | 14 | 8 |
 | ELRS RX (Pi <- TX приемника) | 15 | 10 |
+| I2C SDA (ADS1115) | 2 | 3 |
+| I2C SCL (ADS1115) | 3 | 5 |
 | Buzzer | 17 | 11 |
 | Left BTS7960 RPWM | 18 | 12 |
 | Left BTS7960 LPWM | 13 | 33 |
@@ -17,13 +19,91 @@
 | Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
 
+## Подключение current sense через ADS1115
+
+Для ограничения по току и вывода токов колёс в телеметрию контроллер может читать BTS7960 `IS`-линии через ADS1115.
+
+Рекомендуемая схема первого варианта:
+
+| Сигнал | Куда подключать |
+| --- | --- |
+| ADS1115 VDD | 3.3V Raspberry Pi |
+| ADS1115 GND | GND Raspberry Pi |
+| ADS1115 SDA | GPIO 2 / pin 3 |
+| ADS1115 SCL | GPIO 3 / pin 5 |
+| Left BTS7960 `IS` | ADS1115 A0 |
+| Right BTS7960 `IS` | ADS1115 A1 |
+| Общая земля силовой части | Общая с GND Raspberry Pi и ADS1115 |
+
+Если у вашего BTS7960-модуля доступны отдельные `R_IS` и `L_IS`, используйте тот сигнал, который соответствует фактическому выходу, задействованному в вашей H-мостовой сборке. В текущей реализации ожидается один аналоговый канал на мотор.
+
+## Env-переменные current sense и limiter
+
+Минимальный набор для включения функции:
+
+```ini
+MOTOR_CURRENT_SENSE_ENABLED=1
+MOTOR_CURRENT_LIMITING_ENABLED=1
+MOTOR_CURRENT_SENSE_I2C_ADDRESS=72
+MOTOR_CURRENT_SENSE_LEFT_CHANNEL=0
+MOTOR_CURRENT_SENSE_RIGHT_CHANNEL=1
+MOTOR_CURRENT_SENSE_GAIN=1
+MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ=25
+LEFT_MOTOR_MAX_CURRENT_A=18
+RIGHT_MOTOR_MAX_CURRENT_A=18
+LEFT_MOTOR_MAX_POWER_W=180
+RIGHT_MOTOR_MAX_POWER_W=180
+MOTOR_LIMIT_FALLBACK_VOLTAGE=24.0
+LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V=0.0
+RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V=0.0
+LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT=1.0
+RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT=1.0
+```
+
+Назначение:
+
+- `MOTOR_CURRENT_SENSE_ENABLED=1` включает чтение ADS1115.
+- `MOTOR_CURRENT_LIMITING_ENABLED=1` включает уменьшение PWM по measured current/power.
+- `*_CHANNEL` задают каналы ADS1115 для левого и правого мотора.
+- `*_MAX_CURRENT_A` ограничивают ток каждого мотора независимо.
+- `*_MAX_POWER_W` ограничивают мощность каждого мотора независимо.
+- `MOTOR_LIMIT_FALLBACK_VOLTAGE` используется для расчёта мощности, если Daly BMS временно недоступен.
+- `*_ZERO_OFFSET_V` и `*_AMPS_PER_VOLT` задают калибровку конкретного BTS7960-модуля.
+
+Если нужно только видеть токи колёс в телеметрии, а резать PWM пока не нужно, оставьте:
+
+```ini
+MOTOR_CURRENT_SENSE_ENABLED=1
+MOTOR_CURRENT_LIMITING_ENABLED=0
+```
+
+## Калибровка BTS7960 `IS`
+
+`IS` у BTS7960 на дешёвых модулях нельзя считать абсолютно точным датчиком без калибровки. Для первого запуска используйте такой порядок:
+
+1. Включите только измерение, без limiter:
+	`MOTOR_CURRENT_SENSE_ENABLED=1`, `MOTOR_CURRENT_LIMITING_ENABLED=0`.
+2. Оставьте мотор без нагрузки и снимите напряжение на `IS`.
+	Это значение запишите в `LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V` и `RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V`.
+3. Дайте известную нагрузку и измерьте реальный ток внешним прибором.
+4. Посчитайте коэффициент:
+
+$$
+amps\_per\_volt = \frac{I_{measured}}{V_{is} - V_{offset}}
+$$
+
+5. Запишите коэффициенты в `LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT` и `RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT`.
+6. После этого включайте `MOTOR_CURRENT_LIMITING_ENABLED=1` и подбирайте `*_MAX_CURRENT_A` и `*_MAX_POWER_W` уже по реальным данным.
+
 ## Примечания
 
 - Включите основной UART на Raspberry Pi и освободите его от Bluetooth перед использованием CRSF на скорости 420000 бод.
 - Daly BMS подключается через USB-UART адаптер и обычно появляется как `/dev/ttyUSB0`.
 - Для BTS7960 каждый мотор использует две линии PWM (`RPWM` и `LPWM`) и две линии enable (`REN`, `LEN`).
+- Для ADS1115 включите I2C в Raspberry Pi OS (`raspi-config` -> Interface Options -> I2C).
 - Для ухода от слышимого свиста PWM-линии должны быть подключены только к hardware-PWM GPIO: `12`, `13`, `18`, `19`.
 - Если на конкретной плате `REN` и `LEN` объединены, это можно переопределить одинаковыми значениями в env-конфигурации.
+- Если `IS` не выведен наружу на вашем BTS7960-модуле, текущая реализация current sense не заработает: нужен либо другой модуль, либо отдельный датчик тока.
 - Земля силовой части и земля Raspberry Pi должны быть объединены.
 - Если одно из колёс вращается в неверную сторону, это можно исправить без перепайки через `MOTOR1_INVERTED` или `MOTOR2_INVERTED` в compose-конфигурации.
 
