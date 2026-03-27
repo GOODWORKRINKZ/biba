@@ -136,8 +136,6 @@ bash ~/biba/scripts/diagnostics.sh
 | `RIGHT_MOTOR_LEN` | `21` | Правый BTS7960 `LEN` |
 | `MOTOR1_INVERTED` | `0` | Инверсия мотора 1 |
 | `MOTOR2_INVERTED` | `0` | Инверсия мотора 2 |
-| `VOICE_AUDITION_ENABLED` | `0` | Включает специальный режим проигрывания audition manifest вместо обычного control loop |
-| `VOICE_AUDITION_MANIFEST` | `` | Путь до YAML manifest с ordered candidate list для robot audition |
 
 Тег образа задается в `/etc/default/biba-controller` или `.env`:
 
@@ -180,27 +178,27 @@ BiBa использует пьезо-буззер на GPIO17 для:
 
 На передатчике EdgeTX Lua-скрипт дополнительно проигрывает `playTone` события при старте, восстановлении/потере связи и low battery.
 
-### Проверка voice assets на роботе
+### Обновление voice assets на роботе
 
 Новые голосовые варианты не нужно копировать на робота вручную. Используйте только репозиторий и robot-side update workflow.
 
 Рекомендуемый порядок:
 
 1. Подготовьте русские исходные фразы в `voice-src/phrases.yml`.
-2. Сгенерируйте кандидаты и manifest в `voice-work/robot-audition/`.
-3. Закоммитьте изменения в ветку.
-4. Обновите робота через `bbupdate`.
-5. Перед запуском audition mode задайте переменные окружения:
+2. Сгенерируйте approved WAV-кандидаты в `voice-work/`.
+3. Продвиньте их в production voice каталог:
 
 ```bash
-VOICE_AUDITION_ENABLED=1
-VOICE_AUDITION_MANIFEST=/app/voice-work/robot-audition/<event>/audition.yml
+python scripts/voice_prep.py promote-approved \
+	--manifest voice-src/phrases.yml \
+	--base-dir voice-work \
+	--repo-root .
 ```
 
-6. Перезапустите контроллер и прослушайте кандидаты в порядке, заданном manifest.
-7. После прослушивания выключите audition mode и продвиньте победивший WAV в `biba-controller/voice/`.
+4. Закоммитьте изменения в ветку.
+5. Обновите робота через `bbupdate`.
 
-Смысл режима в том, что контент оценивается через тот же motor spectral path, который будет использоваться в продакшене.
+Новые voice assets по-прежнему доставляются только через репозиторий и обычный robot-side update workflow, без ручной подмены файлов на роботе.
 
 ## Troubleshooting
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -18,6 +19,16 @@ _PROFILE_FILTERS: dict[str, list[str]] = {
     "command_slow": ["highpass", "lowpass", "loudnorm"],
     "robot_harsh": ["highpass", "overdrive", "lowpass", "loudnorm"],
     "seed_clean": ["highpass", "lowpass", "loudnorm"],
+}
+_PRODUCTION_VOICE_FILENAMES: dict[str, str] = {
+    "startup": "startup_returned.wav",
+    "arm": "arm_begin.wav",
+    "disarm": "disarm_waiting.wav",
+    "connected": "connected_online.wav",
+    "disconnected": "disconnected_protocol.wav",
+    "failsafe": "failsafe_intruder.wav",
+    "low_voltage": "low_voltage_retribution.wav",
+    "sos": "sos_comply.wav",
 }
 
 
@@ -188,6 +199,37 @@ def generate_audition_manifests(
     return output_paths
 
 
+def build_production_voice_path(repo_root: str | Path, event: str) -> Path:
+    filename = _PRODUCTION_VOICE_FILENAMES.get(event)
+    if filename is None:
+        raise ValueError(f"unsupported production voice event: {event}")
+    return Path(repo_root) / "biba-controller" / "voice" / filename
+
+
+def promote_approved_voices(
+    manifest_path: str | Path,
+    base_dir: str | Path,
+    repo_root: str | Path,
+    *,
+    events: Sequence[str] | None = None,
+) -> list[Path]:
+    manifest = load_manifest(manifest_path)
+    selected_events = list(events) if events else list(manifest.keys())
+    output_paths: list[Path] = []
+    for event in selected_events:
+        entry = manifest.get(event)
+        if entry is None:
+            raise ValueError(f"unknown event: {event}")
+        source_path = build_candidate_path(base_dir, event, entry.profiles[0], 1)
+        if not source_path.exists():
+            raise FileNotFoundError(source_path)
+        target_path = build_production_voice_path(repo_root, event)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_path, target_path)
+        output_paths.append(target_path)
+    return output_paths
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="voice_prep")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -197,9 +239,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     prepare_audition.add_argument("--base-dir", required=True)
     prepare_audition.add_argument("--event", action="append", dest="events")
 
+    promote_approved = subparsers.add_parser("promote-approved")
+    promote_approved.add_argument("--manifest", required=True)
+    promote_approved.add_argument("--base-dir", required=True)
+    promote_approved.add_argument("--repo-root", required=True)
+    promote_approved.add_argument("--event", action="append", dest="events")
+
     args = parser.parse_args(list(argv) if argv is not None else None)
     if args.command == "prepare-audition":
         generate_audition_manifests(args.manifest, args.base_dir, events=args.events)
+        return 0
+    if args.command == "promote-approved":
+        promote_approved_voices(
+            args.manifest,
+            args.base_dir,
+            args.repo_root,
+            events=args.events,
+        )
         return 0
     raise ValueError(f"unsupported command: {args.command}")
 

@@ -38,9 +38,9 @@ BiBa — это колесная робот-платформа на базе Ras
 - `scripts/setup/` — bringup-скрипты для Raspberry Pi (Docker, Compose, systemd-автозапуск)
 - `scripts/update.sh` — быстрое обновление (git pull + image pull + restart)
 - `scripts/diagnostics.sh` — диагностика хоста и контейнера
-- `scripts/voice_prep.py` — офлайн-подготовка русскоязычных voice assets и audition manifest
+- `scripts/voice_prep.py` — офлайн-подготовка русскоязычных voice assets и явный promote в production voice каталог
 - `voice-src/phrases.yml` — канонический набор русских фраз по событиям
-- `voice-work/` — staging-каталог для сгенерированных кандидатов и robot audition manifests
+- `voice-work/` — staging-каталог для сгенерированных кандидатов перед promote в production voice каталог
 - `docs/deployment.md` — полное руководство по развёртыванию
 - `.agents/skills/` — вендорный каталог skills
 
@@ -135,12 +135,11 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 Базовый цикл такой:
 
 1. Обновить русские фразы в `voice-src/phrases.yml`.
-2. Сгенерировать кандидаты и audition manifest через `scripts/voice_prep.py`.
-3. Закоммитить кандидаты в ветку и доставить их на робота через обычный workflow обновления.
-4. Запустить robot audition mode и прослушать варианты через реальный motor spectral path.
-5. Выбрать победивший WAV и только после этого продвинуть его в `biba-controller/voice/`.
+2. Сгенерировать approved WAV-кандидаты в `voice-work/`.
+3. Явно продвинуть их в production каталог командой `scripts/voice_prep.py promote-approved --manifest voice-src/phrases.yml --base-dir voice-work --repo-root .`.
+4. Закоммитить обновлённые WAV в ветку и доставить их на робота через обычный workflow обновления.
 
-Это нужно для того, чтобы оценка разборчивости происходила на реальном железе, а не только на ноутбуке.
+Так production voice assets обновляются предсказуемо и без отдельного audition runtime path.
 
 ## CI и образы
 
