@@ -111,6 +111,8 @@ STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")
 
 # Voice (WAV playback through motor coils)
 VOICE_SELECTION_MODE = _get_env_choice("VOICE_SELECTION_MODE", "ROUND_ROBIN", {"ROUND_ROBIN", "RANDOM"})
+VOICE_AUDITION_ENABLED = bool(_get_env_int("VOICE_AUDITION_ENABLED", 0))
+VOICE_AUDITION_MANIFEST = os.getenv("VOICE_AUDITION_MANIFEST", "")
 STARTUP_VOICES = _get_env_list(
     "STARTUP_VOICES",
     "/app/voice/startup_returned.wav",

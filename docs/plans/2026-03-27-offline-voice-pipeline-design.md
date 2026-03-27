@@ -22,6 +22,7 @@ That means the biggest leverage is not more runtime complexity, but better sourc
 - Grouped selection remains supported, but default production config should use one asset per event for easier listening evaluation.
 - Offline generation must be reproducible from source text or a seed WAV.
 - Output should favor short command-like phrases over natural speech.
+- Canonical phrase text in `voice-src/phrases.yml` should be Russian.
 - Robot verification must respect the existing deployment workflow: candidates are committed to the repo and deployed via the robot-side update path rather than copied into the robot manually.
 
 ## Recommendation
@@ -60,7 +61,7 @@ Why:
 
 A manifest file, for example `voice-src/phrases.yml`, should describe:
 - event key
-- canonical phrase text
+- canonical Russian phrase text
 - optional alternate text
 - optional seed WAV
 - optional generation profile overrides

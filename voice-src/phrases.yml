@@ -1,0 +1,33 @@
+events:
+  startup:
+    text: я вернулся
+    profiles:
+      - command_slow
+  arm:
+    text: боевой режим
+    profiles:
+      - command_slow
+  disarm:
+    text: ожидаю приказов
+    profiles:
+      - command_slow
+  connected:
+    text: связь установлена
+    profiles:
+      - command_slow
+  disconnected:
+    text: связь потеряна
+    profiles:
+      - command_slow
+  failsafe:
+    text: аварийный протокол
+    profiles:
+      - robot_harsh
+  low_voltage:
+    text: низкий заряд
+    profiles:
+      - command_slow
+  sos:
+    text: щиты пали, запрашиваю подкрепление
+    profiles:
+      - robot_harsh
