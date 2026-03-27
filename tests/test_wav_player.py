@@ -201,8 +201,8 @@ class TestPlaySamples:
         assert call(18, 0, 0) in pi.hardware_PWM.call_args_list
         assert call(13, 0, 0) in pi.hardware_PWM.call_args_list
 
-    def test_default_carrier_frequency_is_4khz(self):
-        assert DEFAULT_CARRIER_HZ == 4000
+    def test_default_carrier_frequency_is_16khz(self):
+        assert DEFAULT_CARRIER_HZ == 16000
 
     def test_comp_pins_receive_complementary_duty(self):
         pi = MagicMock()
