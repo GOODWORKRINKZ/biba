@@ -113,23 +113,23 @@ STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")
 VOICE_SELECTION_MODE = _get_env_choice("VOICE_SELECTION_MODE", "ROUND_ROBIN", {"ROUND_ROBIN", "RANDOM"})
 STARTUP_VOICES = _get_env_list(
     "STARTUP_VOICES",
-    "/app/voice/startup_returned.wav;/app/voice/startup_useful.wav;/app/voice/startup_needed.wav",
+    "/app/voice/startup_returned.wav",
 )
 STARTUP_VOICE_ENABLED = bool(_get_env_int("STARTUP_VOICE_ENABLED", 1))
 STARTUP_VOICE = STARTUP_VOICES[0] if STARTUP_VOICES else ""
 ARM_VOICES = _get_env_list(
     "ARM_VOICES",
-    "/app/voice/arm_begin.wav;/app/voice/arm_confirm.wav;/app/voice/arm_deploy.wav",
+    "/app/voice/arm_begin.wav",
 )
 ARM_VOICE_ENABLED = bool(_get_env_int("ARM_VOICE_ENABLED", 1))
 ARM_VOICE = ARM_VOICES[0] if ARM_VOICES else ""
 DISARM_VOICES = _get_env_list(
     "DISARM_VOICES",
-    "/app/voice/disarm_waiting.wav;/app/voice/disarm_orders.wav",
+    "/app/voice/disarm_waiting.wav",
 )
 CONNECTED_VOICES = _get_env_list(
     "CONNECTED_VOICES",
-    "/app/voice/connected_online.wav;/app/voice/connected_signal.wav",
+    "/app/voice/connected_online.wav",
 )
 DISCONNECTED_VOICES = _get_env_list(
     "DISCONNECTED_VOICES",
@@ -137,7 +137,7 @@ DISCONNECTED_VOICES = _get_env_list(
 )
 FAILSAFE_VOICES = _get_env_list(
     "FAILSAFE_VOICES",
-    "/app/voice/failsafe_intruder.wav;/app/voice/failsafe_drop_weapons.wav",
+    "/app/voice/failsafe_intruder.wav",
 )
 LOW_VOLTAGE_VOICES = _get_env_list(
     "LOW_VOLTAGE_VOICES",

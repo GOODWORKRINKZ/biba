@@ -52,6 +52,36 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.LOG_LEVEL == "INFO"
 
 
+def test_config_defaults_to_single_voice_asset_per_event(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    for name in (
+        "STARTUP_VOICES",
+        "ARM_VOICES",
+        "DISARM_VOICES",
+        "CONNECTED_VOICES",
+        "DISCONNECTED_VOICES",
+        "FAILSAFE_VOICES",
+        "LOW_VOLTAGE_VOICES",
+        "SOS_VOICES",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.STARTUP_VOICES == ["/app/voice/startup_returned.wav"]
+    assert module.STARTUP_VOICE == "/app/voice/startup_returned.wav"
+    assert module.ARM_VOICES == ["/app/voice/arm_begin.wav"]
+    assert module.ARM_VOICE == "/app/voice/arm_begin.wav"
+    assert module.DISARM_VOICES == ["/app/voice/disarm_waiting.wav"]
+    assert module.CONNECTED_VOICES == ["/app/voice/connected_online.wav"]
+    assert module.DISCONNECTED_VOICES == ["/app/voice/disconnected_protocol.wav"]
+    assert module.FAILSAFE_VOICES == ["/app/voice/failsafe_intruder.wav"]
+    assert module.LOW_VOLTAGE_VOICES == ["/app/voice/low_voltage_retribution.wav"]
+    assert module.SOS_VOICES == ["/app/voice/sos_comply.wav"]
+
+
 def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.setenv("MOTOR1_PWM", "19")
     monkeypatch.setenv("MOTOR_DRIVER_TYPE", "BTS7960")
