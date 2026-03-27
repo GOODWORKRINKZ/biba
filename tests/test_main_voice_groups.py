@@ -143,8 +143,8 @@ def test_main_uses_round_robin_voice_group_for_startup(monkeypatch: pytest.Monke
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert "wav:/app/voice/startup_a.wav" in played
-    assert "spectral:/app/voice/startup_a.wav" not in played
+    assert "spectral:/app/voice/startup_a.wav" in played
+    assert "wav:/app/voice/startup_a.wav" not in played
 
 
 def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -294,8 +294,8 @@ def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert "wav:/app/voice/disarm_wait.wav" in played
-    assert "spectral:/app/voice/disarm_wait.wav" not in played
+    assert "spectral:/app/voice/disarm_wait.wav" in played
+    assert "wav:/app/voice/disarm_wait.wav" not in played
 
 
 def test_main_uses_sos_melody_even_when_sos_voice_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:

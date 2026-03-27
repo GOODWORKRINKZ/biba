@@ -105,9 +105,9 @@ def _play_grouped_voice(
     path = selector.choose(event, voices)
     if path is None:
         return False
-    player = getattr(buzzer, "play_wav", None)
+    player = getattr(buzzer, "play_spectral", None)
     if player is None:
-        player = buzzer.play_spectral
+        player = buzzer.play_wav
     player(path)
     return True
 
