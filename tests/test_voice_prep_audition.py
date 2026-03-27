@@ -151,3 +151,17 @@ events:
             "shchity pali, zaprashayu podkreplenie",
             "shchit probit, vyzyvayu podmogu",
         ]
+
+
+def test_repository_connected_audition_manifest_matches_phrase_manifest() -> None:
+    module = _load_voice_prep_module()
+    repo_root = Path(__file__).resolve().parents[1]
+    phrases_path = repo_root / "voice-src" / "phrases.yml"
+    audition_path = repo_root / "voice-work" / "robot-audition" / "connected" / "audition.yml"
+
+    phrases = module.load_manifest(phrases_path)
+    audition_manifest = yaml.safe_load(audition_path.read_text(encoding="utf-8"))
+
+    assert audition_manifest["event"] == "connected"
+    assert audition_manifest["texts"] == [phrases["connected"].text]
+    assert audition_manifest["tts_texts"] == [phrases["connected"].tts_text or phrases["connected"].text]
