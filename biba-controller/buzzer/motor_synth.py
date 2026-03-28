@@ -12,8 +12,10 @@ from buzzer.blheli_parser import parse_blheli
 from buzzer.wav_player import (
     DEFAULT_CARRIER_HZ,
     load_or_build_peak_frames,
+    load_or_build_split_peak_frames,
     load_wav,
     play_peak_frames,
+    play_split_peak_frames,
     play_samples,
 )
 
@@ -29,10 +31,19 @@ class MotorSynth:
         pwm_pins: list[int],
         duty_cycle: int = 50000,
         comp_pins: list[int] | None = None,
+        *,
+        left_pwm_pins: list[int] | None = None,
+        left_comp_pins: list[int] | None = None,
+        right_pwm_pins: list[int] | None = None,
+        right_comp_pins: list[int] | None = None,
     ) -> None:
         self.pi = pi
         self.pwm_pins = list(dict.fromkeys(pwm_pins))
         self.comp_pins = list(dict.fromkeys(comp_pins)) if comp_pins else []
+        self.left_pwm_pins = list(dict.fromkeys(left_pwm_pins)) if left_pwm_pins else []
+        self.left_comp_pins = list(dict.fromkeys(left_comp_pins)) if left_comp_pins else []
+        self.right_pwm_pins = list(dict.fromkeys(right_pwm_pins)) if right_pwm_pins else []
+        self.right_comp_pins = list(dict.fromkeys(right_comp_pins)) if right_comp_pins else []
         self.duty_cycle = duty_cycle
         self._lock = threading.Lock()
         self._interrupt_event = threading.Event()
@@ -40,6 +51,14 @@ class MotorSynth:
         for pin in self.pwm_pins + self.comp_pins:
             self.pi.set_mode(pin, pigpio.OUTPUT)
         self.off()
+
+    def _has_split_motor_groups(self) -> bool:
+        return bool(
+            self.left_pwm_pins
+            or self.left_comp_pins
+            or self.right_pwm_pins
+            or self.right_comp_pins
+        )
 
     def set_control_active(self, active: bool) -> None:
         if active == self._control_active:
@@ -181,19 +200,32 @@ class MotorSynth:
         if self._control_active:
             return
         try:
-            frames = load_or_build_peak_frames(path)
+            if self._has_split_motor_groups():
+                left_frames, right_frames = load_or_build_split_peak_frames(path)
+            else:
+                frames = load_or_build_peak_frames(path)
         except Exception:
             LOGGER.warning("Failed to load WAV for spectral: %s", path, exc_info=True)
             return
         with self._lock:
             if self._control_active:
                 return
-            play_peak_frames(
-                self.pi,
-                self.pwm_pins + self.comp_pins,
-                frames,
-                interrupt_event=self._interrupt_event,
-            )
+            if self._has_split_motor_groups():
+                play_split_peak_frames(
+                    self.pi,
+                    self.left_pwm_pins + self.left_comp_pins,
+                    self.right_pwm_pins + self.right_comp_pins,
+                    left_frames,
+                    right_frames,
+                    interrupt_event=self._interrupt_event,
+                )
+            else:
+                play_peak_frames(
+                    self.pi,
+                    self.pwm_pins + self.comp_pins,
+                    frames,
+                    interrupt_event=self._interrupt_event,
+                )
 
     def play_spectral_async(self, path: str) -> threading.Thread:
         """Play spectral in a background thread. Returns the thread."""

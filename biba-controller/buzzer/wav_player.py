@@ -39,6 +39,19 @@ _SPEECH_MAX_FREQ = 800
 _SPECTRAL_CACHE_VERSION = 1
 
 
+def split_peak_frames_by_side(
+    frames: list[tuple[list[tuple[int, int]], int]],
+) -> tuple[list[tuple[list[tuple[int, int]], int]], list[tuple[list[tuple[int, int]], int]]]:
+    left_frames: list[tuple[list[tuple[int, int]], int]] = []
+    right_frames: list[tuple[list[tuple[int, int]], int]] = []
+
+    for peaks, duration_ms in frames:
+        left_frames.append((peaks[0::2], duration_ms))
+        right_frames.append((peaks[1::2], duration_ms))
+
+    return left_frames, right_frames
+
+
 def _stabilize_peak_frames(
     frames: list[tuple[list[tuple[int, int]], int]],
     *,
@@ -437,6 +450,21 @@ def load_or_build_peak_frames(
     return wav_to_peak_frames(str(source_file))
 
 
+def load_or_build_split_peak_frames(
+    source_path: str | Path,
+) -> tuple[list[tuple[list[tuple[int, int]], int]], list[tuple[list[tuple[int, int]], int]]]:
+    source_file = Path(source_path)
+    left_cache_path, right_cache_path = _default_split_peak_frame_cache_paths(source_file)
+    if left_cache_path is not None and right_cache_path is not None:
+        left_frames = load_peak_frame_cache(left_cache_path, source_file)
+        right_frames = load_peak_frame_cache(right_cache_path, source_file)
+        if left_frames is not None and right_frames is not None:
+            return left_frames, right_frames
+
+    live_frames = wav_to_peak_frames(str(source_file))
+    return split_peak_frames_by_side(live_frames)
+
+
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -452,6 +480,16 @@ def _default_peak_frame_cache_path(source_path: Path) -> Path | None:
     if source_path.parent.name != "voice":
         return None
     return source_path.parent.parent / "voice-cache" / f"{source_path.stem}.peaks.json"
+
+
+def _default_split_peak_frame_cache_paths(source_path: Path) -> tuple[Path | None, Path | None]:
+    if source_path.parent.name != "voice":
+        return None, None
+    cache_dir = source_path.parent.parent / "voice-cache"
+    return (
+        cache_dir / f"{source_path.stem}.left.peaks.json",
+        cache_dir / f"{source_path.stem}.right.peaks.json",
+    )
 
 
 def play_tone_sequence(
@@ -525,4 +563,56 @@ def play_peak_frames(
                 time.sleep(slot_s)
 
     for pin in all_pins:
+        pi.hardware_PWM(pin, 0, 0)
+
+
+def play_split_peak_frames(
+    pi: pigpio.pi,
+    left_pins: list[int],
+    right_pins: list[int],
+    left_frames: list[tuple[list[tuple[int, int]], int]],
+    right_frames: list[tuple[list[tuple[int, int]], int]],
+    interrupt_event: threading.Event | None = None,
+) -> None:
+    all_left_pins = list(left_pins)
+    all_right_pins = list(right_pins)
+    frame_count = max(len(left_frames), len(right_frames))
+
+    for frame_index in range(frame_count):
+        if interrupt_event and interrupt_event.is_set():
+            break
+
+        left_peaks, left_duration_ms = left_frames[frame_index] if frame_index < len(left_frames) else ([], 0)
+        right_peaks, right_duration_ms = right_frames[frame_index] if frame_index < len(right_frames) else ([], 0)
+        duration_ms = left_duration_ms or right_duration_ms
+        slot_count = max(len(left_peaks), len(right_peaks), 1)
+        slot_s = (duration_ms / 1000.0) / slot_count if duration_ms > 0 else 0.0
+
+        for slot_index in range(slot_count):
+            if interrupt_event and interrupt_event.is_set():
+                break
+
+            if slot_index < len(left_peaks):
+                left_freq, left_duty = left_peaks[slot_index]
+                for pin in all_left_pins:
+                    pi.hardware_PWM(pin, left_freq, left_duty)
+            else:
+                for pin in all_left_pins:
+                    pi.hardware_PWM(pin, 0, 0)
+
+            if slot_index < len(right_peaks):
+                right_freq, right_duty = right_peaks[slot_index]
+                for pin in all_right_pins:
+                    pi.hardware_PWM(pin, right_freq, right_duty)
+            else:
+                for pin in all_right_pins:
+                    pi.hardware_PWM(pin, 0, 0)
+
+            if interrupt_event:
+                if interrupt_event.wait(slot_s):
+                    break
+            else:
+                time.sleep(slot_s)
+
+    for pin in all_left_pins + all_right_pins:
         pi.hardware_PWM(pin, 0, 0)

@@ -25,6 +25,39 @@ def test_get_channel_returns_zero_when_index_is_missing() -> None:
     assert main._get_channel([0.4, -0.2], 3) == 0.0
 
 
+def test_create_buzzer_preserves_left_and_right_motor_groups(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    captured: dict[str, object] = {}
+
+    class FakeMotorSynth:
+        def __init__(self, pi, pwm_pins, duty_cycle=50000, comp_pins=None, **kwargs) -> None:
+            captured["pi"] = pi
+            captured["pwm_pins"] = pwm_pins
+            captured["duty_cycle"] = duty_cycle
+            captured["comp_pins"] = comp_pins
+            captured.update(kwargs)
+
+    fake_pi = object()
+
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_ENABLED", True)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_ENABLED", True)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 13)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 12)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 19)
+
+    main._create_buzzer(fake_pi)
+
+    assert captured["pi"] is fake_pi
+    assert captured["pwm_pins"] == [18, 12]
+    assert captured["comp_pins"] == [13, 19]
+    assert captured["left_pwm_pins"] == [18]
+    assert captured["left_comp_pins"] == [13]
+    assert captured["right_pwm_pins"] == [12]
+    assert captured["right_comp_pins"] == [19]
+
+
 def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     drive_calls: list[tuple[float, float, float]] = []

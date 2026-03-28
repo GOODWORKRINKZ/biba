@@ -35,7 +35,7 @@ def _write_wav(path: Path, *, frequency_hz: int) -> None:
         handle.writeframes(b"".join(sample.to_bytes(2, "little", signed=True) for sample in samples))
 
 
-def test_build_spectral_cache_writes_one_cache_file_per_wav(tmp_path: Path) -> None:
+def test_build_spectral_cache_writes_left_and_right_cache_files_per_wav(tmp_path: Path) -> None:
     module = _load_build_cache_module()
     voice_dir = tmp_path / "voice"
     out_dir = tmp_path / "voice-cache"
@@ -46,9 +46,18 @@ def test_build_spectral_cache_writes_one_cache_file_per_wav(tmp_path: Path) -> N
 
     cache_paths = module.build_spectral_cache(voice_dir=voice_dir, out_dir=out_dir)
 
-    assert [path.name for path in cache_paths] == ["arm.peaks.json", "startup.peaks.json"]
-    assert load_peak_frame_cache(out_dir / "startup.peaks.json", voice_dir / "startup.wav")
-    assert load_peak_frame_cache(out_dir / "arm.peaks.json", voice_dir / "arm.wav")
+    assert [path.name for path in cache_paths] == [
+        "arm.left.peaks.json",
+        "arm.right.peaks.json",
+        "startup.left.peaks.json",
+        "startup.right.peaks.json",
+    ]
+    assert load_peak_frame_cache(out_dir / "startup.left.peaks.json", voice_dir / "startup.wav")
+    assert load_peak_frame_cache(out_dir / "startup.right.peaks.json", voice_dir / "startup.wav")
+    assert load_peak_frame_cache(out_dir / "arm.left.peaks.json", voice_dir / "arm.wav")
+    assert load_peak_frame_cache(out_dir / "arm.right.peaks.json", voice_dir / "arm.wav")
+    assert not (out_dir / "startup.peaks.json").exists()
+    assert not (out_dir / "arm.peaks.json").exists()
 
 
 def test_main_builds_spectral_cache_from_cli_arguments(tmp_path: Path) -> None:
@@ -66,7 +75,9 @@ def test_main_builds_spectral_cache_from_cli_arguments(tmp_path: Path) -> None:
     ])
 
     assert exit_code == 0
-    assert (out_dir / "connected.peaks.json").exists()
+    assert (out_dir / "connected.left.peaks.json").exists()
+    assert (out_dir / "connected.right.peaks.json").exists()
+    assert not (out_dir / "connected.peaks.json").exists()
 
 
 def test_build_spectral_cache_rejects_empty_voice_directory(tmp_path: Path) -> None:

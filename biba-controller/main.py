@@ -172,23 +172,35 @@ def _play_buzzer_method_async(buzzer, method_name: str) -> None:
 
 
 def _create_synth_pins() -> tuple[list[int], list[int]]:
-    synth_pwm_pins: list[int] = []
-    synth_comp_pins: list[int] = []
+    left_pwm_pins, left_comp_pins, right_pwm_pins, right_comp_pins = _create_synth_motor_groups()
+    return left_pwm_pins + right_pwm_pins, left_comp_pins + right_comp_pins
+
+
+def _create_synth_motor_groups() -> tuple[list[int], list[int], list[int], list[int]]:
+    left_pwm_pins: list[int] = []
+    left_comp_pins: list[int] = []
+    right_pwm_pins: list[int] = []
+    right_comp_pins: list[int] = []
     if config.LEFT_MOTOR_ENABLED:
-        synth_pwm_pins.append(config.LEFT_MOTOR_RPWM)
-        synth_comp_pins.append(config.LEFT_MOTOR_LPWM)
+        left_pwm_pins.append(config.LEFT_MOTOR_RPWM)
+        left_comp_pins.append(config.LEFT_MOTOR_LPWM)
     if config.RIGHT_MOTOR_ENABLED:
-        synth_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
-        synth_comp_pins.append(config.RIGHT_MOTOR_LPWM)
-    return synth_pwm_pins, synth_comp_pins
+        right_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
+        right_comp_pins.append(config.RIGHT_MOTOR_LPWM)
+    return left_pwm_pins, left_comp_pins, right_pwm_pins, right_comp_pins
 
 
 def _create_buzzer(pi: pigpio.pi):
     synth_pwm_pins, synth_comp_pins = _create_synth_pins()
+    left_pwm_pins, left_comp_pins, right_pwm_pins, right_comp_pins = _create_synth_motor_groups()
     return MotorSynth(
         pi,
         synth_pwm_pins,
         comp_pins=synth_comp_pins,
+        left_pwm_pins=left_pwm_pins,
+        left_comp_pins=left_comp_pins,
+        right_pwm_pins=right_pwm_pins,
+        right_comp_pins=right_comp_pins,
     )
 
 

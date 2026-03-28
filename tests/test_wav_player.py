@@ -20,13 +20,16 @@ from buzzer.wav_player import (
     _SPECTRAL_HOP_MS,
     _SPEECH_MAX_FREQ,
     _SPEECH_MIN_FREQ,
+    _default_split_peak_frame_cache_paths,
     _stabilize_peak_frames,
+    load_or_build_split_peak_frames,
     load_or_build_peak_frames,
     load_peak_frame_cache,
     load_wav,
     play_peak_frames,
     play_samples,
     play_tone_sequence,
+    split_peak_frames_by_side,
     write_peak_frame_cache,
     wav_to_peak_frames,
     wav_to_tones,
@@ -650,6 +653,24 @@ class TestPlayPeakFrames:
 
 
 class TestSpectralCache:
+    def test_split_peak_frames_by_side_routes_even_left_and_odd_right(self):
+        frames = [([(200, 1000), (300, 900), (400, 800), (500, 700)], 6), ([], 6)]
+
+        left_frames, right_frames = split_peak_frames_by_side(frames)
+
+        assert left_frames == [([(200, 1000), (400, 800)], 6), ([], 6)]
+        assert right_frames == [([(300, 900), (500, 700)], 6), ([], 6)]
+
+    def test_default_split_peak_frame_cache_paths_use_left_and_right_suffixes(self, tmp_path):
+        voice_dir = tmp_path / "voice"
+        voice_dir.mkdir()
+        wav_path = voice_dir / "startup.wav"
+
+        left_path, right_path = _default_split_peak_frame_cache_paths(wav_path)
+
+        assert left_path == tmp_path / "voice-cache" / "startup.left.peaks.json"
+        assert right_path == tmp_path / "voice-cache" / "startup.right.peaks.json"
+
     def test_write_and_load_peak_frame_cache_round_trip(self, tmp_path):
         wav_path = tmp_path / "voice.wav"
         wav_path.write_bytes(_make_wav(samples=[0, 12000, -12000, 0] * 40))
@@ -710,6 +731,33 @@ class TestSpectralCache:
 
         live_loader.assert_called_once_with(str(wav_path))
 
+    def test_load_or_build_split_peak_frames_uses_default_voice_side_caches(self, tmp_path):
+        voice_dir = tmp_path / "voice"
+        cache_dir = tmp_path / "voice-cache"
+        voice_dir.mkdir()
+        cache_dir.mkdir()
+        wav_path = voice_dir / "startup.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 9000, -9000, 0] * 40))
+        left_frames = [([(260, 125000)], 6)]
+        right_frames = [([(520, 90000)], 6)]
+        write_peak_frame_cache(cache_dir / "startup.left.peaks.json", wav_path, left_frames)
+        write_peak_frame_cache(cache_dir / "startup.right.peaks.json", wav_path, right_frames)
+
+        with patch("buzzer.wav_player.wav_to_peak_frames", side_effect=AssertionError("should not recompute")):
+            assert load_or_build_split_peak_frames(wav_path) == (left_frames, right_frames)
+
+    def test_load_or_build_split_peak_frames_falls_back_to_live_analysis_for_non_voice_paths(self, tmp_path):
+        wav_path = tmp_path / "ad_hoc.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 10000, -10000, 0] * 40))
+        live_frames = [([(280, 130000), (560, 70000), (720, 40000)], 6)]
+
+        with patch("buzzer.wav_player.wav_to_peak_frames", return_value=live_frames) as live_loader:
+            left_frames, right_frames = load_or_build_split_peak_frames(wav_path)
+
+        assert left_frames == [([(280, 130000), (720, 40000)], 6)]
+        assert right_frames == [([(560, 70000)], 6)]
+        live_loader.assert_called_once_with(str(wav_path))
+
 
 # ---------------------------------------------------------------------------
 # MotorSynth.play_spectral integration tests
@@ -720,6 +768,20 @@ class TestMotorSynthPlaySpectral:
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
         synth = MotorSynth(pi, [18, 13])
+        return synth, pi
+
+    def _make_split_synth(self):
+        pi = MagicMock()
+        from buzzer.motor_synth import MotorSynth
+        synth = MotorSynth(
+            pi,
+            [18, 12],
+            comp_pins=[13, 19],
+            left_pwm_pins=[18],
+            left_comp_pins=[13],
+            right_pwm_pins=[12],
+            right_comp_pins=[19],
+        )
         return synth, pi
 
     def test_play_spectral_calls_hardware_pwm(self, tmp_path):
@@ -748,6 +810,29 @@ class TestMotorSynthPlaySpectral:
 
         loader.assert_called_once_with(str(wav_path))
         assert pi.hardware_PWM.called
+
+    def test_play_spectral_with_motor_groups_uses_split_cache_loader(self, tmp_path):
+        synth, pi = self._make_split_synth()
+        wav_path = tmp_path / "cached.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 32767, -32768, 0] * 40))
+        left_frames = [([(420, 120000)], 10)]
+        right_frames = [([(760, 80000)], 10)]
+        pi.hardware_PWM.reset_mock()
+
+        with patch(
+            "buzzer.motor_synth.load_or_build_split_peak_frames",
+            return_value=(left_frames, right_frames),
+        ) as loader:
+            with patch("buzzer.wav_player.time.sleep"):
+                synth.play_spectral(str(wav_path))
+
+        loader.assert_called_once_with(str(wav_path))
+        assert call(18, 420, 120000) in pi.hardware_PWM.call_args_list
+        assert call(13, 420, 120000) in pi.hardware_PWM.call_args_list
+        assert call(12, 760, 80000) in pi.hardware_PWM.call_args_list
+        assert call(19, 760, 80000) in pi.hardware_PWM.call_args_list
+        assert call(12, 420, 120000) not in pi.hardware_PWM.call_args_list
+        assert call(18, 760, 80000) not in pi.hardware_PWM.call_args_list
 
     def test_play_spectral_default_path_emits_multiple_voiced_frequencies(self, tmp_path):
         synth, pi = self._make_synth()
