@@ -163,6 +163,32 @@ def test_draw_wheel_keeps_idle_forward_and_reverse_logic() -> None:
     assert "else" in body
 
 
+def test_draw_wheel_caps_at_seven_arrows() -> None:
+    body = _extract_function(_lua_source(), "draw_wheel")
+
+    assert "math.min(7" in body or "math.min(max_arrows" in body
+
+
+def test_draw_wheel_uses_bottom_up_for_forward_and_top_down_for_reverse() -> None:
+    body = _extract_function(_lua_source(), "draw_wheel")
+
+    assert "y + wh - 4" in body, "forward arrows should start from wheel bottom"
+    assert "y + 3" in body, "reverse arrows should start from wheel top"
+    assert "draw_wheel_arrow(" in body
+
+
+def test_draw_rounded_rect_is_separate_function() -> None:
+    source = _lua_source()
+
+    assert "local function draw_rounded_rect(" in source
+
+
+def test_draw_wheel_delegates_frame_to_draw_rounded_rect() -> None:
+    body = _extract_function(_lua_source(), "draw_wheel")
+
+    assert "draw_rounded_rect(x, y, ww, wh)" in body
+
+
 def test_draw_compact_keeps_six_cell_loop() -> None:
     body = _extract_function(_lua_source(), "draw_cell_frame")
 

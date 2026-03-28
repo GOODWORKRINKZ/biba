@@ -43,7 +43,7 @@ local function to_ma(current_a)
 end
 
 local function format_current_ma(current_a)
-  return string.format("%05d mA", to_ma(current_a))
+  return string.format("%05dmA", to_ma(current_a))
 end
 
 -- ──────────────────────────────────────────────────
@@ -158,6 +158,19 @@ end
 -- ────────────────────────────────────────────────
 -- Drawing: wheel arrow helper
 -- ──────────────────────────────────────────────────
+local function draw_rounded_rect(x, y, w, h)
+  lcd.drawLine(x, y + 2, x, y + h - 3, SOLID, 0)
+  lcd.drawLine(x + w - 1, y + 2, x + w - 1, y + h - 3, SOLID, 0)
+
+  lcd.drawLine(x + 2, y, x + w - 3, y, SOLID, 0)
+  lcd.drawLine(x + 2, y + h - 1, x + w - 3, y + h - 1, SOLID, 0)
+
+  lcd.drawPoint(x + 1, y + 1)
+  lcd.drawPoint(x + w - 2, y + 1)
+  lcd.drawPoint(x + 1, y - 2 + h)
+  lcd.drawPoint(x + w - 2, y - 2 + h)
+end
+
 local function draw_wheel_arrow(x, y, is_flip)
 
   if is_flip then
@@ -177,52 +190,24 @@ end
 local function draw_wheel(x, y, ww, wh, spd, arrow_w)
   arrow_w = arrow_w or 2
 
-  lcd.drawLine(x,y+2,x,y+wh-3, SOLID, 0)
-  lcd.drawLine(x+ww-1,y+2,x+ww-1,y+wh-3, SOLID, 0)
+  draw_rounded_rect(x, y, ww, wh)
 
-  lcd.drawLine(x+2,y,x+ww-3,y, SOLID, 0)
-  lcd.drawLine(x+2,y+wh-1,x+ww-3,y+wh-1, SOLID, 0)
+  if math.abs(spd) < 0.05 then return end
 
-  lcd.drawPoint(x+1, y+1)
-  lcd.drawPoint(x+ww-2, y+1)
-  lcd.drawPoint(x+1, y-2+wh)
-  lcd.drawPoint(x+ww-2, y-2+wh)
+  local max_arrows = 7
+  local count = math.max(1, math.min(max_arrows, math.floor((math.abs(spd) * max_arrows) + 0.999)))
+  local arrow_x = x + 2
+  local arrow_step = 4
 
-  draw_wheel_arrow(x+2,y+3, true)
-  draw_wheel_arrow(x+2,y+9, false)
-
-  --lcd.drawRectangle(x, y, ww, wh)
-  --if ww > 4 and wh > 4 then
-  --  lcd.drawRectangle(x + 1, y + 1, ww - 2, wh - 2)
-  --end
-
-  --local tread_step = math.max(4, math.floor(wh / 6))
-  --for ty = y + 2, y + wh - 4, tread_step do
-  --  lcd.drawLine(x + 1, ty + 1, x + math.min(3, ww - 2), ty, SOLID, 0)
-  --  lcd.drawLine(x + ww - math.min(3, ww - 2), ty, x + ww - 2, ty + 1, SOLID, 0)
-  --end
-
-  --if math.abs(spd) < 0.05 then return end
-
-  --local mid_x = x + math.floor(ww / 2)
-  --local pct = math.abs(spd) * 100
-  --local count = math.max(1, math.min(5, math.floor((pct + 19) / 20)))
-  --if count == 0 then return end
-
-  --local margin = 2
-  --local usable_h = wh - margin * 2
-  --local slot_h = math.floor(usable_h / 5)
-
-  --for i = 0, count - 1 do
-  --  local sy = y + margin + i * slot_h + math.floor(slot_h / 2)
-  --  if spd > 0 then
-  --    lcd.drawLine(mid_x - arrow_w, sy + arrow_w, mid_x, sy, SOLID, FORCE)
-  --    lcd.drawLine(mid_x, sy, mid_x + arrow_w, sy + arrow_w, SOLID, FORCE)
-  --  else
-  --    lcd.drawLine(mid_x - arrow_w, sy, mid_x, sy + arrow_w, SOLID, FORCE)
-  --    lcd.drawLine(mid_x, sy + arrow_w, mid_x + arrow_w, sy, SOLID, FORCE)
-  --  end
-  --end
+  for i = 0, count - 1 do
+    if spd > 0 then
+      local arrow_y = y + wh - 6 - i * arrow_step
+      draw_wheel_arrow(arrow_x, arrow_y, false)
+    else
+      local arrow_y = y + 3 + i * arrow_step
+      draw_wheel_arrow(arrow_x, arrow_y, true)
+    end
+  end
 end
 
 -- ──────────────────────────────────────────────────
@@ -243,7 +228,7 @@ end
 
 local function draw_header(w, rqly, cell_src)
   lcd.drawText(0, 0, "BiBa", SMLSIZE)
-  local hdr = string.format("Q%03d", rqly)
+  local hdr = string.format("Q%03d PCK", rqly)
   if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
   lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
 end
@@ -253,15 +238,15 @@ end
 -- ──────────────────────────────────────────────────
 
 local function draw_cell_frame(w, cells)
-  local y_top = 8
+  local y_top = 9
   local y_bot = 18
   -- Top border: DOTTED
-  lcd.drawLine(0, y_top, w - 1, y_top, DOTTED, FORCE)
+  lcd.drawLine(2, y_top, w - 3, y_top, DOTTED, FORCE)
   -- Bottom border: SOLID
-  lcd.drawLine(0, y_bot, w - 1, y_bot, SOLID, FORCE)
+  lcd.drawLine(2, y_bot, w - 3, y_bot, SOLID, FORCE)
   -- Side borders
-  lcd.drawLine(0, y_top, 0, y_bot, SOLID, FORCE)
-  lcd.drawLine(w - 1, y_top, w - 1, y_bot, SOLID, FORCE)
+  lcd.drawLine(2, y_top, 2, y_bot, DOTTED, FORCE)
+  lcd.drawLine(w - 3, y_top, w - 3, y_bot, DOTTED, FORCE)
   -- Cell texts and dotted dividers
   local cell_w = math.floor(w / CELL_COUNT)
   for i = 1, math.min(#cells, CELL_COUNT) do
@@ -291,28 +276,28 @@ local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, 
   draw_wheel(w - wheel_w, wheel_y, wheel_w, wheel_h, right_spd, 3)
 
   -- Body rectangle between wheels
-  local body_x = 12
+  local body_x = 11
   local body_y = 20
-  local body_w = w - 24
-  local body_h = 42
-  lcd.drawRectangle(body_x, body_y, body_w, body_h)
+  local body_w = 106
+  local body_h = 30
+  draw_rounded_rect(body_x, body_y, body_w, body_h)
 
   -- Voltage (large) + CPU/RAM
   lcd.drawText(14, 22, string.format("%.1fV", voltage), MIDSIZE)
   if cpu > 0 or ram > 0 then
-    lcd.drawText(62, 23, string.format("CPU%02d%%MEM%02d%%", cpu, ram), SMLSIZE)
+    lcd.drawText(49, 22, string.format("CPU%02d%%MEM%02d%%", cpu, ram), SMLSIZE)
   end
 
   -- Total current + SOC%
-  lcd.drawText(14, 36, format_current_ma(current), SMLSIZE)
-  lcd.drawText(96, 36, string.format("%d%%", pct), SMLSIZE)
+  lcd.drawText(14, 34, format_current_ma(current), SMLSIZE)
+  lcd.drawText(59, 35, string.format("%d%%", pct), SMLSIZE)
 
   -- Wheel currents (left / right)
-  lcd.drawText(14, 45, format_current_ma(left_current), SMLSIZE)
-  lcd.drawText(64, 45, format_current_ma(right_current), SMLSIZE)
+  lcd.drawText(12, 56, format_current_ma(left_current), SMLSIZE)
+  lcd.drawText(81, 56, format_current_ma(right_current), SMLSIZE)
 
   -- SOC bar at bottom of body
-  draw_soc_bar(14, 54, 100, 5, pct)
+  draw_soc_bar(14, 42, 100, 6, pct)
 
   -- LOW battery warning
   if mn > 0 and mn < LOW_CELL_VOLTAGE and math.floor(getTime() / 50) % 2 == 0 then
