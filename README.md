@@ -108,6 +108,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `THROTTLE_FILTER_MODE=KALMAN|NONE` — фильтрация газа до wheel-mix; `KALMAN` сглаживает выбросы канала
 - `THROTTLE_KALMAN_PROCESS_NOISE=0.02` — насколько быстро фильтр принимает изменения реального setpoint
 - `THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5` — насколько сильно фильтр подавляет шум и ложные выбросы канала
+- `BMS_TELEMETRY_TRACE_ENABLED=0|1` — включает точные controller-side trace-логи на этапах consume/send для battery telemetry
 - `BEACON_ENABLED=0|1`
 - `BEACON_DELAY_S=300`
 - `CH_BEACON=5`
@@ -136,6 +137,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - канонические фразы в `voice-src/phrases.yml` должны быть на русском языке
 - production runtime по умолчанию использует по одному утверждённому WAV на событие
 - новые варианты сначала попадают в `voice-work/`, а не сразу в `biba-controller/voice/`
+- при сборке controller image production WAV из `biba-controller/voice/` дополнительно преобразуются в derived spectral cache внутри image, чтобы робот не тратил секунды на FFT-предобработку при arm/disarm/connect voice events
 
 Базовый цикл такой:
 
@@ -145,6 +147,8 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 4. Закоммитить обновлённые WAV в ветку и доставить их на робота через обычный workflow обновления.
 
 Так production voice assets обновляются предсказуемо и без отдельного audition runtime path.
+
+Сами spectral cache artifacts в git не хранятся. Они пересобираются внутри Docker image и в runtime используются автоматически для production voice путей, а для временных или нестандартных WAV контроллер по-прежнему умеет падать обратно на live-анализ.
 
 ## CI и образы
 

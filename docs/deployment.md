@@ -110,6 +110,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `BMS_BLE_WRITE_UUID` | `0000fff2-0000-1000-8000-00805f9b34fb` | BLE characteristic для команд |
 | `BMS_BLE_NOTIFY_UUID` | `0000fff1-0000-1000-8000-00805f9b34fb` | BLE characteristic для ответов |
 | `BMS_BLE_TIMEOUT_S` | `1.5` | Таймаут ответа BMS по BLE |
+| `BMS_TELEMETRY_TRACE_ENABLED` | `0` | Включает точные monotonic trace-логи на этапах consume/send для battery telemetry |
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
 | `MOTOR_DRIVER_TYPE` | `BTS7960` | Тип драйвера моторов: штатный `BTS7960` или старый `PWM_DIR` |
 | `BTS7960_PWM_MODE` | `HARDWARE` | Режим PWM для `BTS7960`: `HARDWARE` по умолчанию в коде, `SOFTWARE` для текущей двухмоторной проводки на Pi Zero 2W |
@@ -204,6 +205,8 @@ python scripts/voice_prep.py promote-approved \
 
 Новые voice assets по-прежнему доставляются только через репозиторий и обычный robot-side update workflow, без ручной подмены файлов на роботе.
 
+Во время сборки controller image production WAV из `biba-controller/voice/` дополнительно преобразуются в derived spectral cache внутри image. Эти cache-файлы не коммитятся в репозиторий: они генерируются заново в CI и затем используются runtime автоматически для production voice путей. Если контроллер получает временный WAV вне production voice каталога, он по-прежнему делает live-анализ как fallback.
+
 ## Troubleshooting
 
 ### Нет USB-устройства BMS
@@ -230,6 +233,8 @@ docker compose logs --tail 50 biba-controller
 - `BMS_BLE_ADDRESS` совпадает с MAC-адресом BMS
 - на хосте активна служба `bluetooth`
 - в контейнер примонтирован `/run/dbus/system_bus_socket`
+
+Если нужно измерить controller-side задержку battery telemetry до UART, временно включите `BMS_TELEMETRY_TRACE_ENABLED=1`. Тогда контроллер начнёт писать monotonic timestamps на этапах consume/send вокруг CRSF battery packet.
 
 ### Нет CRSF-сигнала
 

@@ -437,6 +437,39 @@ def test_send_battery_telemetry_marks_positive_current_as_charging() -> None:
     assert sent_packets == [(24.1, 1.6, 1, 63)]
 
 
+def test_send_battery_telemetry_emits_trace_logs_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    main = importlib.import_module("main")
+
+    class FakeTelemetry:
+        def send_battery(self, voltage_v: float, current_a: float, capacity_mah: int, remaining_pct: int) -> None:
+            assert (voltage_v, current_a, capacity_mah, remaining_pct) == (24.1, 1.3, 2, 63)
+
+    state = BatteryState(
+        voltage=24.1,
+        current=-1.3,
+        soc=63.0,
+        cells=[3.4, 3.45],
+        temperatures=[22.0],
+        min_cell=3.4,
+        max_cell=3.45,
+        delta=0.05,
+    )
+
+    monotonic_values = iter([10.25])
+    monkeypatch.setattr(main.config, "BMS_TELEMETRY_TRACE_ENABLED", True, raising=False)
+    monkeypatch.setattr(main.time, "monotonic", lambda: next(monotonic_values))
+
+    with caplog.at_level(logging.INFO, logger="biba-controller"):
+        main._send_battery_telemetry(FakeTelemetry(), state, consumed_at_s=10.0)
+
+    assert "Battery telemetry trace stage=consume t=10.000000" in caplog.text
+    assert "Battery telemetry trace stage=send t=10.250000" in caplog.text
+    assert "raw_current_a=-1.30" in caplog.text
+
+
 def test_log_battery_telemetry_skips_until_interval_elapsed(caplog: pytest.LogCaptureFixture) -> None:
     main = importlib.import_module("main")
     state = BatteryState(

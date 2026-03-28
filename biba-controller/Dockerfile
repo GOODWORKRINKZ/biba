@@ -31,4 +31,6 @@ RUN ln -s /usr/local/lib/libpigpio.so.1 /usr/local/lib/libpigpio.so
 
 COPY . ./
 
+RUN python voice/build_spectral_cache.py --voice-dir /app/voice --out-dir /app/voice-cache
+
 CMD ["sh", "-c", "rm -f /var/run/pigpio.pid && pigpiod && sleep 1 && python -u main.py"]

@@ -21,10 +21,13 @@ from buzzer.wav_player import (
     _SPEECH_MAX_FREQ,
     _SPEECH_MIN_FREQ,
     _stabilize_peak_frames,
+    load_or_build_peak_frames,
+    load_peak_frame_cache,
     load_wav,
     play_peak_frames,
     play_samples,
     play_tone_sequence,
+    write_peak_frame_cache,
     wav_to_peak_frames,
     wav_to_tones,
 )
@@ -646,6 +649,68 @@ class TestPlayPeakFrames:
         assert call(18, 0, 0) in calls
 
 
+class TestSpectralCache:
+    def test_write_and_load_peak_frame_cache_round_trip(self, tmp_path):
+        wav_path = tmp_path / "voice.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 12000, -12000, 0] * 40))
+        cache_path = tmp_path / "voice.cache.json"
+        frames = [([(310, 120000), (620, 90000)], 6), ([], 6)]
+
+        write_peak_frame_cache(cache_path, wav_path, frames)
+
+        assert load_peak_frame_cache(cache_path, wav_path) == frames
+
+    def test_load_peak_frame_cache_rejects_changed_source_file(self, tmp_path):
+        wav_path = tmp_path / "voice.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 10000, -10000, 0] * 40))
+        cache_path = tmp_path / "voice.cache.json"
+        frames = [([(300, 100000)], 6)]
+        write_peak_frame_cache(cache_path, wav_path, frames)
+
+        wav_path.write_bytes(_make_wav(samples=[0, 5000, -5000, 0] * 40))
+
+        assert load_peak_frame_cache(cache_path, wav_path) is None
+
+    def test_load_or_build_peak_frames_uses_valid_cache_without_recomputing(self, tmp_path):
+        wav_path = tmp_path / "voice.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 11000, -11000, 0] * 40))
+        cache_path = tmp_path / "voice.cache.json"
+        cached_frames = [([(280, 130000), (560, 70000)], 6)]
+        write_peak_frame_cache(cache_path, wav_path, cached_frames)
+
+        with patch("buzzer.wav_player.wav_to_peak_frames", side_effect=AssertionError("should not recompute")):
+            assert load_or_build_peak_frames(wav_path, cache_path=cache_path) == cached_frames
+
+    def test_load_or_build_peak_frames_uses_default_voice_cache_location(self, tmp_path):
+        voice_dir = tmp_path / "voice"
+        cache_dir = tmp_path / "voice-cache"
+        voice_dir.mkdir()
+        cache_dir.mkdir()
+        wav_path = voice_dir / "startup.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 9000, -9000, 0] * 40))
+        cache_path = cache_dir / "startup.peaks.json"
+        cached_frames = [([(260, 125000)], 6)]
+        write_peak_frame_cache(cache_path, wav_path, cached_frames)
+
+        with patch("buzzer.wav_player.wav_to_peak_frames", side_effect=AssertionError("should not recompute")):
+            assert load_or_build_peak_frames(wav_path) == cached_frames
+
+    def test_load_or_build_peak_frames_falls_back_when_cache_file_is_malformed(self, tmp_path):
+        voice_dir = tmp_path / "voice"
+        cache_dir = tmp_path / "voice-cache"
+        voice_dir.mkdir()
+        cache_dir.mkdir()
+        wav_path = voice_dir / "startup.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 9000, -9000, 0] * 40))
+        (cache_dir / "startup.peaks.json").write_text("{not-json", encoding="utf-8")
+        live_frames = [([(330, 110000)], 6)]
+
+        with patch("buzzer.wav_player.wav_to_peak_frames", return_value=live_frames) as live_loader:
+            assert load_or_build_peak_frames(wav_path) == live_frames
+
+        live_loader.assert_called_once_with(str(wav_path))
+
+
 # ---------------------------------------------------------------------------
 # MotorSynth.play_spectral integration tests
 # ---------------------------------------------------------------------------
@@ -668,6 +733,20 @@ class TestMotorSynthPlaySpectral:
         with patch("buzzer.wav_player.time.sleep"):
             synth.play_spectral(str(wav_path))
 
+        assert pi.hardware_PWM.called
+
+    def test_play_spectral_uses_cache_aware_loader(self, tmp_path):
+        synth, pi = self._make_synth()
+        wav_path = tmp_path / "cached.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 32767, -32768, 0] * 40))
+        frames = [([(420, 120000), (760, 80000)], 10)]
+        pi.hardware_PWM.reset_mock()
+
+        with patch("buzzer.motor_synth.load_or_build_peak_frames", return_value=frames) as loader:
+            with patch("buzzer.wav_player.time.sleep"):
+                synth.play_spectral(str(wav_path))
+
+        loader.assert_called_once_with(str(wav_path))
         assert pi.hardware_PWM.called
 
     def test_play_spectral_default_path_emits_multiple_voiced_frequencies(self, tmp_path):

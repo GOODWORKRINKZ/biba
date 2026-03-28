@@ -380,7 +380,37 @@ def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) 
     return now
 
 
-def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatteryState]) -> None:
+def _trace_battery_telemetry(stage: str, state: Optional[BatteryState], timestamp_s: float) -> None:
+    if not config.BMS_TELEMETRY_TRACE_ENABLED:
+        return
+
+    if state is None:
+        LOGGER.info("Battery telemetry trace stage=%s t=%.6f state=none", stage, timestamp_s)
+        return
+
+    LOGGER.info(
+        (
+            "Battery telemetry trace stage=%s t=%.6f raw_current_a=%.2f "
+            "telemetry_current_a=%.2f voltage_v=%.2f soc_pct=%d"
+        ),
+        stage,
+        timestamp_s,
+        state.current,
+        _battery_telemetry_current_a(state.current),
+        state.voltage,
+        int(round(state.soc)),
+    )
+
+
+def _send_battery_telemetry(
+    telemetry: CRSFTelemetry,
+    state: Optional[BatteryState],
+    *,
+    consumed_at_s: float | None = None,
+) -> None:
+    if consumed_at_s is not None:
+        _trace_battery_telemetry("consume", state, consumed_at_s)
+
     if state is None:
         telemetry.send_battery(
             voltage_v=0.0,
@@ -388,6 +418,7 @@ def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatterySta
             capacity_mah=0,
             remaining_pct=0,
         )
+        _trace_battery_telemetry("send", state, time.monotonic())
         return
 
     telemetry.send_battery(
@@ -396,6 +427,7 @@ def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatterySta
         capacity_mah=_battery_telemetry_direction_code(state.current),
         remaining_pct=int(round(state.soc)),
     )
+    _trace_battery_telemetry("send", state, time.monotonic())
 
 
 def _get_motor_supply_voltage(state: Optional[BatteryState]) -> float:
@@ -718,10 +750,10 @@ def main() -> int:
                 try:
                     if battery_state is None:
                         if not battery_telemetry_cleared:
-                            _send_battery_telemetry(telemetry, battery_state)
+                            _send_battery_telemetry(telemetry, battery_state, consumed_at_s=loop_started_at)
                             battery_telemetry_cleared = True
                     else:
-                        _send_battery_telemetry(telemetry, battery_state)
+                        _send_battery_telemetry(telemetry, battery_state, consumed_at_s=loop_started_at)
                         battery_telemetry_cleared = False
                         last_battery_telemetry_log = _log_battery_telemetry(
                             battery_state,

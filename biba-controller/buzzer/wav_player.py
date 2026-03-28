@@ -16,11 +16,14 @@ Two playback modes:
 from __future__ import annotations
 
 import cmath
+import hashlib
+import json
 import math
 import struct
 import threading
 import time
 import wave
+from pathlib import Path
 
 import pigpio
 
@@ -33,6 +36,7 @@ _SPECTRAL_HOP_MS = 6
 _SPECTRAL_N_PEAKS = 2
 _SPEECH_MIN_FREQ = 150
 _SPEECH_MAX_FREQ = 800
+_SPECTRAL_CACHE_VERSION = 1
 
 
 def _stabilize_peak_frames(
@@ -370,6 +374,84 @@ def wav_to_peak_frames(
         frames.append((peak_frame, hop_ms))
 
     return _stabilize_peak_frames(frames)
+
+
+def write_peak_frame_cache(
+    cache_path: str | Path,
+    source_path: str | Path,
+    frames: list[tuple[list[tuple[int, int]], int]],
+) -> Path:
+    source_file = Path(source_path)
+    cache_file = Path(cache_path)
+    payload = {
+        "version": _SPECTRAL_CACHE_VERSION,
+        "source_name": source_file.name,
+        "source_sha256": _hash_file(source_file),
+        "frames": frames,
+    }
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    return cache_file
+
+
+def load_peak_frame_cache(
+    cache_path: str | Path,
+    source_path: str | Path,
+) -> list[tuple[list[tuple[int, int]], int]] | None:
+    cache_file = Path(cache_path)
+    source_file = Path(source_path)
+    if not cache_file.exists() or not source_file.exists():
+        return None
+
+    try:
+        payload = json.loads(cache_file.read_text(encoding="utf-8"))
+        if payload.get("version") != _SPECTRAL_CACHE_VERSION:
+            return None
+        if payload.get("source_name") != source_file.name:
+            return None
+        if payload.get("source_sha256") != _hash_file(source_file):
+            return None
+
+        cached_frames = payload.get("frames")
+        if not isinstance(cached_frames, list):
+            return None
+        return [
+            ([(int(freq), int(duty)) for freq, duty in peaks], int(duration_ms))
+            for peaks, duration_ms in cached_frames
+        ]
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def load_or_build_peak_frames(
+    source_path: str | Path,
+    *,
+    cache_path: str | Path | None = None,
+) -> list[tuple[list[tuple[int, int]], int]]:
+    source_file = Path(source_path)
+    resolved_cache_path = Path(cache_path) if cache_path is not None else _default_peak_frame_cache_path(source_file)
+    if resolved_cache_path is not None:
+        cached_frames = load_peak_frame_cache(resolved_cache_path, source_file)
+        if cached_frames is not None:
+            return cached_frames
+    return wav_to_peak_frames(str(source_file))
+
+
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _default_peak_frame_cache_path(source_path: Path) -> Path | None:
+    if source_path.parent.name != "voice":
+        return None
+    return source_path.parent.parent / "voice-cache" / f"{source_path.stem}.peaks.json"
 
 
 def play_tone_sequence(
