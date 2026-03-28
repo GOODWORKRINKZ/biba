@@ -38,6 +38,14 @@ local function clamp(v, lo, hi)
   return v
 end
 
+local function to_ma(current_a)
+  return math.floor(((current_a or 0) * 1000) + 0.5)
+end
+
+local function format_current_ma(current_a)
+  return string.format("%05d mA", to_ma(current_a))
+end
+
 -- ──────────────────────────────────────────────────
 -- Cell helpers
 -- ──────────────────────────────────────────────────
@@ -147,6 +155,20 @@ local function draw_disconnected()
   end
 end
 
+-- ────────────────────────────────────────────────
+-- Drawing: wheel arrow helper
+-- ──────────────────────────────────────────────────
+local function draw_wheel_arrow(x, y, is_flip)
+
+  if is_flip then
+    lcd.drawLine(x, y, x + 2, y + 2, SOLID, FORCE)
+    lcd.drawLine(x + 3, y + 2, x + 5, y, SOLID, FORCE)
+  else
+    lcd.drawLine(x, y + 2, x + 2, y, SOLID, FORCE)
+    lcd.drawLine(x + 3, y, x + 5, y + 2, SOLID, FORCE)
+  end
+end
+
 -- ──────────────────────────────────────────────────
 -- Drawing: wheel indicator (vertical bar with arrows)
 --   x,y = top-left, w/h = size, spd = -1..1
@@ -154,44 +176,100 @@ end
 
 local function draw_wheel(x, y, ww, wh, spd, arrow_w)
   arrow_w = arrow_w or 2
-  -- Wheel outline (filled dark rectangle)
-  lcd.drawFilledRectangle(x, y, ww, wh)
 
-  if math.abs(spd) < 0.05 then return end
+  lcd.drawLine(x,y+2,x,y+wh-3, SOLID, 0)
+  lcd.drawLine(x+ww-1,y+2,x+ww-1,y+wh-3, SOLID, 0)
 
-  -- Arrow count based on speed: each arrow = 20% throttle
-  local mid_x = x + math.floor(ww / 2)
-  local pct = math.abs(spd) * 100
-  local count = math.min(5, math.floor(pct / 20))
-  if count == 0 then return end
+  lcd.drawLine(x+2,y,x+ww-3,y, SOLID, 0)
+  lcd.drawLine(x+2,y+wh-1,x+ww-3,y+wh-1, SOLID, 0)
 
-  local margin = 2
-  local usable_h = wh - margin * 2
-  local slot_h = math.floor(usable_h / 5)
+  lcd.drawPoint(x+1, y+1)
+  lcd.drawPoint(x+ww-2, y+1)
+  lcd.drawPoint(x+1, y-2+wh)
+  lcd.drawPoint(x+ww-2, y-2+wh)
 
-  for i = 0, count - 1 do
-    local sy = y + margin + i * slot_h + math.floor(slot_h / 2)
-    if spd > 0 then
-      -- Forward: upward chevron
-      lcd.drawLine(mid_x - arrow_w, sy + arrow_w, mid_x, sy, SOLID, ERASE)
-      lcd.drawLine(mid_x, sy, mid_x + arrow_w, sy + arrow_w, SOLID, ERASE)
-    else
-      -- Reverse: downward chevron
-      lcd.drawLine(mid_x - arrow_w, sy, mid_x, sy + arrow_w, SOLID, ERASE)
-      lcd.drawLine(mid_x, sy + arrow_w, mid_x + arrow_w, sy, SOLID, ERASE)
-    end
-  end
+  draw_wheel_arrow(x+2,y+3, true)
+  draw_wheel_arrow(x+2,y+9, false)
+
+  --lcd.drawRectangle(x, y, ww, wh)
+  --if ww > 4 and wh > 4 then
+  --  lcd.drawRectangle(x + 1, y + 1, ww - 2, wh - 2)
+  --end
+
+  --local tread_step = math.max(4, math.floor(wh / 6))
+  --for ty = y + 2, y + wh - 4, tread_step do
+  --  lcd.drawLine(x + 1, ty + 1, x + math.min(3, ww - 2), ty, SOLID, 0)
+  --  lcd.drawLine(x + ww - math.min(3, ww - 2), ty, x + ww - 2, ty + 1, SOLID, 0)
+  --end
+
+  --if math.abs(spd) < 0.05 then return end
+
+  --local mid_x = x + math.floor(ww / 2)
+  --local pct = math.abs(spd) * 100
+  --local count = math.max(1, math.min(5, math.floor((pct + 19) / 20)))
+  --if count == 0 then return end
+
+  --local margin = 2
+  --local usable_h = wh - margin * 2
+  --local slot_h = math.floor(usable_h / 5)
+
+  --for i = 0, count - 1 do
+  --  local sy = y + margin + i * slot_h + math.floor(slot_h / 2)
+  --  if spd > 0 then
+  --    lcd.drawLine(mid_x - arrow_w, sy + arrow_w, mid_x, sy, SOLID, FORCE)
+  --    lcd.drawLine(mid_x, sy, mid_x + arrow_w, sy + arrow_w, SOLID, FORCE)
+  --  else
+  --    lcd.drawLine(mid_x - arrow_w, sy, mid_x, sy + arrow_w, SOLID, FORCE)
+  --    lcd.drawLine(mid_x, sy + arrow_w, mid_x + arrow_w, sy, SOLID, FORCE)
+  --  end
+  --end
 end
 
 -- ──────────────────────────────────────────────────
--- Drawing: battery bar
+-- Drawing: SOC bar
 -- ──────────────────────────────────────────────────
 
-local function draw_bat_bar(x, y, w, h, pct)
+local function draw_soc_bar(x, y, w, h, pct)
   local fill = math.floor((w - 2) * clamp(pct or 0, 0, 100) / 100)
   lcd.drawRectangle(x, y, w, h)
   if fill > 0 then
     lcd.drawFilledRectangle(x + 1, y + 1, fill, h - 2)
+  end
+end
+
+-- ──────────────────────────────────────────────────
+-- Drawing: header row (BiBa + quality + source)
+-- ──────────────────────────────────────────────────
+
+local function draw_header(w, rqly, cell_src)
+  lcd.drawText(0, 0, "BiBa", SMLSIZE)
+  local hdr = string.format("Q%03d", rqly)
+  if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
+  lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
+end
+
+-- ──────────────────────────────────────────────────
+-- Drawing: cell voltage frame (dotted top, solid bottom, dotted dividers)
+-- ──────────────────────────────────────────────────
+
+local function draw_cell_frame(w, cells)
+  local y_top = 8
+  local y_bot = 18
+  -- Top border: DOTTED
+  lcd.drawLine(0, y_top, w - 1, y_top, DOTTED, FORCE)
+  -- Bottom border: SOLID
+  lcd.drawLine(0, y_bot, w - 1, y_bot, SOLID, FORCE)
+  -- Side borders
+  lcd.drawLine(0, y_top, 0, y_bot, SOLID, FORCE)
+  lcd.drawLine(w - 1, y_top, w - 1, y_bot, SOLID, FORCE)
+  -- Cell texts and dotted dividers
+  local cell_w = math.floor(w / CELL_COUNT)
+  for i = 1, math.min(#cells, CELL_COUNT) do
+    local cx = (i - 1) * cell_w
+    if i > 1 then
+      lcd.drawLine(cx, y_top, cx, y_bot, DOTTED, FORCE)
+    end
+    lcd.drawText(cx + 2, y_top + 1, string.format("%.2f", cells[i] or 0), SMLSIZE)
   end
 end
 
@@ -202,63 +280,41 @@ end
 local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
 
-  -- Header with link quality and battery source
-  lcd.drawText(0, 0, "BiBa", SMLSIZE)
-  local hdr = string.format("R%d Q%d", rssi, rqly)
-  if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
-  lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
+  draw_header(w, rqly, cell_src)
+  draw_cell_frame(w, cells)
 
-  -- Robot body: front view centred
-  -- Layout: [wheel] [  body  ] [wheel]
-  local wheel_w = 7
-  local wheel_h = 36
-  local body_w  = w - wheel_w * 2 - 8
-  local body_h  = 30
-  local body_x  = wheel_w + 4
-  local body_y  = 10
-  local wheel_y = body_y + math.floor((body_h - wheel_h) / 2)
+  -- Wheels: 10×42, flush to screen edges, top-aligned with body
+  local wheel_w = 10
+  local wheel_h = 33
+  local wheel_y = 31
+  draw_wheel(0, wheel_y, wheel_w, wheel_h, left_spd, 3)
+  draw_wheel(w - wheel_w, wheel_y, wheel_w, wheel_h, right_spd, 3)
 
-  -- Left wheel
-  draw_wheel(0, wheel_y, wheel_w, wheel_h, left_spd)
-  -- Right wheel
-  draw_wheel(w - wheel_w, wheel_y, wheel_w, wheel_h, right_spd)
-
-  -- Body outline
+  -- Body rectangle between wheels
+  local body_x = 12
+  local body_y = 20
+  local body_w = w - 24
+  local body_h = 42
   lcd.drawRectangle(body_x, body_y, body_w, body_h)
 
-  -- Inside body: voltage + SOC bar + current
-  local inner_x = body_x + 2
-  local inner_y = body_y + 2
-  lcd.drawText(inner_x, inner_y, string.format("%.1fV", voltage), MIDSIZE)
-  lcd.drawText(inner_x + 52, inner_y + 2, string.format("%d%%", pct), SMLSIZE)
-
-  -- SOC bar inside body
-  local bar_w = body_w - 6
-  draw_bat_bar(inner_x, inner_y + 14, bar_w, 6, pct)
-
-  lcd.drawText(inner_x, inner_y + 22, string.format("%.1fA", current), SMLSIZE)
+  -- Voltage (large) + CPU/RAM
+  lcd.drawText(14, 22, string.format("%.1fV", voltage), MIDSIZE)
   if cpu > 0 or ram > 0 then
-    lcd.drawText(inner_x + 32, inner_y + 22, string.format("C%02d M%02d", cpu, ram), SMLSIZE)
-  end
-  lcd.drawText(inner_x, inner_y + 29, string.format("LA%.1f RA%.1f", left_current, right_current), SMLSIZE)
-
-  -- Bottom: cells + stats
-  local cy = body_y + body_h + 4
-  -- Compact cell row
-  for i = 1, math.min(#cells, CELL_COUNT) do
-    local cx = 1 + (i - 1) * 21
-    lcd.drawText(cx, cy, string.format("%.2f", cells[i] or 0), SMLSIZE)
+    lcd.drawText(62, 23, string.format("CPU%02d%%MEM%02d%%", cpu, ram), SMLSIZE)
   end
 
-  -- Min/max/delta
-  local sy = cy + 8
-  if sy + 6 <= sh() then
-    lcd.drawText(0, sy, string.format("m%.2f", mn), SMLSIZE)
-    lcd.drawText(40, sy, string.format("M%.2f", mx), SMLSIZE)
-    lcd.drawText(80, sy, string.format("d%.2f", delta), SMLSIZE)
-  end
+  -- Total current + SOC%
+  lcd.drawText(14, 36, format_current_ma(current), SMLSIZE)
+  lcd.drawText(96, 36, string.format("%d%%", pct), SMLSIZE)
 
-  -- Low voltage warning
+  -- Wheel currents (left / right)
+  lcd.drawText(14, 45, format_current_ma(left_current), SMLSIZE)
+  lcd.drawText(64, 45, format_current_ma(right_current), SMLSIZE)
+
+  -- SOC bar at bottom of body
+  draw_soc_bar(14, 54, 100, 5, pct)
+
+  -- LOW battery warning
   if mn > 0 and mn < LOW_CELL_VOLTAGE and math.floor(getTime() / 50) % 2 == 0 then
     lcd.drawFilledRectangle(w - 28, 0, 28, 8)
     lcd.drawText(w - 26, 0, "LOW", INVERS + SMLSIZE)
@@ -271,43 +327,46 @@ end
 
 local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w, h = sw(), sh()
+  local total_current = format_current_ma(current)
+  local left_current_label = string.format("L %s", format_current_ma(left_current))
+  local right_current_label = string.format("R %s", format_current_ma(right_current))
 
-  -- Header with link quality and battery source
   lcd.drawText(4, 2, "BiBa", DBLSIZE)
-  local hdr = string.format("RSSI %d  Q %d%%", rssi, rqly)
+  local hdr = string.format("Q %d", rqly)
+  if rssi > 0 then hdr = hdr .. string.format("  R %d", rssi) end
   if cell_src ~= "" then hdr = hdr .. "  " .. cell_src end
   lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
 
-  -- Robot body: front view centred
-  local wheel_w  = 17
-  local wheel_h  = 70
-  local body_w   = w - wheel_w * 2 - 24
-  local body_h   = 56
-  local body_x   = wheel_w + 12
-  local body_y   = 24
+  local wheel_w  = 18
+  local wheel_h  = 76
+  local body_w   = w - wheel_w * 2 - 30
+  local body_h   = 82
+  local body_x   = wheel_w + 15
+  local body_y   = 22
   local wheel_y  = body_y + math.floor((body_h - wheel_h) / 2)
 
-  -- Wheels
   draw_wheel(4, wheel_y, wheel_w, wheel_h, left_spd, 3)
   draw_wheel(w - wheel_w - 4, wheel_y, wheel_w, wheel_h, right_spd, 3)
 
-  -- Body
   lcd.drawRectangle(body_x, body_y, body_w, body_h)
 
-  -- Inside body
   local ix = body_x + 4
   local iy = body_y + 3
 
   lcd.drawText(ix, iy, string.format("%.2fV", voltage), MIDSIZE)
-  lcd.drawText(ix + 90, iy + 2, string.format("%d%%", pct), SMLSIZE)
-  lcd.drawText(ix + 120, iy + 2, string.format("%.1fA", current), SMLSIZE)
+  lcd.drawText(body_x + body_w - 30, iy + 2, string.format("%d%%", pct), SMLSIZE)
+  draw_soc_bar(ix, iy + 18, body_w - 10, 8, pct)
 
-  -- SOC bar
-  draw_bat_bar(ix, iy + 18, body_w - 10, 8, pct)
+  lcd.drawText(ix, iy + 31, "I mA", SMLSIZE)
+  lcd.drawText(ix + 24, iy + 31, total_current, SMLSIZE)
+  if cpu > 0 or ram > 0 then
+    lcd.drawText(ix + 70, iy + 31, string.format("C%02d M%02d", cpu, ram), SMLSIZE)
+  end
+  lcd.drawText(ix, iy + 42, left_current_label, SMLSIZE)
+  lcd.drawText(ix + 72, iy + 42, right_current_label, SMLSIZE)
 
-  -- Cells inside body (2 rows × 3 cols)
-  local cell_y = iy + 30
-  local col_w = math.floor((body_w - 10) / 3)
+  local cell_y = iy + 55
+  local col_w = math.floor((body_w - 12) / 3)
   for i = 1, math.min(#cells, CELL_COUNT) do
     local col = (i - 1) % 3
     local row = math.floor((i - 1) / 3)
@@ -315,25 +374,16 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
       string.format("C%d %.2fV", i, cells[i] or 0), SMLSIZE)
   end
 
-  -- Bottom stats
   local bottom_y = body_y + body_h + 4
   lcd.drawText(4, bottom_y, string.format("Min %.2fV", mn), SMLSIZE)
-  lcd.drawText(math.floor(w / 3), bottom_y, string.format("Max %.2fV", mx), SMLSIZE)
-  lcd.drawText(math.floor(w * 2 / 3), bottom_y, string.format("Delta %.3fV", delta), SMLSIZE)
+  lcd.drawText(math.floor(w / 2) - 18, bottom_y, string.format("Max %.2fV", mx), SMLSIZE)
+  lcd.drawText(w - 76, bottom_y, string.format("D %.3fV", delta), SMLSIZE)
 
-  -- System stats from Pi
-  if cpu > 0 or ram > 0 then
-    lcd.drawText(4, bottom_y + 10, string.format("CPU %02d%%  RAM %02d%%", cpu, ram), SMLSIZE)
-  end
-  lcd.drawText(math.floor(w / 2), bottom_y + 10, string.format("LA %.1f  RA %.1f", left_current, right_current), SMLSIZE)
-
-  -- Low warning
   if mn > 0 and mn < LOW_CELL_VOLTAGE and math.floor(getTime() / 50) % 2 == 0 then
     lcd.drawFilledRectangle(w - 48, 0, 48, 14)
     lcd.drawText(w - 44, 2, "LOW!", INVERS + SMLSIZE)
   end
 
-  -- Speed labels beside wheels
   if math.abs(left_spd) > 0.05 then
     lcd.drawText(4, wheel_y + wheel_h + 2,
       string.format("L%+.0f%%", left_spd * 100), SMLSIZE)
@@ -425,13 +475,13 @@ local function run(event)
     cell_src = ""
     mn = 0
     mx = 0
-    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    delta = 0
   end
-    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+
   if sw() >= 212 and sh() >= 128 then
-    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
+    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   else
-    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram)
+    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   end
 
   -- Low battery sound (every ~10 seconds)

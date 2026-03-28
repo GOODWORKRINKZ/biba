@@ -121,7 +121,19 @@ def test_draw_compact_displays_motor_currents() -> None:
 
     assert "left_current" in body
     assert "right_current" in body
-    assert "LA" in body or "L " in body
+    assert "format_current_ma" in body
+
+
+def test_draw_compact_formats_total_current_in_milliamps() -> None:
+    body = _extract_function(_lua_source(), "draw_compact")
+
+    assert "format_current_ma(current)" in body
+
+
+def test_draw_compact_uses_current_format_helper() -> None:
+    body = _extract_function(_lua_source(), "draw_compact")
+
+    assert "format_current_ma" in body
 
 
 def test_draw_wide_displays_motor_currents() -> None:
@@ -131,7 +143,103 @@ def test_draw_wide_displays_motor_currents() -> None:
     assert "right_current" in body
 
 
+def test_draw_wide_formats_wheel_currents_in_milliamps() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "mA" in body
+
+
+def test_draw_wide_uses_current_format_helper() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "format_current_ma" in body
+
+
+def test_draw_wheel_keeps_idle_forward_and_reverse_logic() -> None:
+    body = _extract_function(_lua_source(), "draw_wheel")
+
+    assert "math.abs(spd) < 0.05" in body
+    assert "if spd > 0 then" in body
+    assert "else" in body
+
+
+def test_draw_compact_keeps_six_cell_loop() -> None:
+    body = _extract_function(_lua_source(), "draw_cell_frame")
+
+    assert "math.min(#cells, CELL_COUNT)" in body
+    assert 'string.format("%.2f"' in body
+
+
+def test_draw_wide_keeps_six_cell_loop() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "math.min(#cells, CELL_COUNT)" in body
+    assert 'string.format("C%d %.2fV"' in body
+
+
 def test_run_reads_motor_currents() -> None:
     body = _extract_function(_lua_source(), "run")
 
     assert "read_motor_currents()" in body
+
+
+def test_lua_declares_current_format_helper() -> None:
+    source = _lua_source()
+
+    assert "local function format_current_ma(" in source
+
+
+def test_format_current_ma_zero_pads_to_five_digits() -> None:
+    body = _extract_function(_lua_source(), "format_current_ma")
+
+    assert "%05d" in body, "mA values should be zero-padded to 5 digits"
+
+
+def test_draw_wheel_arrows_use_visible_draw_mode() -> None:
+    body = _extract_function(_lua_source(), "draw_wheel")
+
+    assert "SOLID, ERASE" not in body, "arrows drawn with ERASE are invisible on unfilled background"
+
+
+def test_draw_compact_cell_voltage_frame() -> None:
+    """draw_compact delegates cell voltages to draw_cell_frame."""
+    body = _extract_function(_lua_source(), "draw_compact")
+    assert "draw_cell_frame(" in body
+
+
+def test_draw_cell_frame_uses_dotted_top_and_dividers() -> None:
+    body = _extract_function(_lua_source(), "draw_cell_frame")
+    assert "DOTTED" in body, "cell frame top/dividers must be DOTTED"
+
+
+def test_draw_cell_frame_has_solid_bottom() -> None:
+    body = _extract_function(_lua_source(), "draw_cell_frame")
+    assert "SOLID" in body, "cell frame bottom border must be SOLID"
+
+
+def test_draw_header_is_separate_function() -> None:
+    source = _lua_source()
+    assert "local function draw_header(" in source
+
+
+def test_draw_soc_bar_is_separate_function() -> None:
+    source = _lua_source()
+    assert "local function draw_soc_bar(" in source
+
+
+def test_draw_compact_delegates_to_sub_functions() -> None:
+    body = _extract_function(_lua_source(), "draw_compact")
+    assert "draw_header(" in body
+    assert "draw_cell_frame(" in body
+    assert "draw_wheel(" in body
+    assert "draw_soc_bar(" in body
+
+
+def test_run_calls_only_one_draw_branch_and_passes_motor_currents() -> None:
+    body = _extract_function(_lua_source(), "run")
+
+    assert "if sw() >= 212 and sh() >= 128 then" in body
+    assert body.count("draw_compact(") == 1
+    assert body.count("draw_wide(") == 1
+    assert "draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
+    assert "draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
