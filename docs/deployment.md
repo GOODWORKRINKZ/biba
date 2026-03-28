@@ -112,6 +112,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `BMS_BLE_TIMEOUT_S` | `1.5` | Таймаут ответа BMS по BLE |
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
 | `MOTOR_DRIVER_TYPE` | `BTS7960` | Тип драйвера моторов: штатный `BTS7960` или старый `PWM_DIR` |
+| `BTS7960_PWM_MODE` | `HARDWARE` | Режим PWM для `BTS7960`: `HARDWARE` по умолчанию в коде, `SOFTWARE` для текущей двухмоторной проводки на Pi Zero 2W |
 | `CH_STEERING` | `0` | Номер канала руления |
 | `CH_THROTTLE` | `1` | Номер канала газа |
 | `CH_ARM` | `4` | Номер канала арма |
@@ -144,10 +145,13 @@ BIBA_IMAGE_TAG=latest
 BMS_TRANSPORT=BLE
 BMS_BLE_ADDRESS=
 MOTOR_DRIVER_TYPE=BTS7960
+BTS7960_PWM_MODE=SOFTWARE
 BEACON_ENABLED=1
 BEACON_DELAY_S=300
 CH_BEACON=5
 ```
+
+Для текущего робота c проводкой `LEFT 18/13` и `RIGHT 12/19` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. Кодовый дефолт `HARDWARE` сохранён для будущих конфигураций без конфликта hardware-PWM каналов.
 
 ### BLE BMS
 

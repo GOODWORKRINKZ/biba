@@ -41,6 +41,7 @@ def _get_env_list(name: str, default: str) -> list[str]:
 
 
 MOTOR_DRIVER_TYPE = _get_env_choice("MOTOR_DRIVER_TYPE", "BTS7960", {"PWM_DIR", "BTS7960"})
+BTS7960_PWM_MODE = _get_env_choice("BTS7960_PWM_MODE", "HARDWARE", {"HARDWARE", "SOFTWARE"})
 MOTOR1_PWM = _get_env_int("MOTOR1_PWM", 18)
 MOTOR1_DIR = _get_env_int("MOTOR1_DIR", 23)
 MOTOR2_PWM = _get_env_int("MOTOR2_PWM", 13)

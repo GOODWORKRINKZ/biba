@@ -14,6 +14,7 @@ def config_module():
 def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.delenv("MOTOR1_PWM", raising=False)
     monkeypatch.delenv("MOTOR_DRIVER_TYPE", raising=False)
+    monkeypatch.delenv("BTS7960_PWM_MODE", raising=False)
     monkeypatch.delenv("MOTOR1_INVERTED", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.delenv("BMS_TRANSPORT", raising=False)
@@ -34,6 +35,7 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
 
     assert module.MOTOR1_PWM == 18
     assert module.MOTOR_DRIVER_TYPE == "BTS7960"
+    assert module.BTS7960_PWM_MODE == "HARDWARE"
     assert module.MOTOR1_INVERTED == 0
     assert module.MOTOR2_INVERTED == 0
     assert module.LEFT_MOTOR_RPWM == 18
@@ -112,6 +114,7 @@ def test_config_defaults_to_single_voice_asset_per_event(
 def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.setenv("MOTOR1_PWM", "19")
     monkeypatch.setenv("MOTOR_DRIVER_TYPE", "BTS7960")
+    monkeypatch.setenv("BTS7960_PWM_MODE", "software")
     monkeypatch.setenv("MOTOR1_INVERTED", "1")
     monkeypatch.setenv("MOTOR2_INVERTED", "1")
     monkeypatch.setenv("LEFT_MOTOR_REN", "26")
@@ -149,6 +152,7 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
 
     assert module.MOTOR1_PWM == 19
     assert module.MOTOR_DRIVER_TYPE == "BTS7960"
+    assert module.BTS7960_PWM_MODE == "SOFTWARE"
     assert module.MOTOR1_INVERTED == 1
     assert module.MOTOR2_INVERTED == 1
     assert module.LEFT_MOTOR_REN == 26
@@ -203,6 +207,17 @@ def test_config_falls_back_to_ble_for_invalid_bms_transport(monkeypatch: pytest.
     assert module.BMS_TRANSPORT == "BLE"
 
 
+def test_config_falls_back_to_hardware_for_invalid_bts7960_pwm_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    monkeypatch.setenv("BTS7960_PWM_MODE", "ultrasonic")
+
+    module = importlib.reload(config_module)
+
+    assert module.BTS7960_PWM_MODE == "HARDWARE"
+
+
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
@@ -217,6 +232,8 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
         compose = compose_file.read()
 
     assert "${MOTOR_DRIVER_TYPE:-BTS7960}" in compose
+    assert "BTS7960_PWM_MODE:" in compose
+    assert "BTS7960_PWM_MODE: ${BTS7960_PWM_MODE:-SOFTWARE}" in compose
     assert "MOTOR_DRIVER_TYPE:" in compose
     assert "${LEFT_MOTOR_LEN:-24}" in compose
     assert "${RIGHT_MOTOR_LPWM:-19}" in compose
@@ -231,6 +248,7 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
     assert "RIGHT_MOTOR_REN:" in compose
     assert "RIGHT_MOTOR_LEN:" in compose
     assert "RIGHT_MOTOR_ENABLED:" in compose
+    assert "RIGHT_MOTOR_ENABLED: ${RIGHT_MOTOR_ENABLED:-1}" in compose
 
 
 def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
@@ -263,6 +281,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "BEACON_DELAY_S=" in env_example
     assert "CH_BEACON=" in env_example
     assert "MOTOR_DRIVER_TYPE=BTS7960" in env_example
+    assert "BTS7960_PWM_MODE=SOFTWARE" in env_example
     assert "THROTTLE_FILTER_MODE=NONE" in env_example
     assert "THROTTLE_KALMAN_PROCESS_NOISE=0.02" in env_example
     assert "THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5" in env_example
@@ -276,7 +295,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "RIGHT_MOTOR_LPWM=19" in env_example
     assert "RIGHT_MOTOR_REN=20" in env_example
     assert "RIGHT_MOTOR_LEN=21" in env_example
-    assert "RIGHT_MOTOR_ENABLED=0" in env_example
+    assert "RIGHT_MOTOR_ENABLED=1" in env_example
     assert "MOTOR_CURRENT_LIMITING_ENABLED=" in env_example
     assert "MOTOR_CURRENT_SENSE_ENABLED=" in env_example
     assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS=" in env_example

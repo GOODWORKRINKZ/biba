@@ -48,8 +48,8 @@ class MotorDriver:
 class BTS7960MotorDriver:
     """Control one motor through BTS7960 RPWM/LPWM and enable pins.
 
-    Uses hardware PWM for precise frequency control (20 kHz, inaudible)
-    and fine duty-cycle resolution (1 000 000 steps).
+    Uses either hardware PWM for precise 20 kHz control or software PWM
+    when the board wiring cannot provide two independent hardware channels.
     """
 
     _HW_PWM_RANGE = 1_000_000  # hardware_PWM duty range 0..1 000 000
@@ -62,6 +62,7 @@ class BTS7960MotorDriver:
         ren_pin: int,
         len_pin: int,
         inverted: bool = False,
+        pwm_mode: str | None = None,
     ) -> None:
         self.pi = pi
         self.rpwm_pin = rpwm_pin
@@ -70,6 +71,8 @@ class BTS7960MotorDriver:
         self.len_pin = len_pin
         self.inverted = inverted
         self._frequency = config.PWM_FREQUENCY_HZ
+        self._pwm_mode = self._normalize_pwm_mode(pwm_mode)
+        self._software_pwm_range = 0
 
         for pin in self._unique_pins(self.ren_pin, self.len_pin):
             self.pi.set_mode(pin, pigpio.OUTPUT)
@@ -77,8 +80,10 @@ class BTS7960MotorDriver:
         for pin in self._unique_pins(self.ren_pin, self.len_pin):
             self.pi.write(pin, 1)
 
-        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
-        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
+        if self._pwm_mode == "SOFTWARE":
+            self._setup_software_pwm()
+        else:
+            self._setup_hardware_pwm()
 
     @staticmethod
     def _unique_pins(*pins: int) -> list[int]:
@@ -90,26 +95,66 @@ class BTS7960MotorDriver:
                 unique.append(pin)
         return unique
 
+    @staticmethod
+    def _normalize_pwm_mode(pwm_mode: str | None) -> str:
+        normalized = (pwm_mode or config.BTS7960_PWM_MODE).strip().upper()
+        if normalized in {"HARDWARE", "SOFTWARE"}:
+            return normalized
+        return "HARDWARE"
+
+    def _setup_hardware_pwm(self) -> None:
+        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
+        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
+
+    def _setup_software_pwm(self) -> None:
+        for pin in self._unique_pins(self.rpwm_pin, self.lpwm_pin):
+            self.pi.set_mode(pin, pigpio.OUTPUT)
+            self.pi.set_PWM_frequency(pin, self._frequency)
+
+        self._software_pwm_range = min(
+            self.pi.get_PWM_real_range(self.rpwm_pin),
+            self.pi.get_PWM_real_range(self.lpwm_pin),
+        )
+
+        for pin in self._unique_pins(self.rpwm_pin, self.lpwm_pin):
+            self.pi.set_PWM_range(pin, self._software_pwm_range)
+            self.pi.set_PWM_dutycycle(pin, 0)
+
+    def _set_hardware_direction(self, rpwm_duty: int, lpwm_duty: int) -> None:
+        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, rpwm_duty)
+        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, lpwm_duty)
+
+    def _set_software_direction(self, rpwm_duty: int, lpwm_duty: int) -> None:
+        self.pi.set_PWM_dutycycle(self.rpwm_pin, rpwm_duty)
+        self.pi.set_PWM_dutycycle(self.lpwm_pin, lpwm_duty)
+
     def set_speed(self, value: float) -> None:
         """Set motor speed in the range -1.0..1.0."""
         clamped = max(-1.0, min(1.0, value))
         if self.inverted:
             clamped *= -1.0
 
-        duty = int(abs(clamped) * self._HW_PWM_RANGE)
+        duty_range = self._HW_PWM_RANGE if self._pwm_mode == "HARDWARE" else self._software_pwm_range
+        duty = int(abs(clamped) * duty_range)
         if clamped > 0.0:
-            self.pi.hardware_PWM(self.rpwm_pin, self._frequency, duty)
-            self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
+            if self._pwm_mode == "HARDWARE":
+                self._set_hardware_direction(duty, 0)
+            else:
+                self._set_software_direction(duty, 0)
         elif clamped < 0.0:
-            self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
-            self.pi.hardware_PWM(self.lpwm_pin, self._frequency, duty)
+            if self._pwm_mode == "HARDWARE":
+                self._set_hardware_direction(0, duty)
+            else:
+                self._set_software_direction(0, duty)
         else:
             self.stop()
 
     def stop(self) -> None:
         """Stop the motor immediately."""
-        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, 0)
-        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, 0)
+        if self._pwm_mode == "HARDWARE":
+            self._set_hardware_direction(0, 0)
+        else:
+            self._set_software_direction(0, 0)
 
 
 class DifferentialDrive:
