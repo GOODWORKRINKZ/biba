@@ -121,6 +121,7 @@ MOTOR_DEADBAND = _get_env_float("MOTOR_DEADBAND", 0.05)
 BEACON_ENABLED = bool(_get_env_int("BEACON_ENABLED", 1))
 BEACON_DELAY_S = _get_env_float("BEACON_DELAY_S", 300.0)
 CH_BEACON = _get_env_int("CH_BEACON", 7)
+CH_MUTE = _get_env_int("CH_MUTE", 6)
 
 # Melody selection
 ENABLE_RC_MELODIES = bool(_get_env_int("ENABLE_RC_MELODIES", 0))

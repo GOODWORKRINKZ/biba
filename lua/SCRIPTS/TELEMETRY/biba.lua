@@ -4,6 +4,10 @@
 local CELL_COUNT = 6
 local LOW_CELL_VOLTAGE = 3.5
 local BATTERY_HOLDOFF_CS = 1200
+local BATTERY_DIRECTION_MASK = 0x03
+local STATUS_ICON_ARMED = 0x04
+local STATUS_ICON_MUTED = 0x08
+local STATUS_ICON_BEACON = 0x10
 
 -- Sound state tracking
 local prev_connected = nil  -- nil = first run, true/false after
@@ -129,10 +133,20 @@ local function read_motor_currents()
 end
 
 local function read_battery_direction()
-  local direction_flag = sensor({ "Capa", "Mah", "mAh" }, 0)
+  local direction_flag = bit32.band(sensor({ "Capa", "Mah", "mAh" }, 0), BATTERY_DIRECTION_MASK)
   if direction_flag == 1 then return "CHG" end
   if direction_flag == 2 then return "DIS" end
   return ""
+end
+
+local function read_status_icons()
+  local status_flags = sensor({ "Capa", "Mah", "mAh" }, 0)
+  local icons = ""
+  if bit32.band(status_flags, STATUS_ICON_ARMED) ~= 0 then icons = icons .. "A" end
+  if bit32.band(status_flags, STATUS_ICON_MUTED) ~= 0 then icons = icons .. "M" end
+  if bit32.band(status_flags, STATUS_ICON_BEACON) ~= 0 then icons = icons .. "B" end
+  if read_battery_direction() == "CHG" then icons = icons .. "C" end
+  return icons
 end
 
 -- ──────────────────────────────────────────────────
@@ -233,10 +247,11 @@ end
 -- Drawing: header row (BiBa + quality + source)
 -- ──────────────────────────────────────────────────
 
-local function draw_header(w, rqly, cell_src)
+local function draw_header(w, rqly, cell_src, status_icons)
   lcd.drawText(0, 0, "BiBa", SMLSIZE)
   local hdr = string.format("Q%03d", rqly)
   if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
+  if status_icons ~= "" then hdr = hdr .. " " .. status_icons end
   lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
 end
 
@@ -244,10 +259,11 @@ end
 -- Drawing: wide header row (BiBa + quality + source)
 -- ──────────────────────────────────────────────────
 
-local function draw_header_wide(w, rqly, cell_src)
+local function draw_header_wide(w, rqly, cell_src, status_icons)
   lcd.drawText(4, 2, "BiBa", DBLSIZE)
   local hdr = string.format("Q%03d", rqly)
   if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
+  if status_icons ~= "" then hdr = hdr .. " " .. status_icons end
   lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
 end
 
@@ -280,10 +296,10 @@ end
 -- Drawing: compact connected (128×64)
 -- ──────────────────────────────────────────────────
 
-local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
 
-  draw_header(w, rqly, cell_src)
+  draw_header(w, rqly, cell_src, status_icons)
   draw_cell_frame(w, cells)
 
   -- Wheels: 10×42, flush to screen edges, top-aligned with body
@@ -308,9 +324,6 @@ local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly
 
   -- Total current + SOC%
   lcd.drawText(14, 34, format_current_ma(current), SMLSIZE)
-  if battery_direction ~= "" then
-    lcd.drawText(49, 34, battery_direction, SMLSIZE)
-  end
   lcd.drawText(59, 35, string.format("%d%%", pct), SMLSIZE)
 
   -- Wheel currents (left / right)
@@ -331,11 +344,11 @@ end
 -- Drawing: wide connected (≥212×128)
 -- ──────────────────────────────────────────────────
 
-local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
   local total_current = format_current_ma(current)
 
-  draw_header_wide(w, rqly, cell_src)
+  draw_header_wide(w, rqly, cell_src, status_icons)
 
   local wheel_w  = 18
   local wheel_h  = 76
@@ -363,9 +376,6 @@ local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, c
 
   -- Current + system stats.
   lcd.drawText(ix, current_row_y, total_current, SMLSIZE)
-  if battery_direction ~= "" then
-    lcd.drawText(ix + 42, current_row_y, battery_direction, SMLSIZE)
-  end
   if cpu > 0 or ram > 0 then
     lcd.drawText(ix + 74, current_row_y, string.format("CPU%02d MEM%02d", cpu, ram), SMLSIZE)
   end
@@ -474,6 +484,7 @@ local function run(event)
   local cpu, ram = read_system()
   local left_current, right_current = read_motor_currents()
   local battery_direction = read_battery_direction()
+  local status_icons = read_status_icons()
 
   if now < battery_holdoff_until then
     voltage = 0
@@ -490,9 +501,9 @@ local function run(event)
   end
 
   if sw() >= 212 and sh() >= 128 then
-    draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   else
-    draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   end
 
   -- Low battery sound (every ~10 seconds)

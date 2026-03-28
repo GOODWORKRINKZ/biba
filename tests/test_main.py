@@ -18,6 +18,54 @@ def test_is_armed_uses_configured_channel_threshold(monkeypatch: pytest.MonkeyPa
     assert main._is_armed([0.0, 0.1, 0.2]) is False
 
 
+def test_is_muted_uses_configured_channel_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "CH_MUTE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.25)
+
+    assert main._is_muted([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4]) is True
+    assert main._is_muted([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2]) is False
+
+
+def test_play_grouped_voice_async_if_allowed_skips_when_muted() -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeSelector:
+        def choose(self, event: str, voices: list[str]) -> str | None:
+            assert event == "connected"
+            assert voices == ["/app/voice/connected_online.wav"]
+            return voices[0]
+
+    class FakeBuzzer:
+        def play_spectral_async(self, path: str) -> None:
+            played.append(path)
+
+    result = main._play_grouped_voice_async_if_allowed(
+        FakeSelector(),
+        "connected",
+        ["/app/voice/connected_online.wav"],
+        FakeBuzzer(),
+        mute_active=True,
+    )
+
+    assert result is False
+    assert played == []
+
+
+def test_play_named_async_if_allowed_skips_when_muted() -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeBuzzer:
+        def play_named_async(self, name: str) -> None:
+            played.append(name)
+
+    main._play_named_async_if_allowed(FakeBuzzer(), "melody", mute_active=True)
+
+    assert played == []
+
+
 def test_get_channel_returns_zero_when_index_is_missing() -> None:
     main = importlib.import_module("main")
 
@@ -206,6 +254,166 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
 
     assert main.main() == 0
     assert drive_calls[-1][0] > 0.0
+
+
+def test_main_allows_sos_beacon_while_muted(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    sos_calls: list[str] = []
+    frames = iter(
+        [
+            [0.0, 0.0, 0.0, 0.0, -0.98, 0.0, 0.98, 0.0, 0.0],
+        ]
+    )
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            try:
+                return next(frames)
+            except StopIteration:
+                main.RUNNING = False
+                return None
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def sos_beacon(self) -> None:
+            sos_calls.append("sos")
+
+        def low_voltage_alarm(self) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            self._called = False
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            if self._called:
+                main.RUNNING = False
+                return False
+            self._called = True
+            return True
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_MUTE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert sos_calls == ["sos"]
 
 
 def test_main_uses_elapsed_time_between_drive_updates(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -446,6 +654,19 @@ def test_send_battery_telemetry_uses_absolute_bms_current_for_discharge() -> Non
     assert sent_packets == [(24.1, 1.3, 2, 63)]
 
 
+def test_encode_battery_status_bits_preserves_direction_and_sets_flags() -> None:
+    main = importlib.import_module("main")
+
+    status_bits = main._encode_battery_status_bits(
+        current_a=-3.2,
+        armed=True,
+        mute_active=True,
+        beacon_active=True,
+    )
+
+    assert status_bits == 0b11110
+
+
 def test_send_battery_telemetry_marks_positive_current_as_charging() -> None:
     main = importlib.import_module("main")
     sent_packets: list[tuple[float, float, int, int]] = []
@@ -468,6 +689,36 @@ def test_send_battery_telemetry_marks_positive_current_as_charging() -> None:
     main._send_battery_telemetry(FakeTelemetry(), state)
 
     assert sent_packets == [(24.1, 1.6, 1, 63)]
+
+
+def test_send_battery_telemetry_includes_arm_mute_and_beacon_flags() -> None:
+    main = importlib.import_module("main")
+    sent_packets: list[tuple[float, float, int, int]] = []
+
+    class FakeTelemetry:
+        def send_battery(self, voltage_v: float, current_a: float, capacity_mah: int, remaining_pct: int) -> None:
+            sent_packets.append((voltage_v, current_a, capacity_mah, remaining_pct))
+
+    state = BatteryState(
+        voltage=24.1,
+        current=1.6,
+        soc=63.0,
+        cells=[3.4, 3.45],
+        temperatures=[22.0],
+        min_cell=3.4,
+        max_cell=3.45,
+        delta=0.05,
+    )
+
+    main._send_battery_telemetry(
+        FakeTelemetry(),
+        state,
+        armed=True,
+        mute_active=True,
+        beacon_active=True,
+    )
+
+    assert sent_packets == [(24.1, 1.6, 0b11101, 63)]
 
 
 def test_send_battery_telemetry_emits_trace_logs_when_enabled(

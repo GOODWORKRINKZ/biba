@@ -31,6 +31,10 @@ from system_stats import SystemStats
 LOGGER = logging.getLogger("biba-controller")
 RUNNING = True
 _BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
+_BATTERY_DIRECTION_MASK = 0b00011
+_BATTERY_STATUS_ARMED = 0b00100
+_BATTERY_STATUS_MUTED = 0b01000
+_BATTERY_STATUS_BEACON = 0b10000
 
 
 class _NullDrive:
@@ -161,6 +165,34 @@ def _play_grouped_voice_async(
     return True
 
 
+def _play_grouped_voice_if_allowed(
+    selector: VoiceSelector,
+    event: str,
+    voices: list[str],
+    buzzer,
+    *,
+    mute_active: bool,
+    allow_when_muted: bool = False,
+) -> bool:
+    if mute_active and not allow_when_muted:
+        return False
+    return _play_grouped_voice(selector, event, voices, buzzer)
+
+
+def _play_grouped_voice_async_if_allowed(
+    selector: VoiceSelector,
+    event: str,
+    voices: list[str],
+    buzzer,
+    *,
+    mute_active: bool,
+    allow_when_muted: bool = False,
+) -> bool:
+    if mute_active and not allow_when_muted:
+        return False
+    return _play_grouped_voice_async(selector, event, voices, buzzer)
+
+
 def _play_buzzer_method_async(buzzer, method_name: str) -> None:
     player = getattr(buzzer, f"{method_name}_async", None)
     if player is not None:
@@ -169,6 +201,32 @@ def _play_buzzer_method_async(buzzer, method_name: str) -> None:
 
     player = getattr(buzzer, method_name)
     threading.Thread(target=player, daemon=True).start()
+
+
+def _play_buzzer_method_async_if_allowed(
+    buzzer,
+    method_name: str,
+    *,
+    mute_active: bool,
+    allow_when_muted: bool = False,
+) -> bool:
+    if mute_active and not allow_when_muted:
+        return False
+    _play_buzzer_method_async(buzzer, method_name)
+    return True
+
+
+def _play_named_async_if_allowed(
+    buzzer,
+    name: str,
+    *,
+    mute_active: bool,
+    allow_when_muted: bool = False,
+) -> bool:
+    if mute_active and not allow_when_muted:
+        return False
+    buzzer.play_named_async(name)
+    return True
 
 
 def _create_synth_pins() -> tuple[list[int], list[int]]:
@@ -248,6 +306,10 @@ def _is_armed(channels: list[float]) -> bool:
     if len(channels) <= config.CH_ARM:
         return False
     return channels[config.CH_ARM] > config.ARM_THRESHOLD
+
+
+def _is_muted(channels: list[float]) -> bool:
+    return _get_channel(channels, config.CH_MUTE) > config.ARM_THRESHOLD
 
 
 def _get_channel(channels: list[float], index: int) -> float:
@@ -367,6 +429,23 @@ def _battery_telemetry_direction_label(current_a: float) -> str:
     return "IDLE"
 
 
+def _encode_battery_status_bits(
+    current_a: float,
+    *,
+    armed: bool,
+    mute_active: bool,
+    beacon_active: bool,
+) -> int:
+    status_bits = _battery_telemetry_direction_code(current_a) & _BATTERY_DIRECTION_MASK
+    if armed:
+        status_bits |= _BATTERY_STATUS_ARMED
+    if mute_active:
+        status_bits |= _BATTERY_STATUS_MUTED
+    if beacon_active:
+        status_bits |= _BATTERY_STATUS_BEACON
+    return status_bits
+
+
 def _encode_crsf_current_da(current_a: float) -> int:
     return max(0, int(round(current_a * 10)))
 
@@ -419,15 +498,25 @@ def _send_battery_telemetry(
     state: Optional[BatteryState],
     *,
     consumed_at_s: float | None = None,
+    armed: bool = False,
+    mute_active: bool = False,
+    beacon_active: bool = False,
 ) -> None:
     if consumed_at_s is not None:
         _trace_battery_telemetry("consume", state, consumed_at_s)
+
+    status_bits = _encode_battery_status_bits(
+        0.0 if state is None else state.current,
+        armed=armed,
+        mute_active=mute_active,
+        beacon_active=beacon_active,
+    )
 
     if state is None:
         telemetry.send_battery(
             voltage_v=0.0,
             current_a=0.0,
-            capacity_mah=0,
+            capacity_mah=status_bits,
             remaining_pct=0,
         )
         _trace_battery_telemetry("send", state, time.monotonic())
@@ -436,7 +525,7 @@ def _send_battery_telemetry(
     telemetry.send_battery(
         voltage_v=state.voltage,
         current_a=_battery_telemetry_current_a(state.current),
-        capacity_mah=_battery_telemetry_direction_code(state.current),
+        capacity_mah=status_bits,
         remaining_pct=int(round(state.soc)),
     )
     _trace_battery_telemetry("send", state, time.monotonic())
@@ -567,6 +656,8 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _signal_handler)
 
     armed = False
+    mute_active = False
+    beacon_active = False
     had_connection = False
     low_voltage_active = False
     melody_zone = -1
@@ -610,16 +701,22 @@ def main() -> int:
                 received_frame = True
                 last_frame_time = loop_started_at
                 arm_state_changed = False
+                mute_active = _is_muted(channels)
 
                 if not had_connection:
                     had_connection = True
-                    if not _play_grouped_voice_async(
+                    if not _play_grouped_voice_async_if_allowed(
                         voice_selector,
                         "connected",
                         config.CONNECTED_VOICES,
                         buzzer,
+                        mute_active=mute_active,
                     ):
-                        buzzer.connected_tone()
+                        _play_buzzer_method_async_if_allowed(
+                            buzzer,
+                            "connected_tone",
+                            mute_active=mute_active,
+                        )
                 beacon.on_connected()
 
                 requested_armed = _is_armed(channels)
@@ -628,24 +725,34 @@ def main() -> int:
                     armed = requested_armed
                     if armed:
                         LOGGER.info("Platform armed")
-                        if config.ARM_VOICE_ENABLED and _play_grouped_voice_async(
+                        if config.ARM_VOICE_ENABLED and _play_grouped_voice_async_if_allowed(
                             voice_selector,
                             "arm",
                             config.ARM_VOICES,
                             buzzer,
+                            mute_active=mute_active,
                         ):
                             pass
                         else:
-                            _play_buzzer_method_async(buzzer, "arm_tone")
+                            _play_buzzer_method_async_if_allowed(
+                                buzzer,
+                                "arm_tone",
+                                mute_active=mute_active,
+                            )
                     else:
                         LOGGER.info("Platform disarmed")
-                        if not _play_grouped_voice_async(
+                        if not _play_grouped_voice_async_if_allowed(
                             voice_selector,
                             "disarm",
                             config.DISARM_VOICES,
                             buzzer,
+                            mute_active=mute_active,
                         ):
-                            _play_buzzer_method_async(buzzer, "disarm_tone")
+                            _play_buzzer_method_async_if_allowed(
+                                buzzer,
+                                "disarm_tone",
+                                mute_active=mute_active,
+                            )
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
 
@@ -710,7 +817,8 @@ def main() -> int:
 
                 # Manual beacon toggle via RC channel
                 beacon_ch = _get_channel(channels, config.CH_BEACON)
-                beacon.set_manual(beacon_ch > config.ARM_THRESHOLD)
+                beacon_active = beacon_ch > config.ARM_THRESHOLD
+                beacon.set_manual(beacon_active)
 
                 # Melody selection via RC channel
                 if config.ENABLE_RC_MELODIES:
@@ -723,18 +831,27 @@ def main() -> int:
                     elif new_zone != melody_zone:
                         melody_zone = new_zone
                         if not arm_state_changed:
-                            buzzer.play_named_async(FUN_PLAYLIST[melody_zone])
+                            _play_named_async_if_allowed(
+                                buzzer,
+                                FUN_PLAYLIST[melody_zone],
+                                mute_active=mute_active,
+                            )
 
             if not received_frame and drive.check_failsafe(last_frame_time):
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
-                    if not _play_grouped_voice_async(
+                    if not _play_grouped_voice_async_if_allowed(
                         voice_selector,
                         "failsafe",
                         config.FAILSAFE_VOICES,
                         buzzer,
+                        mute_active=mute_active,
                     ):
-                        _play_buzzer_method_async(buzzer, "failsafe_tone")
+                        _play_buzzer_method_async_if_allowed(
+                            buzzer,
+                            "failsafe_tone",
+                            mute_active=mute_active,
+                        )
                 if throttle_filter is not None:
                     throttle_filter.reset()
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
@@ -742,13 +859,18 @@ def main() -> int:
                 last_drive_update_at = loop_started_at
                 if had_connection:
                     had_connection = False
-                    if not _play_grouped_voice_async(
+                    if not _play_grouped_voice_async_if_allowed(
                         voice_selector,
                         "disconnected",
                         config.DISCONNECTED_VOICES,
                         buzzer,
+                        mute_active=mute_active,
                     ):
-                        buzzer.disconnected_tone()
+                        _play_buzzer_method_async_if_allowed(
+                            buzzer,
+                            "disconnected_tone",
+                            mute_active=mute_active,
+                        )
                 armed = False
                 beacon.on_failsafe(loop_started_at)
 
@@ -762,10 +884,24 @@ def main() -> int:
                 try:
                     if battery_state is None:
                         if not battery_telemetry_cleared:
-                            _send_battery_telemetry(telemetry, battery_state, consumed_at_s=loop_started_at)
+                            _send_battery_telemetry(
+                                telemetry,
+                                battery_state,
+                                consumed_at_s=loop_started_at,
+                                armed=armed,
+                                mute_active=mute_active,
+                                beacon_active=beacon_active,
+                            )
                             battery_telemetry_cleared = True
                     else:
-                        _send_battery_telemetry(telemetry, battery_state, consumed_at_s=loop_started_at)
+                        _send_battery_telemetry(
+                            telemetry,
+                            battery_state,
+                            consumed_at_s=loop_started_at,
+                            armed=armed,
+                            mute_active=mute_active,
+                            beacon_active=beacon_active,
+                        )
                         battery_telemetry_cleared = False
                         last_battery_telemetry_log = _log_battery_telemetry(
                             battery_state,
@@ -790,13 +926,18 @@ def main() -> int:
                     if is_low_voltage and not low_voltage_active:
                         low_voltage_active = True
                         LOGGER.warning("Low battery warning: %.2fV", battery_state.voltage)
-                        if not _play_grouped_voice_async(
+                        if not _play_grouped_voice_async_if_allowed(
                             voice_selector,
                             "low_voltage",
                             config.LOW_VOLTAGE_VOICES,
                             buzzer,
+                            mute_active=mute_active,
                         ):
-                            _play_buzzer_method_async(buzzer, "low_voltage_alarm")
+                            _play_buzzer_method_async_if_allowed(
+                                buzzer,
+                                "low_voltage_alarm",
+                                mute_active=mute_active,
+                            )
                     elif not is_low_voltage:
                         low_voltage_active = False
                 else:
