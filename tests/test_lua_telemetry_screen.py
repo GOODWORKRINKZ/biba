@@ -146,13 +146,33 @@ def test_draw_wide_displays_motor_currents() -> None:
 def test_draw_wide_formats_wheel_currents_in_milliamps() -> None:
     body = _extract_function(_lua_source(), "draw_wide")
 
-    assert "mA" in body
+    assert body.count("format_current_ma(") >= 3
 
 
 def test_draw_wide_uses_current_format_helper() -> None:
     body = _extract_function(_lua_source(), "draw_wide")
 
     assert "format_current_ma" in body
+
+
+def test_draw_wide_uses_compact_header_style_without_rssi_text() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "Q%03d" in body or "draw_header_wide(" in body
+    assert 'string.format("  R %d"' not in body
+
+
+def test_draw_wide_uses_rounded_rect_body() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "draw_rounded_rect(" in body
+
+
+def test_draw_wide_does_not_prefix_wheel_currents_with_lr_labels() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert 'string.format("L %s"' not in body
+    assert 'string.format("R %s"' not in body
 
 
 def test_draw_wheel_keeps_idle_forward_and_reverse_logic() -> None:
@@ -172,9 +192,12 @@ def test_draw_wheel_caps_at_seven_arrows() -> None:
 def test_draw_wheel_uses_bottom_up_for_forward_and_top_down_for_reverse() -> None:
     body = _extract_function(_lua_source(), "draw_wheel")
 
-    assert "y + wh - 4" in body, "forward arrows should start from wheel bottom"
+    assert "y + wh" in body, "forward arrows should be anchored near wheel bottom"
+    assert "- i * arrow_step" in body, "forward arrows should grow upward"
     assert "y + 3" in body, "reverse arrows should start from wheel top"
-    assert "draw_wheel_arrow(" in body
+    assert "+ i * arrow_step" in body, "reverse arrows should grow downward"
+    assert "draw_wheel_arrow(arrow_x, arrow_y, false)" in body
+    assert "draw_wheel_arrow(arrow_x, arrow_y, true)" in body
 
 
 def test_draw_rounded_rect_is_separate_function() -> None:
@@ -246,6 +269,14 @@ def test_draw_cell_frame_has_solid_bottom() -> None:
 def test_draw_header_is_separate_function() -> None:
     source = _lua_source()
     assert "local function draw_header(" in source
+
+
+def test_draw_header_formats_quality_and_appends_source_once() -> None:
+    body = _extract_function(_lua_source(), "draw_header")
+
+    assert 'string.format("Q%03d"' in body
+    assert 'string.format("Q%03d PCK"' not in body
+    assert 'hdr = hdr .. " " .. cell_src' in body
 
 
 def test_draw_soc_bar_is_separate_function() -> None:

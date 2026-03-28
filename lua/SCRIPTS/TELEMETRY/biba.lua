@@ -228,9 +228,20 @@ end
 
 local function draw_header(w, rqly, cell_src)
   lcd.drawText(0, 0, "BiBa", SMLSIZE)
-  local hdr = string.format("Q%03d PCK", rqly)
+  local hdr = string.format("Q%03d", rqly)
   if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
   lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
+end
+
+-- ──────────────────────────────────────────────────
+-- Drawing: wide header row (BiBa + quality + source)
+-- ──────────────────────────────────────────────────
+
+local function draw_header_wide(w, rqly, cell_src)
+  lcd.drawText(4, 2, "BiBa", DBLSIZE)
+  local hdr = string.format("Q%03d", rqly)
+  if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
+  lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
 end
 
 -- ──────────────────────────────────────────────────
@@ -311,16 +322,10 @@ end
 -- ──────────────────────────────────────────────────
 
 local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
-  local w, h = sw(), sh()
+  local w = sw()
   local total_current = format_current_ma(current)
-  local left_current_label = string.format("L %s", format_current_ma(left_current))
-  local right_current_label = string.format("R %s", format_current_ma(right_current))
 
-  lcd.drawText(4, 2, "BiBa", DBLSIZE)
-  local hdr = string.format("Q %d", rqly)
-  if rssi > 0 then hdr = hdr .. string.format("  R %d", rssi) end
-  if cell_src ~= "" then hdr = hdr .. "  " .. cell_src end
-  lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
+  draw_header_wide(w, rqly, cell_src)
 
   local wheel_w  = 18
   local wheel_h  = 76
@@ -333,22 +338,28 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
   draw_wheel(4, wheel_y, wheel_w, wheel_h, left_spd, 3)
   draw_wheel(w - wheel_w - 4, wheel_y, wheel_w, wheel_h, right_spd, 3)
 
-  lcd.drawRectangle(body_x, body_y, body_w, body_h)
+  draw_rounded_rect(body_x, body_y, body_w, body_h)
 
   local ix = body_x + 4
   local iy = body_y + 3
+  local current_row_y = iy + 31
+  local wheel_current_row_y = iy + 42
+  local right_current_x = body_x + body_w - 78
 
+  -- Main battery metrics.
   lcd.drawText(ix, iy, string.format("%.2fV", voltage), MIDSIZE)
   lcd.drawText(body_x + body_w - 30, iy + 2, string.format("%d%%", pct), SMLSIZE)
   draw_soc_bar(ix, iy + 18, body_w - 10, 8, pct)
 
-  lcd.drawText(ix, iy + 31, "I mA", SMLSIZE)
-  lcd.drawText(ix + 24, iy + 31, total_current, SMLSIZE)
+  -- Current + system stats.
+  lcd.drawText(ix, current_row_y, total_current, SMLSIZE)
   if cpu > 0 or ram > 0 then
-    lcd.drawText(ix + 70, iy + 31, string.format("C%02d M%02d", cpu, ram), SMLSIZE)
+    lcd.drawText(ix + 74, current_row_y, string.format("CPU%02d MEM%02d", cpu, ram), SMLSIZE)
   end
-  lcd.drawText(ix, iy + 42, left_current_label, SMLSIZE)
-  lcd.drawText(ix + 72, iy + 42, right_current_label, SMLSIZE)
+
+  -- Wheel currents use position instead of L/R text prefixes.
+  lcd.drawText(ix, wheel_current_row_y, format_current_ma(left_current), SMLSIZE)
+  lcd.drawText(right_current_x, wheel_current_row_y, format_current_ma(right_current), SMLSIZE)
 
   local cell_y = iy + 55
   local col_w = math.floor((body_w - 12) / 3)
