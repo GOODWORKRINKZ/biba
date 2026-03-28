@@ -4,11 +4,14 @@
 local CELL_COUNT = 6
 local LOW_CELL_VOLTAGE = 3.5
 local BATTERY_HOLDOFF_CS = 1200
+local LOG_SERIAL_BAUD = 115200
+local LOG_INTERVAL_CS = 20
 
 -- Sound state tracking
 local prev_connected = nil  -- nil = first run, true/false after
 local low_bat_sound_at = 0  -- getTime() of last low-bat alert
 local battery_holdoff_until = 0
+local next_log_at = 0
 
 -- ──────────────────────────────────────────────────
 -- Utility helpers
@@ -44,6 +47,55 @@ end
 
 local function format_current_ma(current_a)
   return string.format("%05dmA", to_ma(current_a))
+end
+
+local function text_or_dash(value)
+  if value == nil or value == "" then return "-" end
+  return value
+end
+
+local function format_cells_for_log(cells)
+  if type(cells) ~= "table" or #cells == 0 then return "-" end
+
+  local result = ""
+  for i = 1, math.min(#cells, CELL_COUNT) do
+    if i > 1 then
+      result = result .. "/"
+    end
+    result = result .. string.format("%.2f", cells[i] or 0)
+  end
+  return result
+end
+
+local function log_telemetry(now, connected, holdoff_active,
+  raw_voltage, raw_current, raw_pct, raw_rqly, raw_cell_src, raw_cells, raw_left_current, raw_right_current, raw_battery_direction,
+  voltage, current, pct, cell_src, cells, left_current, right_current, battery_direction)
+  if now < next_log_at then return end
+
+  next_log_at = now + LOG_INTERVAL_CS
+  serialWrite(string.format(
+    "T=%d CON=%d HOLD=%d RQ=%d RAWV=%.2f RAWI=%.2f RAWP=%d RAWDIR=%s RAWSRC=%s RAWCELLS=%s RAWL=%s RAWR=%s DSPV=%.2f DSPI=%.2f DSPP=%d DSPDIR=%s DSPSRC=%s DSPCELLS=%s DSPL=%s DSPR=%s\n",
+    now,
+    connected and 1 or 0,
+    holdoff_active and 1 or 0,
+    raw_rqly or 0,
+    raw_voltage or 0,
+    raw_current or 0,
+    raw_pct or 0,
+    text_or_dash(raw_battery_direction),
+    text_or_dash(raw_cell_src),
+    format_cells_for_log(raw_cells),
+    format_current_ma(raw_left_current),
+    format_current_ma(raw_right_current),
+    voltage or 0,
+    current or 0,
+    pct or 0,
+    text_or_dash(battery_direction),
+    text_or_dash(cell_src),
+    format_cells_for_log(cells),
+    format_current_ma(left_current),
+    format_current_ma(right_current)
+  ))
 end
 
 -- ──────────────────────────────────────────────────
@@ -442,6 +494,7 @@ local function run(event)
 
   local connected = is_connected()
   local now = getTime()
+  local rqly = sensor("RQly", 0)
 
   -- Connection state change sounds
   if prev_connected ~= nil then
@@ -459,23 +512,36 @@ local function run(event)
   prev_connected = connected
 
   if not connected then
+    log_telemetry(now, connected, false,
+      0, 0, 0, rqly, "", {}, 0, 0, "",
+      0, 0, 0, "", {}, 0, 0, "")
     draw_disconnected()
     return 0
   end
 
-  local voltage = sensor({ "VFAS", "RxBt" }, 0)
-  local current = sensor("Curr", 0)
-  local pct     = sensor({ "Bat%", "Fuel" }, 0)
-  local rssi    = sensor("RSSI", 0)
-  local rqly    = sensor("RQly", 0)
-  local cells, cell_src = read_cells(voltage)
-  local mn, mx, delta = cell_stats(cells)
+  local raw_voltage = sensor({ "VFAS", "RxBt" }, 0)
+  local raw_current = sensor("Curr", 0)
+  local raw_pct = sensor({ "Bat%", "Fuel" }, 0)
+  local rssi = sensor("RSSI", 0)
+  local raw_cells, raw_cell_src = read_cells(raw_voltage)
   local left_spd, right_spd = read_drive()
   local cpu, ram = read_system()
-  local left_current, right_current = read_motor_currents()
-  local battery_direction = read_battery_direction()
+  local raw_left_current, raw_right_current = read_motor_currents()
+  local raw_battery_direction = read_battery_direction()
+
+  local voltage = raw_voltage
+  local current = raw_current
+  local pct = raw_pct
+  local cells = raw_cells
+  local cell_src = raw_cell_src
+  local left_current = raw_left_current
+  local right_current = raw_right_current
+  local battery_direction = raw_battery_direction
+  local mn, mx, delta = cell_stats(cells)
+  local holdoff_active = false
 
   if now < battery_holdoff_until then
+    holdoff_active = true
     voltage = 0
     current = 0
     battery_direction = ""
@@ -488,6 +554,10 @@ local function run(event)
     mx = 0
     delta = 0
   end
+
+  log_telemetry(now, connected, holdoff_active,
+    raw_voltage, raw_current, raw_pct, rqly, raw_cell_src, raw_cells, raw_left_current, raw_right_current, raw_battery_direction,
+    voltage, current, pct, cell_src, cells, left_current, right_current, battery_direction)
 
   if sw() >= 212 and sh() >= 128 then
     draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
@@ -507,6 +577,8 @@ local function run(event)
 end
 
 local function init()
+  setSerialBaudrate(LOG_SERIAL_BAUD)
+  serialWrite("BIBA LUA VCP LOG READY\n")
   snd_startup()
   return 0
 end
