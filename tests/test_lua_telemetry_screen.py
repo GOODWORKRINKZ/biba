@@ -116,6 +116,14 @@ def test_read_motor_currents_uses_gps_heading_and_altitude_sensors() -> None:
     assert 'sensor("Alt", 0)' in body
 
 
+def test_read_battery_direction_uses_capacity_sensor_flag() -> None:
+    body = _extract_function(_lua_source(), "read_battery_direction")
+
+    assert 'sensor({ "Capa", "Mah", "mAh" }, 0)' in body
+    assert 'return "CHG"' in body
+    assert 'return "DIS"' in body
+
+
 def test_draw_compact_displays_motor_currents() -> None:
     body = _extract_function(_lua_source(), "draw_compact")
 
@@ -128,6 +136,12 @@ def test_draw_compact_formats_total_current_in_milliamps() -> None:
     body = _extract_function(_lua_source(), "draw_compact")
 
     assert "format_current_ma(current)" in body
+
+
+def test_draw_compact_displays_battery_direction_label() -> None:
+    body = _extract_function(_lua_source(), "draw_compact")
+
+    assert "battery_direction" in body
 
 
 def test_draw_compact_uses_current_format_helper() -> None:
@@ -147,6 +161,12 @@ def test_draw_wide_formats_wheel_currents_in_milliamps() -> None:
     body = _extract_function(_lua_source(), "draw_wide")
 
     assert body.count("format_current_ma(") >= 3
+
+
+def test_draw_wide_displays_battery_direction_label() -> None:
+    body = _extract_function(_lua_source(), "draw_wide")
+
+    assert "battery_direction" in body
 
 
 def test_draw_wide_uses_current_format_helper() -> None:
@@ -232,6 +252,12 @@ def test_run_reads_motor_currents() -> None:
     assert "read_motor_currents()" in body
 
 
+def test_run_reads_battery_direction() -> None:
+    body = _extract_function(_lua_source(), "run")
+
+    assert "read_battery_direction()" in body
+
+
 def test_lua_declares_current_format_helper() -> None:
     source = _lua_source()
 
@@ -298,5 +324,5 @@ def test_run_calls_only_one_draw_branch_and_passes_motor_currents() -> None:
     assert "if sw() >= 212 and sh() >= 128 then" in body
     assert body.count("draw_compact(") == 1
     assert body.count("draw_wide(") == 1
-    assert "draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
-    assert "draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
+    assert "draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
+    assert "draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body

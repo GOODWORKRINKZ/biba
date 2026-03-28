@@ -293,8 +293,25 @@ def _send_system_telemetry(
     )
 
 
-def _clamp_battery_current_a(current_a: float) -> float:
-    return max(0.0, current_a)
+def _battery_telemetry_current_a(current_a: float) -> float:
+    return abs(current_a)
+
+
+def _battery_telemetry_direction_code(current_a: float) -> int:
+    if current_a > 0.0:
+        return 1
+    if current_a < 0.0:
+        return 2
+    return 0
+
+
+def _battery_telemetry_direction_label(current_a: float) -> str:
+    direction_code = _battery_telemetry_direction_code(current_a)
+    if direction_code == 1:
+        return "CHG"
+    if direction_code == 2:
+        return "DIS"
+    return "IDLE"
 
 
 def _encode_crsf_current_da(current_a: float) -> int:
@@ -305,15 +322,17 @@ def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) 
     if now - last_log_at < _BATTERY_TELEMETRY_LOG_INTERVAL_S:
         return last_log_at
 
-    clamped_current_a = _clamp_battery_current_a(state.current)
+    telemetry_current_a = _battery_telemetry_current_a(state.current)
+    telemetry_direction = _battery_telemetry_direction_label(state.current)
     LOGGER.info(
         (
-            "Battery telemetry raw_current_a=%.2f clamped_current_a=%.2f "
-            "crsf_current_da=%d voltage_v=%.2f soc_pct=%d"
+            "Battery telemetry raw_current_a=%.2f telemetry_current_a=%.2f "
+            "crsf_current_da=%d telemetry_direction=%s voltage_v=%.2f soc_pct=%d"
         ),
         state.current,
-        clamped_current_a,
-        _encode_crsf_current_da(clamped_current_a),
+        telemetry_current_a,
+        _encode_crsf_current_da(telemetry_current_a),
+        telemetry_direction,
         state.voltage,
         int(round(state.soc)),
     )
@@ -332,8 +351,8 @@ def _send_battery_telemetry(telemetry: CRSFTelemetry, state: Optional[BatterySta
 
     telemetry.send_battery(
         voltage_v=state.voltage,
-        current_a=_clamp_battery_current_a(state.current),
-        capacity_mah=0,
+        current_a=_battery_telemetry_current_a(state.current),
+        capacity_mah=_battery_telemetry_direction_code(state.current),
         remaining_pct=int(round(state.soc)),
     )
 

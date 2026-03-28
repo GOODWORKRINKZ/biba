@@ -128,6 +128,13 @@ local function read_motor_currents()
   return left_current, right_current
 end
 
+local function read_battery_direction()
+  local direction_flag = sensor({ "Capa", "Mah", "mAh" }, 0)
+  if direction_flag == 1 then return "CHG" end
+  if direction_flag == 2 then return "DIS" end
+  return ""
+end
+
 -- ──────────────────────────────────────────────────
 -- Drawing: disconnected screen
 -- ──────────────────────────────────────────────────
@@ -273,7 +280,7 @@ end
 -- Drawing: compact connected (128×64)
 -- ──────────────────────────────────────────────────
 
-local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
 
   draw_header(w, rqly, cell_src)
@@ -301,6 +308,9 @@ local function draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, 
 
   -- Total current + SOC%
   lcd.drawText(14, 34, format_current_ma(current), SMLSIZE)
+  if battery_direction ~= "" then
+    lcd.drawText(49, 34, battery_direction, SMLSIZE)
+  end
   lcd.drawText(59, 35, string.format("%d%%", pct), SMLSIZE)
 
   -- Wheel currents (left / right)
@@ -321,7 +331,7 @@ end
 -- Drawing: wide connected (≥212×128)
 -- ──────────────────────────────────────────────────
 
-local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
   local total_current = format_current_ma(current)
 
@@ -353,6 +363,9 @@ local function draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn,
 
   -- Current + system stats.
   lcd.drawText(ix, current_row_y, total_current, SMLSIZE)
+  if battery_direction ~= "" then
+    lcd.drawText(ix + 42, current_row_y, battery_direction, SMLSIZE)
+  end
   if cpu > 0 or ram > 0 then
     lcd.drawText(ix + 74, current_row_y, string.format("CPU%02d MEM%02d", cpu, ram), SMLSIZE)
   end
@@ -460,10 +473,12 @@ local function run(event)
   local left_spd, right_spd = read_drive()
   local cpu, ram = read_system()
   local left_current, right_current = read_motor_currents()
+  local battery_direction = read_battery_direction()
 
   if now < battery_holdoff_until then
     voltage = 0
     current = 0
+    battery_direction = ""
     pct = 0
     cells = {}
     left_current = 0
@@ -475,9 +490,9 @@ local function run(event)
   end
 
   if sw() >= 212 and sh() >= 128 then
-    draw_wide(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   else
-    draw_compact(voltage, current, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   end
 
   -- Low battery sound (every ~10 seconds)

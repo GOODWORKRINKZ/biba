@@ -384,8 +384,57 @@ def test_log_battery_telemetry_reports_raw_clamped_and_encoded_current(caplog: p
 
     assert next_log_at == 10.0
     assert "raw_current_a=-7.34" in caplog.text
-    assert "clamped_current_a=0.00" in caplog.text
-    assert "crsf_current_da=0" in caplog.text
+    assert "telemetry_current_a=7.34" in caplog.text
+    assert "crsf_current_da=73" in caplog.text
+    assert "telemetry_direction=DIS" in caplog.text
+
+
+def test_send_battery_telemetry_uses_absolute_bms_current_for_discharge() -> None:
+    main = importlib.import_module("main")
+    sent_packets: list[tuple[float, float, int, int]] = []
+
+    class FakeTelemetry:
+        def send_battery(self, voltage_v: float, current_a: float, capacity_mah: int, remaining_pct: int) -> None:
+            sent_packets.append((voltage_v, current_a, capacity_mah, remaining_pct))
+
+    state = BatteryState(
+        voltage=24.1,
+        current=-1.3,
+        soc=63.0,
+        cells=[3.4, 3.45],
+        temperatures=[22.0],
+        min_cell=3.4,
+        max_cell=3.45,
+        delta=0.05,
+    )
+
+    main._send_battery_telemetry(FakeTelemetry(), state)
+
+    assert sent_packets == [(24.1, 1.3, 2, 63)]
+
+
+def test_send_battery_telemetry_marks_positive_current_as_charging() -> None:
+    main = importlib.import_module("main")
+    sent_packets: list[tuple[float, float, int, int]] = []
+
+    class FakeTelemetry:
+        def send_battery(self, voltage_v: float, current_a: float, capacity_mah: int, remaining_pct: int) -> None:
+            sent_packets.append((voltage_v, current_a, capacity_mah, remaining_pct))
+
+    state = BatteryState(
+        voltage=24.1,
+        current=1.6,
+        soc=63.0,
+        cells=[3.4, 3.45],
+        temperatures=[22.0],
+        min_cell=3.4,
+        max_cell=3.45,
+        delta=0.05,
+    )
+
+    main._send_battery_telemetry(FakeTelemetry(), state)
+
+    assert sent_packets == [(24.1, 1.6, 1, 63)]
 
 
 def test_log_battery_telemetry_skips_until_interval_elapsed(caplog: pytest.LogCaptureFixture) -> None:
