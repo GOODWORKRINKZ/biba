@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import signal
+import threading
 import time
 from pathlib import Path
 from types import FrameType
@@ -113,6 +114,12 @@ class _NullBuzzer:
     def play_spectral(self, path: str) -> None:
         del path
 
+    def play_wav_async(self, path: str) -> None:
+        del path
+
+    def play_spectral_async(self, path: str) -> None:
+        del path
+
 
 def _play_grouped_voice(
     selector: VoiceSelector,
@@ -128,6 +135,40 @@ def _play_grouped_voice(
         player = buzzer.play_wav
     player(path)
     return True
+
+
+def _play_grouped_voice_async(
+    selector: VoiceSelector,
+    event: str,
+    voices: list[str],
+    buzzer,
+) -> bool:
+    path = selector.choose(event, voices)
+    if path is None:
+        return False
+
+    player = getattr(buzzer, "play_spectral_async", None)
+    if player is None:
+        player = getattr(buzzer, "play_wav_async", None)
+    if player is not None:
+        player(path)
+        return True
+
+    player = getattr(buzzer, "play_spectral", None)
+    if player is None:
+        player = buzzer.play_wav
+    threading.Thread(target=player, args=(path,), daemon=True).start()
+    return True
+
+
+def _play_buzzer_method_async(buzzer, method_name: str) -> None:
+    player = getattr(buzzer, f"{method_name}_async", None)
+    if player is not None:
+        player()
+        return
+
+    player = getattr(buzzer, method_name)
+    threading.Thread(target=player, daemon=True).start()
 
 
 def _create_synth_pins() -> tuple[list[int], list[int]]:
@@ -528,7 +569,7 @@ def main() -> int:
 
                 if not had_connection:
                     had_connection = True
-                    if not _play_grouped_voice(
+                    if not _play_grouped_voice_async(
                         voice_selector,
                         "connected",
                         config.CONNECTED_VOICES,
@@ -543,7 +584,7 @@ def main() -> int:
                     armed = requested_armed
                     if armed:
                         LOGGER.info("Platform armed")
-                        if config.ARM_VOICE_ENABLED and _play_grouped_voice(
+                        if config.ARM_VOICE_ENABLED and _play_grouped_voice_async(
                             voice_selector,
                             "arm",
                             config.ARM_VOICES,
@@ -551,16 +592,16 @@ def main() -> int:
                         ):
                             pass
                         else:
-                            buzzer.arm_tone()
+                            _play_buzzer_method_async(buzzer, "arm_tone")
                     else:
                         LOGGER.info("Platform disarmed")
-                        if not _play_grouped_voice(
+                        if not _play_grouped_voice_async(
                             voice_selector,
                             "disarm",
                             config.DISARM_VOICES,
                             buzzer,
                         ):
-                            buzzer.disarm_tone()
+                            _play_buzzer_method_async(buzzer, "disarm_tone")
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
 
@@ -643,13 +684,13 @@ def main() -> int:
             if not received_frame and drive.check_failsafe(last_frame_time):
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
-                    if not _play_grouped_voice(
+                    if not _play_grouped_voice_async(
                         voice_selector,
                         "failsafe",
                         config.FAILSAFE_VOICES,
                         buzzer,
                     ):
-                        buzzer.failsafe_tone()
+                        _play_buzzer_method_async(buzzer, "failsafe_tone")
                 if throttle_filter is not None:
                     throttle_filter.reset()
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
@@ -657,7 +698,7 @@ def main() -> int:
                 last_drive_update_at = loop_started_at
                 if had_connection:
                     had_connection = False
-                    if not _play_grouped_voice(
+                    if not _play_grouped_voice_async(
                         voice_selector,
                         "disconnected",
                         config.DISCONNECTED_VOICES,
@@ -705,13 +746,13 @@ def main() -> int:
                     if is_low_voltage and not low_voltage_active:
                         low_voltage_active = True
                         LOGGER.warning("Low battery warning: %.2fV", battery_state.voltage)
-                        if not _play_grouped_voice(
+                        if not _play_grouped_voice_async(
                             voice_selector,
                             "low_voltage",
                             config.LOW_VOLTAGE_VOICES,
                             buzzer,
                         ):
-                            buzzer.low_voltage_alarm()
+                            _play_buzzer_method_async(buzzer, "low_voltage_alarm")
                     elif not is_low_voltage:
                         low_voltage_active = False
                 else:

@@ -132,6 +132,38 @@ def test_ble_read_state_aggregates_all_measurements() -> None:
     )
 
 
+def test_ble_read_state_reuses_cached_cells_and_temperatures_for_fast_soc_updates() -> None:
+    responses = [
+        build_response(0x90, bytes.fromhex("00fc0000755d030f")),
+        build_response(0x95, bytes.fromhex("0dac0db600000000")),
+        build_response(0x95, bytes.fromhex("0dc00dca0dd40000")),
+        build_response(0x92, bytes([0, 45, 50, 0, 0, 0, 0, 0])),
+        build_response(0x90, bytes.fromhex("00fc00007553030f")),
+    ]
+    client = FakeBleClient(responses)
+    bms = DalyBMSBle(
+        "71:C1:46:20:25:4F",
+        "0000fff0-0000-1000-8000-00805f9b34fb",
+        "0000fff2-0000-1000-8000-00805f9b34fb",
+        "0000fff1-0000-1000-8000-00805f9b34fb",
+        timeout=0.0,
+        client_factory=lambda address, service_uuid: client,
+    )
+    bms.open()
+
+    first_state = bms.read_state()
+    second_state = bms.read_state()
+
+    assert first_state is not None
+    assert second_state is not None
+    assert first_state.cells == [3.5, 3.51, 3.52, 3.53, 3.54]
+    assert first_state.temperatures == [5.0, 10.0]
+    assert second_state.current == 3.5
+    assert second_state.cells == first_state.cells
+    assert second_state.temperatures == first_state.temperatures
+    assert [write[1][2] for write in client.written] == [0x90, 0x95, 0x95, 0x92, 0x90]
+
+
 def test_ble_close_stops_notifications_and_disconnects() -> None:
     client = FakeBleClient()
     bms = DalyBMSBle(

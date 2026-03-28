@@ -108,6 +108,12 @@ def test_main_uses_round_robin_voice_group_for_startup(monkeypatch: pytest.Monke
         def play_spectral(self, path: str) -> None:
             played.append(f"spectral:{path}")
 
+        def play_wav_async(self, path: str) -> None:
+            played.append(f"wav:{path}")
+
+        def play_spectral_async(self, path: str) -> None:
+            played.append(f"spectral:{path}")
+
         def set_control_active(self, active: bool) -> None:
             del active
 
@@ -256,6 +262,12 @@ def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> No
         def play_spectral(self, path: str) -> None:
             played.append(f"spectral:{path}")
 
+        def play_wav_async(self, path: str) -> None:
+            played.append(f"wav:{path}")
+
+        def play_spectral_async(self, path: str) -> None:
+            played.append(f"spectral:{path}")
+
         def set_control_active(self, active: bool) -> None:
             del active
 
@@ -399,6 +411,9 @@ def test_main_uses_sos_melody_even_when_sos_voice_is_configured(monkeypatch: pyt
             played.append(name)
 
         def play_spectral(self, path: str) -> None:
+            played.append(path)
+
+        def play_spectral_async(self, path: str) -> None:
             played.append(path)
 
         def set_control_active(self, active: bool) -> None:

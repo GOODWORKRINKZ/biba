@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Callable, Optional, Protocol
@@ -191,6 +192,7 @@ class DalyBMSBle(DalyBMS):
         write_uuid: str,
         notify_uuid: str,
         timeout: float = 1.5,
+        detail_refresh_interval_s: float = 10.0,
         client_factory: Optional[Callable[[str, str], BleClientProtocol]] = None,
     ) -> None:
         super().__init__(port=address, baudrate=0, timeout=timeout)
@@ -204,6 +206,11 @@ class DalyBMSBle(DalyBMS):
         self._response_event = threading.Event()
         self._pending_command: Optional[int] = None
         self._pending_frames: list[bytes] = []
+        self._detail_refresh_interval_s = detail_refresh_interval_s
+        self._cached_cells: list[float] = []
+        self._cached_temperatures: list[float] = []
+        self._cells_refreshed_at = 0.0
+        self._temperatures_refreshed_at = 0.0
 
     def open(self) -> None:
         if not self.address:
@@ -274,6 +281,45 @@ class DalyBMSBle(DalyBMS):
                 if len(cells) >= 6:
                     break
         return cells[:6]
+
+    def _details_are_stale(self, refreshed_at: float, now: float) -> bool:
+        if refreshed_at <= 0.0:
+            return True
+        return (now - refreshed_at) >= self._detail_refresh_interval_s
+
+    def read_state(self) -> Optional[BatteryState]:
+        soc = self.get_soc()
+        if soc is None:
+            return None
+
+        now = time.monotonic()
+        if self._details_are_stale(self._cells_refreshed_at, now):
+            cells = self.get_cell_voltages()
+            if cells:
+                self._cached_cells = cells
+                self._cells_refreshed_at = now
+
+        if self._details_are_stale(self._temperatures_refreshed_at, now):
+            temperatures = self.get_temperatures()
+            if temperatures:
+                self._cached_temperatures = temperatures
+                self._temperatures_refreshed_at = now
+
+        cells = list(self._cached_cells)
+        temperatures = list(self._cached_temperatures)
+        min_cell = min(cells) if cells else 0.0
+        max_cell = max(cells) if cells else 0.0
+
+        return BatteryState(
+            voltage=soc["voltage"],
+            current=soc["current"],
+            soc=soc["soc"],
+            cells=cells,
+            temperatures=temperatures,
+            min_cell=min_cell,
+            max_cell=max_cell,
+            delta=max_cell - min_cell if cells else 0.0,
+        )
 
 
 def _build_ble_client(address: str, service_uuid: str) -> BleClientProtocol:
