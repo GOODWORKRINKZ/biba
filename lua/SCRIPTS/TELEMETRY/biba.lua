@@ -256,7 +256,7 @@ local function draw_cell_frame(w, cells)
   -- Bottom border: SOLID
   lcd.drawLine(2, y_bot, w - 3, y_bot, SOLID, FORCE)
   -- Side borders
-  lcd.drawLine(2, y_top, 2, y_bot, DOTTED, FORCE)
+  lcd.drawLine(1, y_top, 1, y_bot, DOTTED, FORCE)
   lcd.drawLine(w - 3, y_top, w - 3, y_bot, DOTTED, FORCE)
   -- Cell texts and dotted dividers
   local cell_w = math.floor(w / CELL_COUNT)
@@ -265,7 +265,7 @@ local function draw_cell_frame(w, cells)
     if i > 1 then
       lcd.drawLine(cx, y_top, cx, y_bot, DOTTED, FORCE)
     end
-    lcd.drawText(cx + 2, y_top + 1, string.format("%.2f", cells[i] or 0), SMLSIZE)
+    lcd.drawText(cx + 3, y_top + 2, string.format("%.2f", cells[i] or 0), SMLSIZE)
   end
 end
 
