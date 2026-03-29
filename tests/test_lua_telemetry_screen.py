@@ -124,6 +124,34 @@ def test_read_battery_direction_uses_capacity_sensor_flag() -> None:
     assert 'return "DIS"' in body
 
 
+def test_read_battery_direction_masks_status_bits_from_capacity_sensor() -> None:
+    body = _extract_function(_lua_source(), "read_battery_direction")
+
+    assert "BATTERY_DIRECTION_MASK" in body
+    assert "bit32.band(" in body
+
+
+def test_lua_declares_status_icon_helper() -> None:
+    source = _lua_source()
+
+    assert "local function read_status_icons()" in source
+
+
+def test_read_status_icons_emits_a_m_b_letters() -> None:
+    body = _extract_function(_lua_source(), "read_status_icons")
+
+    assert 'icons = icons .. "A"' in body
+    assert 'icons = icons .. "M"' in body
+    assert 'icons = icons .. "B"' in body
+
+
+def test_read_status_icons_appends_charging_icon_only_for_charge_direction() -> None:
+    body = _extract_function(_lua_source(), "read_status_icons")
+
+    assert 'read_battery_direction() == "CHG"' in body
+    assert 'icons = icons .. "C"' in body
+
+
 def test_draw_compact_displays_motor_currents() -> None:
     body = _extract_function(_lua_source(), "draw_compact")
 
@@ -141,7 +169,7 @@ def test_draw_compact_formats_total_current_in_milliamps() -> None:
 def test_draw_compact_displays_battery_direction_label() -> None:
     body = _extract_function(_lua_source(), "draw_compact")
 
-    assert "battery_direction" in body
+    assert 'lcd.drawText(49, 34, battery_direction' not in body
 
 
 def test_draw_compact_uses_current_format_helper() -> None:
@@ -166,7 +194,7 @@ def test_draw_wide_formats_wheel_currents_in_milliamps() -> None:
 def test_draw_wide_displays_battery_direction_label() -> None:
     body = _extract_function(_lua_source(), "draw_wide")
 
-    assert "battery_direction" in body
+    assert 'lcd.drawText(ix + 42, current_row_y, battery_direction' not in body
 
 
 def test_draw_wide_uses_current_format_helper() -> None:
@@ -369,6 +397,20 @@ def test_draw_header_formats_quality_and_appends_source_once() -> None:
     assert 'hdr = hdr .. " " .. cell_src' in body
 
 
+def test_draw_header_appends_status_icons() -> None:
+    body = _extract_function(_lua_source(), "draw_header")
+
+    assert "status_icons" in body
+    assert 'hdr = hdr .. " " .. status_icons' in body
+
+
+def test_draw_header_wide_appends_status_icons() -> None:
+    body = _extract_function(_lua_source(), "draw_header_wide")
+
+    assert "status_icons" in body
+    assert 'hdr = hdr .. " " .. status_icons' in body
+
+
 def test_draw_soc_bar_is_separate_function() -> None:
     source = _lua_source()
     assert "local function draw_soc_bar(" in source
@@ -388,5 +430,6 @@ def test_run_calls_only_one_draw_branch_and_passes_motor_currents() -> None:
     assert "if sw() >= 212 and sh() >= 128 then" in body
     assert body.count("draw_compact(") == 1
     assert body.count("draw_wide(") == 1
-    assert "draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
-    assert "draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
+    assert "status_icons = read_status_icons()" in body
+    assert "draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
+    assert "draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body

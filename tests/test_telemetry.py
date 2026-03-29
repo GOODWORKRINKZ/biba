@@ -40,6 +40,19 @@ def test_send_battery_clamps_negative_and_out_of_range_values() -> None:
     assert payload == bytes.fromhex("00000000ffffff64")
 
 
+def test_send_battery_preserves_status_bitmask_in_capacity_field() -> None:
+    serial_port = FakeSerial()
+    telemetry = CRSFTelemetry(serial_port)
+
+    telemetry.send_battery(voltage_v=25.2, current_a=4.5, capacity_mah=0b11110, remaining_pct=78)
+
+    parsed = parse_frame(serial_port.writes[-1])
+
+    assert parsed is not None
+    _, payload = parsed
+    assert payload == bytes.fromhex("00fc002d00001e4e")
+
+
 def test_send_system_stats_emits_valid_crsf_gps_frame() -> None:
     serial_port = FakeSerial()
     telemetry = CRSFTelemetry(serial_port)

@@ -218,6 +218,14 @@ def test_config_falls_back_to_hardware_for_invalid_bts7960_pwm_mode(
     assert module.BTS7960_PWM_MODE == "HARDWARE"
 
 
+def test_config_defaults_mute_channel_to_ch6(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.delenv("CH_MUTE", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.CH_MUTE == 6
+
+
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
@@ -225,6 +233,7 @@ def test_docker_compose_exposes_beacon_environment_variables() -> None:
     assert "BEACON_ENABLED:" in compose
     assert "BEACON_DELAY_S:" in compose
     assert "CH_BEACON:" in compose
+    assert "CH_MUTE:" in compose
 
 
 def test_docker_compose_exposes_bts7960_environment_variables() -> None:
@@ -280,6 +289,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "BEACON_ENABLED=" in env_example
     assert "BEACON_DELAY_S=" in env_example
     assert "CH_BEACON=" in env_example
+    assert "CH_MUTE=" in env_example
     assert "MOTOR_DRIVER_TYPE=BTS7960" in env_example
     assert "BTS7960_PWM_MODE=SOFTWARE" in env_example
     assert "THROTTLE_FILTER_MODE=NONE" in env_example
