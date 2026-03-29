@@ -298,8 +298,8 @@ local function draw_soc_bar(x, y, w, h, pct)
 end
 
 local function draw_status_badge(x, y, label)
+  lcd.drawText(x + 3, y, label, SMLSIZE)
   draw_rounded_rect(x, y, HEADER_BADGE_W, HEADER_BADGE_H)
-  lcd.drawText(x + 3, y + 1, label, SMLSIZE)
   return x + HEADER_BADGE_W + HEADER_BADGE_GAP
 end
 
