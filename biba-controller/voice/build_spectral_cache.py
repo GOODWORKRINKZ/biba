@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def build_spectral_cache(voice_dir: str | Path, out_dir: str | Path) -> list[Path]:
-    from buzzer.wav_player import split_peak_frames_by_side, wav_to_peak_frames, write_peak_frame_cache
+    from buzzer.wav_player import mirror_peak_frames_to_both_sides, wav_to_peak_frames, write_peak_frame_cache
 
     source_dir = Path(voice_dir)
     if not source_dir.is_dir():
@@ -28,7 +28,7 @@ def build_spectral_cache(voice_dir: str | Path, out_dir: str | Path) -> list[Pat
     cache_paths: list[Path] = []
     for wav_path in wav_paths:
         frames = wav_to_peak_frames(str(wav_path))
-        left_frames, right_frames = split_peak_frames_by_side(frames)
+        left_frames, right_frames = mirror_peak_frames_to_both_sides(frames)
         left_cache_path = cache_dir / f"{wav_path.stem}.left.peaks.json"
         right_cache_path = cache_dir / f"{wav_path.stem}.right.peaks.json"
         write_peak_frame_cache(left_cache_path, wav_path, left_frames)

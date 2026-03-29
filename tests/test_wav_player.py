@@ -18,6 +18,7 @@ from buzzer.wav_player import (
     _SPECTRAL_DUTY_MAX,
     _SPECTRAL_FRAME_MS,
     _SPECTRAL_HOP_MS,
+    _SPECTRAL_N_PEAKS,
     _SPEECH_MAX_FREQ,
     _SPEECH_MIN_FREQ,
     _default_split_peak_frame_cache_paths,
@@ -423,15 +424,15 @@ class TestWavToPeakFrames:
 
         assert len(with_overlap) > len(without_overlap)
 
-    def test_default_analysis_limits_frames_to_two_peaks(self, tmp_path):
+    def test_default_analysis_preserves_three_peaks_for_sam_like_frame(self, tmp_path):
         import math
 
         n = 800
         samples = [
             int(
-                12000 * math.sin(2 * math.pi * 350 * i / 8000)
-                + 9000 * math.sin(2 * math.pi * 800 * i / 8000)
-                + 7000 * math.sin(2 * math.pi * 1400 * i / 8000)
+                14000 * math.sin(2 * math.pi * 258 * i / 8000)
+                + 11000 * math.sin(2 * math.pi * 516 * i / 8000)
+                + 9000 * math.sin(2 * math.pi * 904 * i / 8000)
             )
             for i in range(n)
         ]
@@ -442,7 +443,11 @@ class TestWavToPeakFrames:
 
         voiced = [peaks for peaks, _duration in frames if peaks]
         assert voiced
-        assert all(len(peaks) <= 2 for peaks in voiced)
+        assert any(len(peaks) >= 3 for peaks in voiced)
+        peak_freqs = [freq for freq, _duty in voiced[0]]
+        assert any(abs(freq - 258) < 100 for freq in peak_freqs)
+        assert any(abs(freq - 516) < 120 for freq in peak_freqs)
+        assert any(abs(freq - 904) < 160 for freq in peak_freqs)
 
     def test_default_analysis_filters_peaks_above_speech_band(self, tmp_path):
         import math
@@ -492,8 +497,9 @@ class TestWavToPeakFrames:
         """Constants should cover the full intended speech analysis band."""
         assert _SPEECH_MIN_FREQ <= 100
         assert _SPEECH_MAX_FREQ >= 1200
-        assert _SPECTRAL_FRAME_MS <= 12
-        assert _SPECTRAL_HOP_MS <= 6
+        assert _SPECTRAL_FRAME_MS <= 10
+        assert _SPECTRAL_HOP_MS <= 4
+        assert _SPECTRAL_N_PEAKS >= 3
 
     def test_default_analysis_rejects_low_frequency_hum(self, tmp_path):
         """A tone below the 100 Hz speech band should not appear in default peaks."""
@@ -758,6 +764,20 @@ class TestSpectralCache:
         assert right_frames == [([(560, 70000)], 6)]
         live_loader.assert_called_once_with(str(wav_path))
 
+    def test_load_or_build_split_peak_frames_mirrors_voice_frames_for_speech(self, tmp_path):
+        voice_dir = tmp_path / "voice"
+        voice_dir.mkdir()
+        wav_path = voice_dir / "arm.wav"
+        wav_path.write_bytes(_make_wav(samples=[0, 12000, -12000, 0] * 40))
+        live_frames = [([(258, 120000), (516, 100000), (904, 80000)], 4)]
+
+        with patch("buzzer.wav_player.wav_to_peak_frames", return_value=live_frames) as live_loader:
+            left_frames, right_frames = load_or_build_split_peak_frames(wav_path)
+
+        assert left_frames == live_frames
+        assert right_frames == live_frames
+        live_loader.assert_called_once_with(str(wav_path))
+
 
 # ---------------------------------------------------------------------------
 # MotorSynth.play_spectral integration tests
@@ -833,6 +853,36 @@ class TestMotorSynthPlaySpectral:
         assert call(19, 760, 80000) in pi.hardware_PWM.call_args_list
         assert call(12, 420, 120000) not in pi.hardware_PWM.call_args_list
         assert call(18, 760, 80000) not in pi.hardware_PWM.call_args_list
+
+    def test_play_spectral_with_motor_groups_mirrors_voice_speech_to_both_sides(self, tmp_path):
+        synth, pi = self._make_split_synth()
+        voice_dir = tmp_path / "voice"
+        voice_dir.mkdir()
+        import math
+
+        samples = [
+            int(
+                14000 * math.sin(2 * math.pi * 258 * i / 8000)
+                + 11000 * math.sin(2 * math.pi * 516 * i / 8000)
+                + 9000 * math.sin(2 * math.pi * 904 * i / 8000)
+            )
+            for i in range(800)
+        ]
+        wav_path = voice_dir / "arm.wav"
+        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
+        pi.hardware_PWM.reset_mock()
+
+        with patch("buzzer.wav_player.time.sleep"):
+            synth.play_spectral(str(wav_path))
+
+        calls = pi.hardware_PWM.call_args_list
+        assert call(18, 258, 0) not in calls
+        positive_calls = [entry.args for entry in calls if entry.args[1] > 0 and entry.args[2] > 0]
+        left_freqs = {freq for pin, freq, duty in positive_calls if pin in {18, 13}}
+        right_freqs = {freq for pin, freq, duty in positive_calls if pin in {12, 19}}
+        assert left_freqs
+        assert right_freqs
+        assert left_freqs == right_freqs
 
     def test_play_spectral_default_path_emits_multiple_voiced_frequencies(self, tmp_path):
         synth, pi = self._make_synth()

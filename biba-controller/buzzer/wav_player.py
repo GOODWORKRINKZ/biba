@@ -31,12 +31,24 @@ DEFAULT_CARRIER_HZ = 16000
 _DUTY_MAX = 1_000_000
 _INTERRUPT_CHECK_INTERVAL = 256  # check interrupt every N samples
 _SPECTRAL_DUTY_MAX = 500_000  # 50 % duty → max fundamental amplitude
-_SPECTRAL_FRAME_MS = 12
-_SPECTRAL_HOP_MS = 6
-_SPECTRAL_N_PEAKS = 2
+_SPECTRAL_FRAME_MS = 8
+_SPECTRAL_HOP_MS = 4
+_SPECTRAL_N_PEAKS = 3
 _SPEECH_MIN_FREQ = 100
 _SPEECH_MAX_FREQ = 1200
 _SPECTRAL_CACHE_VERSION = 1
+
+
+def _clone_peak_frames(
+    frames: list[tuple[list[tuple[int, int]], int]],
+) -> list[tuple[list[tuple[int, int]], int]]:
+    return [([(freq, duty) for freq, duty in peaks], duration_ms) for peaks, duration_ms in frames]
+
+
+def mirror_peak_frames_to_both_sides(
+    frames: list[tuple[list[tuple[int, int]], int]],
+) -> tuple[list[tuple[list[tuple[int, int]], int]], list[tuple[list[tuple[int, int]], int]]]:
+    return _clone_peak_frames(frames), _clone_peak_frames(frames)
 
 
 def split_peak_frames_by_side(
@@ -116,7 +128,7 @@ def _select_peak_bins(
     chosen: list[tuple[int, float]] = []
     chosen_bins: list[int] = []
     for bin_idx, magnitude in ranked:
-        if magnitude < top_mag * 0.25:
+        if magnitude < top_mag * 0.18:
             break
         if any(abs(bin_idx - existing) <= 1 for existing in chosen_bins):
             continue
@@ -125,6 +137,7 @@ def _select_peak_bins(
         chosen_bins.append(bin_idx)
         if len(chosen) >= n_peaks:
             break
+    chosen.sort(key=lambda item: item[0])
     return chosen
 
 
@@ -462,6 +475,8 @@ def load_or_build_split_peak_frames(
             return left_frames, right_frames
 
     live_frames = wav_to_peak_frames(str(source_file))
+    if source_file.parent.name == "voice":
+        return mirror_peak_frames_to_both_sides(live_frames)
     return split_peak_frames_by_side(live_frames)
 
 
