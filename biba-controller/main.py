@@ -229,6 +229,46 @@ def _play_named_async_if_allowed(
     return True
 
 
+def _replay_current_audio_state_after_unmute(
+    voice_selector: VoiceSelector,
+    buzzer,
+    *,
+    connected: bool,
+    armed: bool,
+) -> bool:
+    if armed:
+        if config.ARM_VOICE_ENABLED and _play_grouped_voice_async_if_allowed(
+            voice_selector,
+            "arm",
+            config.ARM_VOICES,
+            buzzer,
+            mute_active=False,
+        ):
+            return True
+        return _play_buzzer_method_async_if_allowed(
+            buzzer,
+            "arm_tone",
+            mute_active=False,
+        )
+
+    if connected:
+        if _play_grouped_voice_async_if_allowed(
+            voice_selector,
+            "connected",
+            config.CONNECTED_VOICES,
+            buzzer,
+            mute_active=False,
+        ):
+            return True
+        return _play_buzzer_method_async_if_allowed(
+            buzzer,
+            "connected_tone",
+            mute_active=False,
+        )
+
+    return False
+
+
 def _create_synth_pins() -> tuple[list[int], list[int]]:
     left_pwm_pins, left_comp_pins, right_pwm_pins, right_comp_pins = _create_synth_motor_groups()
     return left_pwm_pins + right_pwm_pins, left_comp_pins + right_comp_pins
@@ -701,9 +741,12 @@ def main() -> int:
                 received_frame = True
                 last_frame_time = loop_started_at
                 arm_state_changed = False
+                connection_state_changed = False
+                was_muted = mute_active
                 mute_active = _is_muted(channels)
 
                 if not had_connection:
+                    connection_state_changed = True
                     had_connection = True
                     if not _play_grouped_voice_async_if_allowed(
                         voice_selector,
@@ -753,6 +796,14 @@ def main() -> int:
                                 "disarm_tone",
                                 mute_active=mute_active,
                             )
+
+                if was_muted and not mute_active and not arm_state_changed and not connection_state_changed:
+                    _replay_current_audio_state_after_unmute(
+                        voice_selector,
+                        buzzer,
+                        connected=had_connection,
+                        armed=armed,
+                    )
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
 

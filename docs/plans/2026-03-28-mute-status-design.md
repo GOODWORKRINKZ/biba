@@ -2,7 +2,7 @@
 
 ## Summary
 
-Add an RC-controlled mute mode on `CH6` that suppresses normal buzzer and voice playback while leaving hardware SOS/beacon playback untouched. Expose the runtime sound state to the Lua telemetry screen by rendering compact header letters: `A` for armed, `M` for mute, `B` for beacon, and a charging icon when battery current indicates charging.
+Add an RC-controlled mute mode on `CH6` that suppresses normal buzzer and voice playback while leaving hardware SOS/beacon playback untouched. Expose operator-facing sound state on the Lua telemetry screen by rendering compact header badges immediately after `BiBa`: lowercase `a`, `m`, and `b` are derived from the local app switch positions on the transmitter, while charging remains a fact-based battery indicator rendered as a lightning glyph.
 
 ## Problem
 
@@ -13,9 +13,10 @@ The controller currently plays startup, connection, arm, disarm, failsafe, and l
 1. Add a dedicated mute RC channel with a default of `CH6`.
 2. Mute ordinary sounds consistently across synchronous and asynchronous voice/tone paths.
 3. Preserve SOS playback, including the beacon-triggered hardware path.
-4. Show `A`, `M`, and `B` together in the Lua header when those states are active.
+4. Show `a`, `m`, and `b` together in the Lua header when the corresponding app switches are active.
 5. Show a charging indicator in the same header only while the battery is charging.
-6. Preserve the existing telemetry mappings for CPU, RAM, and wheel currents.
+6. Keep the badges visually stable when `RQly` changes by drawing them after `BiBa`, not in the right-aligned header text.
+7. Preserve the existing telemetry mappings for CPU, RAM, and wheel currents.
 
 ## Non-Goals
 
@@ -67,9 +68,16 @@ This preserves the existing Lua battery-direction behavior while adding three in
 
 ### 4. Lua header rendering
 
-Update `lua/SCRIPTS/TELEMETRY/biba.lua` to decode the extended `Capa/Mah/mAh` bitmask. Keep `read_battery_direction()` behavior compatible by masking the low 2 bits, but stop rendering `CHG/DIS` text in the body because it is noisy and redundant once the header carries the charging state. Add a helper that decodes `A`, `M`, and `B` from status bits and appends a charging marker only when the low 2 bits indicate `CHG`.
+Update `lua/SCRIPTS/TELEMETRY/biba.lua` so the displayed badges no longer depend on robot status telemetry for `a/m/b`. The Lua screen should read the local app switch positions directly from EdgeTX channels and render those states immediately, without waiting for a robot response. Because the script already reads transmitter channels for wheel animation, this keeps the behavior local to the radio and avoids telemetry lag.
 
-Render the letters in the existing top header row, next to the quality/source text. Multiple letters may appear simultaneously. The charging marker appears only for charging and is absent while idle or discharging.
+The header will be split into two visual regions:
+
+- left: `BiBa` followed by a fixed gap and then one badge per active state
+- right: the existing `Qxxx` and optional source text (`BMS` / `PCK`)
+
+Each badge is its own small rounded rectangle. `a`, `m`, and `b` use lowercase text. Charging is not shown as text; instead, render a small lightning glyph inside its own rounded rectangle. The charging badge continues to come from the battery direction bits in the telemetry payload, because that state should remain factual rather than inferred from a switch.
+
+Stop rendering `CHG/DIS` text in the body because it is noisy and redundant once the charging glyph exists.
 
 ### 5. Testing strategy
 
@@ -77,14 +85,14 @@ Use TDD across three layers:
 
 1. `tests/test_main.py` for runtime mute gating and status-bit composition.
 2. `tests/test_telemetry.py` for battery frame packing with the new status bitmask.
-3. `tests/test_lua_telemetry_screen.py` for Lua decoding, charging-icon rendering, and removal of the old `CHG/DIS` body labels.
+3. `tests/test_lua_telemetry_screen.py` for Lua channel-based badge decoding, per-badge rounded-rectangle rendering, charging lightning rendering, and removal of the old `CHG/DIS` body labels.
 
 The tests should prove both muted and unmuted behavior, and should explicitly cover the invariant that SOS is not blocked.
 
 ## Error Handling and Compatibility
 
 - If `CH_MUTE` is out of range for a given receiver frame, the controller treats mute as inactive, matching the current `_get_channel()` fallback behavior.
-- Existing Lua installs that do not receive the new controller telemetry will continue to show no status letters.
+- Existing Lua installs that do not receive the new controller telemetry will continue to omit the charging badge, but `a/m/b` remain available because they are sourced locally from the transmitter.
 - Existing battery direction bits remain stable because direction decoding continues to use only the low 2 bits.
 
 ## Deployment Notes

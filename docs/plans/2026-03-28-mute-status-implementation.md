@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add a mute RC channel that suppresses ordinary sounds while preserving SOS playback, and expose `A/M/B` plus a charging indicator in the Lua telemetry header through an extended battery telemetry bitmask.
+**Goal:** Add a mute RC channel that suppresses ordinary sounds while preserving SOS playback, and expose local app-switch badges plus a charging lightning badge in the Lua telemetry header.
 
-**Architecture:** Keep runtime sound suppression in `main.py` behind small helper functions so the control loop remains readable and the mute policy is centralized. Reuse the existing CRSF battery payload shape by extending the already repurposed `capacity_mah` field into a status bitmask that carries direction plus armed, mute, and beacon flags; then decode those bits in Lua, render the compact status letters in the header, and derive a charging icon from the direction bits while removing the old `CHG/DIS` body text.
+**Architecture:** Keep runtime sound suppression in `main.py` behind small helper functions so the control loop remains readable and the mute policy is centralized. Preserve the existing battery direction bitmask for charging, but render UI badges from two sources in Lua: local transmitter channels for `a/m/b`, and battery direction bits for the charging lightning badge. Draw each active badge as its own small rounded rectangle immediately after `BiBa`, leaving right-aligned quality/source text unchanged.
 
 **Tech Stack:** Python 3.10, pytest, CRSF telemetry helpers, EdgeTX Lua telemetry script.
 
@@ -92,7 +92,7 @@ Expected: PASS.
 
 Do not commit unless explicitly requested.
 
-### Task 3: Add failing Lua decoding and charging-icon header tests
+### Task 3: Add failing Lua local-badge and charging-lightning tests
 
 **Files:**
 - Modify: `tests/test_lua_telemetry_screen.py`
@@ -102,24 +102,25 @@ Do not commit unless explicitly requested.
 
 Add assertions that:
 - Lua masks low bits when decoding battery direction
-- Lua exposes a helper that extracts `A/M/B` letters plus a charging icon from the same capacity sensor
-- compact and wide headers include the status string without duplicating source text formatting
+- Lua exposes a helper that reads the local app switch channels for `a/m/b`
+- compact and wide headers draw per-badge rounded rectangles after `BiBa`
+- charging is rendered with a lightning helper instead of a text glyph
 - compact and wide body layouts stop rendering `CHG/DIS` text next to current values
 
 **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_lua_telemetry_screen.py -q -k "status or header or battery_direction"`
 
-Expected: FAIL because Lua currently reads only the raw direction code and renders no status letters.
+Expected: FAIL because Lua currently right-aligns a concatenated status string and does not draw channel-based badges or a lightning glyph.
 
 **Step 3: Write minimal implementation**
 
 Update `lua/SCRIPTS/TELEMETRY/biba.lua` to:
-- add bitmask constants for direction and `A/M/B`
+- add local app-channel badge helpers for arm, mute, and beacon
 - mask the low bits in `read_battery_direction()`
-- add a `read_status_icons()` helper that appends a charging indicator only for `CHG`
-- pass the decoded status string into `draw_header()` and `draw_header_wide()`
-- render the letters in the top header row
+- add a small lightning draw helper for charging
+- pass badge data into `draw_header()` and `draw_header_wide()`
+- render one rounded-rectangle badge per active icon immediately after `BiBa`
 - remove body rendering of `CHG/DIS`
 
 **Step 4: Run test to verify it passes**

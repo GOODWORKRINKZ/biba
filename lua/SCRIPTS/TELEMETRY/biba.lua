@@ -5,11 +5,15 @@ local CELL_COUNT = 6
 local LOW_CELL_VOLTAGE = 3.5
 local BATTERY_HOLDOFF_CS = 1200
 local BATTERY_DIRECTION_MASK = 0x03
-local STATUS_ICON_ARMED = 0x04
-local STATUS_ICON_MUTED = 0x08
-local STATUS_ICON_BEACON = 0x10
 local LOG_SERIAL_BAUD = 115200
 local LOG_INTERVAL_CS = 20
+local APP_ARM_CHANNEL = "ch5"
+local APP_BEACON_CHANNEL = "ch6"
+local APP_MUTE_CHANNEL = "ch7"
+local APP_SWITCH_THRESHOLD = 300
+local HEADER_BADGE_W = 10
+local HEADER_BADGE_H = 8
+local HEADER_BADGE_GAP = 2
 
 -- Sound state tracking
 local prev_connected = nil  -- nil = first run, true/false after
@@ -191,14 +195,12 @@ local function read_battery_direction()
   return ""
 end
 
-local function read_status_icons()
-  local status_flags = sensor({ "Capa", "Mah", "mAh" }, 0)
-  local icons = ""
-  if bit32.band(status_flags, STATUS_ICON_ARMED) ~= 0 then icons = icons .. "A" end
-  if bit32.band(status_flags, STATUS_ICON_MUTED) ~= 0 then icons = icons .. "M" end
-  if bit32.band(status_flags, STATUS_ICON_BEACON) ~= 0 then icons = icons .. "B" end
-  if read_battery_direction() == "CHG" then icons = icons .. "C" end
-  return icons
+local function read_local_status_badges()
+  local badges = {}
+  if sensor("ch5", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "a" end
+  if sensor("ch7", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
+  if sensor("ch6", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "b" end
+  return badges
 end
 
 -- ──────────────────────────────────────────────────
@@ -295,15 +297,39 @@ local function draw_soc_bar(x, y, w, h, pct)
   end
 end
 
+local function draw_status_badge(x, y, label)
+  draw_rounded_rect(x, y, HEADER_BADGE_W, HEADER_BADGE_H)
+  lcd.drawText(x + 3, y + 1, label, SMLSIZE)
+  return x + HEADER_BADGE_W + HEADER_BADGE_GAP
+end
+
+local function draw_charge_icon(x, y)
+  lcd.drawLine(x + 6, y + 1, x + 4, y + 4, SOLID, FORCE)
+  lcd.drawLine(x + 4, y + 4, x + 6, y + 4, SOLID, FORCE)
+  lcd.drawLine(x + 6, y + 4, x + 3, y + 7, SOLID, FORCE)
+end
+
+local function draw_status_badges(x, y, badges, charging_active)
+  for _, badge in ipairs(badges) do
+    x = draw_status_badge(x, y, badge)
+  end
+  if charging_active then
+    draw_rounded_rect(x, y, HEADER_BADGE_W, HEADER_BADGE_H)
+    draw_charge_icon(x, y)
+    x = x + HEADER_BADGE_W + HEADER_BADGE_GAP
+  end
+  return x
+end
+
 -- ──────────────────────────────────────────────────
 -- Drawing: header row (BiBa + quality + source)
 -- ──────────────────────────────────────────────────
 
-local function draw_header(w, rqly, cell_src, status_icons)
+local function draw_header(w, rqly, cell_src, status_badges, charging_active)
   lcd.drawText(0, 0, "BiBa", SMLSIZE)
+  draw_status_badges(23, 0, status_badges, charging_active)
   local hdr = string.format("Q%03d", rqly)
   if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
-  if status_icons ~= "" then hdr = hdr .. " " .. status_icons end
   lcd.drawText(w - #hdr * 5, 0, hdr, SMLSIZE)
 end
 
@@ -311,11 +337,11 @@ end
 -- Drawing: wide header row (BiBa + quality + source)
 -- ──────────────────────────────────────────────────
 
-local function draw_header_wide(w, rqly, cell_src, status_icons)
+local function draw_header_wide(w, rqly, cell_src, status_badges, charging_active)
   lcd.drawText(4, 2, "BiBa", DBLSIZE)
+  draw_status_badges(38, 3, status_badges, charging_active)
   local hdr = string.format("Q%03d", rqly)
   if cell_src ~= "" then hdr = hdr .. " " .. cell_src end
-  if status_icons ~= "" then hdr = hdr .. " " .. status_icons end
   lcd.drawText(w - #hdr * 6, 4, hdr, SMLSIZE)
 end
 
@@ -348,10 +374,10 @@ end
 -- Drawing: compact connected (128×64)
 -- ──────────────────────────────────────────────────
 
-local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_badges, charging_active, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
 
-  draw_header(w, rqly, cell_src, status_icons)
+  draw_header(w, rqly, cell_src, status_badges, charging_active)
   draw_cell_frame(w, cells)
 
   -- Wheels: 10×42, flush to screen edges, top-aligned with body
@@ -396,11 +422,11 @@ end
 -- Drawing: wide connected (≥212×128)
 -- ──────────────────────────────────────────────────
 
-local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_badges, charging_active, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   local w = sw()
   local total_current = format_current_ma(current)
 
-  draw_header_wide(w, rqly, cell_src, status_icons)
+  draw_header_wide(w, rqly, cell_src, status_badges, charging_active)
 
   local wheel_w  = 18
   local wheel_h  = 76
@@ -547,7 +573,7 @@ local function run(event)
   local left_current = raw_left_current
   local right_current = raw_right_current
   local battery_direction = raw_battery_direction
-  local status_icons = read_status_icons()
+  local status_badges = read_local_status_badges()
   local mn, mx, delta = cell_stats(cells)
   local holdoff_active = false
 
@@ -565,19 +591,16 @@ local function run(event)
     mx = 0
     delta = 0
   end
-
-  if battery_direction ~= "CHG" then
-    status_icons = string.gsub(status_icons, "C", "")
-  end
+  local charging_active = battery_direction == "CHG"
 
   log_telemetry(now, connected, holdoff_active,
     raw_voltage, raw_current, raw_pct, rqly, raw_cell_src, raw_cells, raw_left_current, raw_right_current, raw_battery_direction,
     voltage, current, pct, cell_src, cells, left_current, right_current, battery_direction)
 
   if sw() >= 212 and sh() >= 128 then
-    draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_badges, charging_active, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   else
-    draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_icons, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
+    draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_badges, charging_active, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)
   end
 
   -- Low battery sound (every ~10 seconds)

@@ -416,6 +416,184 @@ def test_main_allows_sos_beacon_while_muted(monkeypatch: pytest.MonkeyPatch) -> 
     assert sos_calls == ["sos"]
 
 
+def test_main_replays_arm_sound_when_mute_is_disabled_while_still_armed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    tone_calls: list[str] = []
+    frames = iter(
+        [
+            [0.0, 0.0, 0.0, 0.0, 0.98, 0.0, 0.98, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.98, 0.0, -0.98, 0.0],
+        ]
+    )
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            try:
+                channels = next(frames)
+            except StopIteration:
+                main.RUNNING = False
+                return None
+            if channels[main.config.CH_MUTE] < 0:
+                main.RUNNING = False
+            return channels
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone_async(self) -> None:
+            tone_calls.append("connected")
+
+        def disconnected_tone_async(self) -> None:
+            tone_calls.append("disconnected")
+
+        def arm_tone_async(self) -> None:
+            tone_calls.append("arm")
+
+        def disarm_tone_async(self) -> None:
+            tone_calls.append("disarm")
+
+        def failsafe_tone_async(self) -> None:
+            tone_calls.append("failsafe")
+
+        def low_voltage_alarm_async(self) -> None:
+            tone_calls.append("low")
+
+        def sos_beacon(self) -> None:
+            tone_calls.append("sos")
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeStats:
+        def cpu_percent(self) -> float:
+            return 0.0
+
+        def memory_percent(self) -> float:
+            return 0.0
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "SystemStats", FakeStats)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "ARM_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_MUTE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert tone_calls == ["arm"]
+
+
 def test_main_uses_elapsed_time_between_drive_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     drive_calls: list[tuple[float, float, float]] = []
