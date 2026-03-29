@@ -1,6 +1,6 @@
 # BiBa
 
-BiBa — это колесная робот-платформа на базе Raspberry Pi Zero 2W с управлением по ExpressLRS/CRSF, телеметрией от Daly 6S BMS по BLE или USB-UART, двухканальным моторным драйвером и звуковой индикацией через моторы.
+BiBa — это колесная робот-платформа на базе Raspberry Pi Zero 2W с управлением по ExpressLRS/CRSF, телеметрией от Daly 6S BMS по BLE или USB-UART, двухканальными драйверами BTS7960 и звуковой индикацией через моторы.
 
 ## Состав железа
 
@@ -9,6 +9,7 @@ BiBa — это колесная робот-платформа на базе Ras
 - Daly BMS по BLE или с USB-UART адаптером
 - 6S аккумулятор с телеметрией BMS
 - Два драйвера BTS7960 для левого и правого моторов
+- ADS1115 для current sense и телеметрии токов колёс (опционально)
 
 ## Распиновка
 
@@ -16,6 +17,8 @@ BiBa — это колесная робот-платформа на базе Ras
 | --- | --- | --- |
 | ELRS TX | 14 | 8 |
 | ELRS RX | 15 | 10 |
+| I2C SDA (ADS1115, опционально) | 2 | 3 |
+| I2C SCL (ADS1115, опционально) | 3 | 5 |
 | Left BTS7960 RPWM | 18 | 12 |
 | Left BTS7960 LPWM | 13 | 33 |
 | Left BTS7960 REN | 23 | 16 |
@@ -32,7 +35,7 @@ BiBa — это колесная робот-платформа на базе Ras
 
 ## Структура репозитория
 
-- `biba-controller/` — Python-контроллер для CRSF, моторов, моторного synth/audio и телеметрии BMS
+- `biba-controller/` — Python-контроллер для CRSF, моторов, моторного audio/voice runtime и телеметрии BMS
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
 - `.github/workflows/` — global builder workflows для Ruff, pytest, shellcheck и сборки arm64 Docker-образа в GHCR
 - `scripts/setup/` — bringup-скрипты для Raspberry Pi (Docker, Compose, systemd-автозапуск)
@@ -56,6 +59,7 @@ BiBa — это колесная робот-платформа на базе Ras
 
 3. Перезагрузите Raspberry Pi.
 4. Настройте Daly BMS по BLE или подключите USB-UART адаптер, если используете UART-вариант.
+5. Если используете ADS1115 для current sense, включите I2C и проверьте наличие `/dev/i2c-1`.
 
 Вместо ручной установки Docker/Compose можно использовать bringup-скрипт:
 
@@ -115,11 +119,16 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `MOTOR_TRIM_MAX_EFFECT=0.20` — максимальная коррекция, применяемая к одной стороне от полного хода `CH9`
 - `MOTOR_TRIM_CONFIRM_HOLD_S=5.0` — сколько секунд держать trim-жест для входа и подтверждения
 - `MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json` — файл сохранённого trim на persistent Docker volume
+- `ENABLE_RC_MELODIES=0|1` — включает выбор BLHeli-мелодий с передатчика
+- `CH_MELODY=8` — канал выбора мелодии, если `ENABLE_RC_MELODIES=1`
+- `STARTUP_MELODY=biba_signature` — стартовая BLHeli-мелодия при включённом melody-runtime
 - `RAMP_ACCEL_RATE=2.0` — скорость разгона мотора (единиц/сек, 0→100% за 0.5с)
 - `RAMP_DECEL_RATE=0.5` — скорость отпускания/торможения (единиц/сек, 100%→0 за 2с)
 - `RAMP_REVERSE_DECEL_RATE=0.5` — скорость подхода к нулю перед сменой направления; меньше значение = мягче переход в реверс
 - `RAMP_ZERO_HOLD_S=0.15` — пауза на нуле (секунды) после торможения перед реверсом; даёт мотору физически остановиться и убирает «гавканье» BTS7960
 - `MOTOR_DEADBAND=0.05` — мёртвая зона стика (меньше порога → мотор стоит)
+
+Если нужно включить current sense через ADS1115, дополнительно добавьте в `docker-compose.yml` соответствующие env-переменные из `docs/wiring.md`: `MOTOR_CURRENT_SENSE_ENABLED`, `MOTOR_CURRENT_LIMITING_ENABLED`, `MOTOR_CURRENT_SENSE_*`, `LEFT_MOTOR_MAX_CURRENT_A`, `RIGHT_MOTOR_MAX_CURRENT_A`, `LEFT_MOTOR_MAX_POWER_W`, `RIGHT_MOTOR_MAX_POWER_W`.
 
 `HARDWARE` остаётся дефолтом в коде для совместимых конфигураций, где PWM-линии не конфликтуют между собой. Для текущего робота override на `SOFTWARE` считается временной эксплуатационной конфигурацией.
 
@@ -131,6 +140,8 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - ручное включение с тумблера передатчика через `CH_BEACON`
 - общий мьют обычных звуков через `CH_MUTE`
 - отключение маяка через `BEACON_ENABLED=0`
+
+Отдельный hardware buzzer в текущей конфигурации не нужен: аудио, маяк и voice playback идут через моторный synth.
 
 ## Motor Trim
 

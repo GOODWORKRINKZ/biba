@@ -5,10 +5,10 @@
 ### Оборудование
 
 - Raspberry Pi Zero 2W (или другая плата с arm64 и GPIO)
-- ELRS-приемник, подключенный к UART (`/dev/ttyAMA0`)
+- ELRS-приемник, подключенный к UART (`/dev/ttyS0`)
 - Daly BMS по BLE или через USB-UART адаптер (`/dev/ttyUSB0`)
-- Двухканальный драйвер моторов (PWM + DIR)
-- Буззер на GPIO17
+- Два драйвера BTS7960 для левого и правого моторов
+- ADS1115 для current sense и телеметрии токов колёс (опционально)
 - 6S LiPo аккумулятор
 
 ### Подключение
@@ -102,7 +102,7 @@ bash ~/biba/scripts/diagnostics.sh
 
 | Переменная | По умолчанию | Описание |
 |------------|-------------|---------|
-| `CRSF_PORT` | `/dev/ttyAMA0` | UART-порт ELRS |
+| `CRSF_PORT` | `/dev/ttyS0` | UART-порт ELRS |
 | `BMS_TRANSPORT` | `BLE` | Транспорт BMS: `BLE` или явный fallback `UART` |
 | `BMS_PORT` | `/dev/ttyUSB0` | USB-UART порт Daly BMS |
 | `BMS_BLE_ADDRESS` | `` | MAC-адрес BLE-модуля Daly |
@@ -114,23 +114,27 @@ bash ~/biba/scripts/diagnostics.sh
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
 | `MOTOR_DRIVER_TYPE` | `BTS7960` | Тип драйвера моторов: штатный `BTS7960` или старый `PWM_DIR` |
 | `BTS7960_PWM_MODE` | `HARDWARE` | Режим PWM для `BTS7960`: `HARDWARE` по умолчанию в коде, `SOFTWARE` для текущей двухмоторной проводки на Pi Zero 2W |
-| `CH_STEERING` | `0` | Номер канала руления |
+| `CH_STEERING` | `3` | Номер канала руления |
 | `CH_THROTTLE` | `1` | Номер канала газа |
 | `CH_ARM` | `4` | Номер канала арма |
-| `THROTTLE_FILTER_MODE` | `KALMAN` | Фильтрация газа до wheel-mix; `NONE` отключает, `KALMAN` сглаживает выбросы канала |
+| `THROTTLE_FILTER_MODE` | `NONE` | Фильтрация газа до wheel-mix; `NONE` отключает, `KALMAN` сглаживает выбросы канала |
 | `THROTTLE_KALMAN_PROCESS_NOISE` | `0.02` | Насколько быстро фильтр принимает изменение реального газа |
 | `THROTTLE_KALMAN_MEASUREMENT_NOISE` | `0.5` | Насколько сильно фильтр подавляет шум и ложные выбросы канала |
 | `BEACON_ENABLED` | `1` | Включить звуковой маяк/SOS на роботе |
 | `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
-| `CH_BEACON` | `5` | Канал тумблера для ручного включения маяка |
+| `CH_BEACON` | `7` | Канал тумблера для ручного включения маяка |
 | `CH_MUTE` | `6` | Канал мьюта обычных звуков; SOS не приглушается |
 | `CH_TRIM` | `8` | `CH9`; live-источник trim в режиме калибровки прямолинейности |
 | `MOTOR_TRIM_MAX_EFFECT` | `0.20` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
 | `MOTOR_TRIM_CONFIRM_HOLD_S` | `5.0` | Длительность trim-жеста для входа и подтверждения |
 | `MOTOR_TRIM_SETTINGS_PATH` | `/data/motor-trim.json` | Путь к persistent JSON-файлу сохранённого trim |
+| `ENABLE_RC_MELODIES` | `0` | Включает выбор BLHeli-мелодий с передатчика |
+| `CH_MELODY` | `8` | Канал выбора мелодии при `ENABLE_RC_MELODIES=1` |
+| `STARTUP_MELODY` | `biba_signature` | Стартовая BLHeli-мелодия |
 | `RAMP_ACCEL_RATE` | `2.0` | Макс. скорость разгона мотора (ед/сек); 0→100% за 0.5с |
+| `PWM_FREQUENCY_HZ` | `20000` | Частота PWM для motor runtime |
 | `RAMP_DECEL_RATE` | `0.5` | Макс. скорость отпускания/торможения (ед/сек); 100%→0 за 2с |
-| `RAMP_REVERSE_DECEL_RATE` | `1.0` | Скорость подхода к нулю перед сменой направления; меньше значение делает реверс мягче |
+| `RAMP_REVERSE_DECEL_RATE` | `0.5` | Скорость подхода к нулю перед сменой направления; меньше значение делает реверс мягче |
 | `RAMP_ZERO_HOLD_S` | `0.15` | Пауза на нуле (сек) после торможения перед реверсом; даёт мотору физически остановиться |
 | `MOTOR_DEADBAND` | `0.05` | Мёртвая зона: значения ниже порога → мотор стоит |
 | `LEFT_MOTOR_RPWM` | `18` | Левый BTS7960 `RPWM` |
@@ -154,7 +158,7 @@ MOTOR_DRIVER_TYPE=BTS7960
 BTS7960_PWM_MODE=SOFTWARE
 BEACON_ENABLED=1
 BEACON_DELAY_S=300
-CH_BEACON=5
+CH_BEACON=7
 CH_MUTE=6
 CH_TRIM=8
 MOTOR_TRIM_MAX_EFFECT=0.20
@@ -183,7 +187,7 @@ BMS_TRANSPORT=UART
 
 ### Звуковая индикация
 
-BiBa использует пьезо-буззер на GPIO17 для:
+BiBa использует моторный synth/audio runtime для:
 
 - startup/shutdown мелодий
 - arm/disarm сигналов
@@ -264,7 +268,7 @@ docker compose logs --tail 50 biba-controller
 
 ```bash
 bblogs | grep -i crsf           # поиск ошибок CRSF
-ls -la /dev/ttyAMA0             # проверить UART
+ls -la /dev/ttyS0               # проверить UART
 ```
 
 Убедитесь, что:
