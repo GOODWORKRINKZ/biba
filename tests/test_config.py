@@ -226,6 +226,20 @@ def test_config_defaults_mute_channel_to_ch6(monkeypatch: pytest.MonkeyPatch, co
     assert module.CH_MUTE == 6
 
 
+def test_config_defaults_trim_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.delenv("CH_TRIM", raising=False)
+    monkeypatch.delenv("MOTOR_TRIM_MAX_EFFECT", raising=False)
+    monkeypatch.delenv("MOTOR_TRIM_CONFIRM_HOLD_S", raising=False)
+    monkeypatch.delenv("MOTOR_TRIM_SETTINGS_PATH", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.CH_TRIM == 8
+    assert module.MOTOR_TRIM_MAX_EFFECT == pytest.approx(0.20)
+    assert module.MOTOR_TRIM_CONFIRM_HOLD_S == pytest.approx(5.0)
+    assert module.MOTOR_TRIM_SETTINGS_PATH == "/data/motor-trim.json"
+
+
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
@@ -234,6 +248,30 @@ def test_docker_compose_exposes_beacon_environment_variables() -> None:
     assert "BEACON_DELAY_S:" in compose
     assert "CH_BEACON:" in compose
     assert "CH_MUTE:" in compose
+
+
+def test_env_example_exposes_trim_environment_variables() -> None:
+    with open(".env.example", encoding="utf-8") as env_file:
+        env_example = env_file.read()
+
+    assert "CH_TRIM=" in env_example
+    assert "MOTOR_TRIM_MAX_EFFECT=" in env_example
+    assert "MOTOR_TRIM_CONFIRM_HOLD_S=" in env_example
+    assert "MOTOR_TRIM_SETTINGS_PATH=" in env_example
+
+
+def test_docker_compose_exposes_trim_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "CH_TRIM:" in compose
+    assert "CH_TRIM: ${CH_TRIM:-8}" in compose
+    assert "MOTOR_TRIM_MAX_EFFECT:" in compose
+    assert "MOTOR_TRIM_MAX_EFFECT: ${MOTOR_TRIM_MAX_EFFECT:-0.20}" in compose
+    assert "MOTOR_TRIM_CONFIRM_HOLD_S:" in compose
+    assert "MOTOR_TRIM_CONFIRM_HOLD_S: ${MOTOR_TRIM_CONFIRM_HOLD_S:-5.0}" in compose
+    assert "MOTOR_TRIM_SETTINGS_PATH:" in compose
+    assert "MOTOR_TRIM_SETTINGS_PATH: ${MOTOR_TRIM_SETTINGS_PATH:-/data/motor-trim.json}" in compose
 
 
 def test_docker_compose_exposes_bts7960_environment_variables() -> None:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import signal
 import threading
 import time
@@ -35,6 +37,13 @@ _BATTERY_DIRECTION_MASK = 0b00011
 _BATTERY_STATUS_ARMED = 0b00100
 _BATTERY_STATUS_MUTED = 0b01000
 _BATTERY_STATUS_BEACON = 0b10000
+_BATTERY_STATUS_TRIM_MODE = 0b100000
+_TRIM_GESTURE_CHANNEL_COUNT = 4
+_TRIM_GESTURE_HIGH_THRESHOLD = 0.9
+
+
+def _clamp_motor_trim(trim: float) -> float:
+    return max(-config.MOTOR_TRIM_MAX_EFFECT, min(config.MOTOR_TRIM_MAX_EFFECT, trim))
 
 
 class _NullDrive:
@@ -358,6 +367,17 @@ def _get_channel(channels: list[float], index: int) -> float:
     return channels[index]
 
 
+def _trim_gesture_active(channels: list[float]) -> bool:
+    for index in range(_TRIM_GESTURE_CHANNEL_COUNT):
+        if _get_channel(channels, index) < _TRIM_GESTURE_HIGH_THRESHOLD:
+            return False
+    return True
+
+
+def _live_motor_trim_from_channels(channels: list[float]) -> float:
+    return _clamp_motor_trim(_get_channel(channels, config.CH_TRIM) * config.MOTOR_TRIM_MAX_EFFECT)
+
+
 def _battery_is_low(state: BatteryState) -> bool:
     if state.cells and state.min_cell > 0:
         return state.min_cell <= config.LOW_CELL_VOLTAGE
@@ -469,12 +489,49 @@ def _battery_telemetry_direction_label(current_a: float) -> str:
     return "IDLE"
 
 
+def _apply_motor_trim(left_duty: float, right_duty: float, trim: float) -> tuple[float, float]:
+    clamped_trim = _clamp_motor_trim(trim)
+    if clamped_trim > 0.0:
+        return left_duty, right_duty * (1.0 - clamped_trim)
+    if clamped_trim < 0.0:
+        return left_duty * (1.0 - abs(clamped_trim)), right_duty
+    return left_duty, right_duty
+
+
+def _load_saved_motor_trim() -> float:
+    settings_path = Path(config.MOTOR_TRIM_SETTINGS_PATH)
+    if not settings_path.exists():
+        return 0.0
+
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+        trim = float(payload.get("trim", 0.0))
+    except Exception as exc:
+        LOGGER.warning("Failed to load motor trim settings from %s: %s", settings_path, exc)
+        return 0.0
+
+    return _clamp_motor_trim(trim)
+
+
+def _save_motor_trim(trim: float) -> None:
+    settings_path = Path(config.MOTOR_TRIM_SETTINGS_PATH)
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = settings_path.with_name(f"{settings_path.name}.tmp")
+    payload = {
+        "trim": _clamp_motor_trim(trim),
+        "updated_at": time.time(),
+    }
+    temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(temp_path, settings_path)
+
+
 def _encode_battery_status_bits(
     current_a: float,
     *,
     armed: bool,
     mute_active: bool,
     beacon_active: bool,
+    trim_mode_active: bool = False,
 ) -> int:
     status_bits = _battery_telemetry_direction_code(current_a) & _BATTERY_DIRECTION_MASK
     if armed:
@@ -483,6 +540,8 @@ def _encode_battery_status_bits(
         status_bits |= _BATTERY_STATUS_MUTED
     if beacon_active:
         status_bits |= _BATTERY_STATUS_BEACON
+    if trim_mode_active:
+        status_bits |= _BATTERY_STATUS_TRIM_MODE
     return status_bits
 
 
@@ -541,6 +600,7 @@ def _send_battery_telemetry(
     armed: bool = False,
     mute_active: bool = False,
     beacon_active: bool = False,
+    trim_mode_active: bool = False,
 ) -> None:
     if consumed_at_s is not None:
         _trace_battery_telemetry("consume", state, consumed_at_s)
@@ -550,6 +610,7 @@ def _send_battery_telemetry(
         armed=armed,
         mute_active=mute_active,
         beacon_active=beacon_active,
+        trim_mode_active=trim_mode_active,
     )
 
     if state is None:
@@ -698,9 +759,13 @@ def main() -> int:
     armed = False
     mute_active = False
     beacon_active = False
+    trim_mode_active = False
     had_connection = False
     low_voltage_active = False
     melody_zone = -1
+    saved_motor_trim = _load_saved_motor_trim()
+    trim_gesture_started_at: float | None = None
+    trim_gesture_consumed = False
     left_current_sample = MotorCurrentSample(current_a=None, valid=False)
     right_current_sample = MotorCurrentSample(current_a=None, valid=False)
     last_frame_time = time.monotonic()
@@ -805,6 +870,29 @@ def main() -> int:
                         armed=armed,
                     )
 
+                trim_gesture_requested = (not armed) and _trim_gesture_active(channels)
+                if trim_gesture_requested:
+                    if trim_gesture_started_at is None:
+                        trim_gesture_started_at = loop_started_at
+                    elif (
+                        not trim_gesture_consumed
+                        and loop_started_at - trim_gesture_started_at >= config.MOTOR_TRIM_CONFIRM_HOLD_S
+                    ):
+                        if trim_mode_active:
+                            saved_motor_trim = _live_motor_trim_from_channels(channels)
+                            _save_motor_trim(saved_motor_trim)
+                            trim_mode_active = False
+                            LOGGER.info("Motor trim saved trim=%.3f", saved_motor_trim)
+                        else:
+                            trim_mode_active = True
+                            LOGGER.info("Motor trim mode enabled")
+                        trim_gesture_consumed = True
+                else:
+                    trim_gesture_started_at = None
+                    trim_gesture_consumed = False
+
+                motor_trim = _live_motor_trim_from_channels(channels) if trim_mode_active else saved_motor_trim
+
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
 
                 throttle = raw_throttle
@@ -831,9 +919,14 @@ def main() -> int:
                             right_sample=right_sample,
                             battery_state=battery_state,
                         )
-                        left_duty, right_duty = drive.apply_output(
+                        trimmed_left, trimmed_right = _apply_motor_trim(
                             limited.left_output,
                             limited.right_output,
+                            motor_trim,
+                        )
+                        left_duty, right_duty = drive.apply_output(
+                            trimmed_left,
+                            trimmed_right,
                             throttle=throttle,
                             steering=steering,
                             dt=control_dt,
@@ -942,6 +1035,7 @@ def main() -> int:
                                 armed=armed,
                                 mute_active=mute_active,
                                 beacon_active=beacon_active,
+                                trim_mode_active=trim_mode_active,
                             )
                             battery_telemetry_cleared = True
                     else:
@@ -952,6 +1046,7 @@ def main() -> int:
                             armed=armed,
                             mute_active=mute_active,
                             beacon_active=beacon_active,
+                            trim_mode_active=trim_mode_active,
                         )
                         battery_telemetry_cleared = False
                         last_battery_telemetry_log = _log_battery_telemetry(

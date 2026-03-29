@@ -148,6 +148,26 @@ def test_read_local_status_badges_reads_app_switch_channels() -> None:
     assert 'badges[#badges + 1] = "b"' in body
 
 
+def test_lua_declares_trim_mode_status_bit_constant() -> None:
+    source = _lua_source()
+
+    assert "local BATTERY_STATUS_TRIM_MODE" in source
+
+
+def test_lua_declares_robot_status_badge_helper() -> None:
+    source = _lua_source()
+
+    assert "local function read_robot_status_badges()" in source
+
+
+def test_read_robot_status_badges_reads_trim_mode_flag() -> None:
+    body = _extract_function(_lua_source(), "read_robot_status_badges")
+
+    assert 'sensor({ "Capa", "Mah", "mAh" }, 0)' in body
+    assert "BATTERY_STATUS_TRIM_MODE" in body
+    assert 'badges[#badges + 1] = "t"' in body
+
+
 def test_lua_declares_charge_lightning_helper() -> None:
     source = _lua_source()
 
@@ -460,6 +480,7 @@ def test_run_calls_only_one_draw_branch_and_passes_motor_currents() -> None:
     assert body.count("draw_compact(") == 1
     assert body.count("draw_wide(") == 1
     assert "status_badges = read_local_status_badges()" in body
+    assert "read_robot_status_badges()" in body
     assert 'charging_active = battery_direction == "CHG"' in body
     assert "draw_wide(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_badges, charging_active, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body
     assert "draw_compact(voltage, current, battery_direction, pct, rssi, rqly, cell_src, status_badges, charging_active, cells, mn, mx, delta, left_spd, right_spd, cpu, ram, left_current, right_current)" in body

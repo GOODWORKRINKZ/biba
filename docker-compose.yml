@@ -13,6 +13,7 @@ services:
       - /dev/vcio:/dev/vcio
       - /dev/mem:/dev/mem
     volumes:
+      - biba-controller-data:/data
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python.*main' || exit 1"]
@@ -42,6 +43,10 @@ services:
       BEACON_DELAY_S: ${BEACON_DELAY_S:-300}
       CH_BEACON: ${CH_BEACON:-7}
       CH_MUTE: ${CH_MUTE:-6}
+      CH_TRIM: ${CH_TRIM:-8}
+      MOTOR_TRIM_MAX_EFFECT: ${MOTOR_TRIM_MAX_EFFECT:-0.20}
+      MOTOR_TRIM_CONFIRM_HOLD_S: ${MOTOR_TRIM_CONFIRM_HOLD_S:-5.0}
+      MOTOR_TRIM_SETTINGS_PATH: ${MOTOR_TRIM_SETTINGS_PATH:-/data/motor-trim.json}
       ENABLE_RC_MELODIES: ${ENABLE_RC_MELODIES:-0}
       CH_MELODY: ${CH_MELODY:-8}
       STARTUP_MELODY: ${STARTUP_MELODY:-biba_signature}
@@ -63,3 +68,6 @@ services:
       RIGHT_MOTOR_ENABLED: ${RIGHT_MOTOR_ENABLED:-1}
       MOTOR1_INVERTED: ${MOTOR1_INVERTED:-0}
       MOTOR2_INVERTED: ${MOTOR2_INVERTED:-0}
+
+volumes:
+  biba-controller-data:

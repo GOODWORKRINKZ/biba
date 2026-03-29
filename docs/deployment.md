@@ -124,6 +124,10 @@ bash ~/biba/scripts/diagnostics.sh
 | `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
 | `CH_BEACON` | `5` | Канал тумблера для ручного включения маяка |
 | `CH_MUTE` | `6` | Канал мьюта обычных звуков; SOS не приглушается |
+| `CH_TRIM` | `8` | `CH9`; live-источник trim в режиме калибровки прямолинейности |
+| `MOTOR_TRIM_MAX_EFFECT` | `0.20` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
+| `MOTOR_TRIM_CONFIRM_HOLD_S` | `5.0` | Длительность trim-жеста для входа и подтверждения |
+| `MOTOR_TRIM_SETTINGS_PATH` | `/data/motor-trim.json` | Путь к persistent JSON-файлу сохранённого trim |
 | `RAMP_ACCEL_RATE` | `2.0` | Макс. скорость разгона мотора (ед/сек); 0→100% за 0.5с |
 | `RAMP_DECEL_RATE` | `0.5` | Макс. скорость отпускания/торможения (ед/сек); 100%→0 за 2с |
 | `RAMP_REVERSE_DECEL_RATE` | `1.0` | Скорость подхода к нулю перед сменой направления; меньше значение делает реверс мягче |
@@ -152,6 +156,10 @@ BEACON_ENABLED=1
 BEACON_DELAY_S=300
 CH_BEACON=5
 CH_MUTE=6
+CH_TRIM=8
+MOTOR_TRIM_MAX_EFFECT=0.20
+MOTOR_TRIM_CONFIRM_HOLD_S=5.0
+MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
 ```
 
 Для текущего робота c проводкой `LEFT 18/13` и `RIGHT 12/19` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. Кодовый дефолт `HARDWARE` сохранён для будущих конфигураций без конфликта hardware-PWM каналов.
@@ -184,6 +192,20 @@ BiBa использует пьезо-буззер на GPIO17 для:
 - SOS-маяка после длительного failsafe
 
 На передатчике EdgeTX Lua-скрипт дополнительно проигрывает `playTone` события при старте, восстановлении/потере связи и low battery.
+
+### Motor trim
+
+Контроллер умеет хранить подстроенный межколёсный trim в persistent Docker volume `biba-controller-data`.
+
+Операторский цикл:
+
+1. Разармить платформу.
+2. Держать первые четыре канала в максимуме `5` секунд, чтобы войти в trim-mode.
+3. Крутилкой на `CH9` подобрать прямолинейность. На Lua-экране в этот момент виден badge `t`.
+4. Снова в `disarm` удержать первые четыре канала в максимуме `5` секунд.
+5. Контроллер сохранит текущее effective trim в `/data/motor-trim.json` и выйдет из trim-mode.
+
+Вне trim-mode live `CH9` не используется: применяется только последнее сохранённое значение.
 
 ### Обновление voice assets на роботе
 

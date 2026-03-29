@@ -256,6 +256,367 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
     assert drive_calls[-1][0] > 0.0
 
 
+def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    applied_outputs: list[tuple[float, float]] = []
+
+    def frame(ch1: float, ch2: float, ch3: float, ch4: float, arm: float, ch9: float) -> list[float]:
+        return [ch1, ch2, ch3, ch4, arm, 0.0, 0.0, 0.0, ch9]
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.5),
+                frame(0.0, 1.0, 0.0, 0.0, 1.0, 0.5),
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame_value = self._frames.pop(0)
+            if not self._frames:
+                main.RUNNING = False
+            return frame_value
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del steering, dt
+            return throttle, throttle
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            applied_outputs.append((left_duty, right_duty))
+            return left_duty, right_duty
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del throttle, steering, dt
+            return (0.0, 0.0)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def sos_beacon(self) -> None:
+            pass
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monotonic_counter = iter(index * 0.5 for index in range(100))
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: next(monotonic_counter))
+    monkeypatch.setattr(main, "_load_saved_motor_trim", lambda: 0.0)
+    monkeypatch.setattr(main, "_save_motor_trim", lambda trim: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "CH_TRIM", 8)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_CONFIRM_HOLD_S", 5.0)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.2)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert applied_outputs[-1][0] == pytest.approx(1.0)
+    assert applied_outputs[-1][1] == pytest.approx(0.9)
+
+
+def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    applied_outputs: list[tuple[float, float]] = []
+    saved_trims: list[float] = []
+
+    def frame(ch1: float, ch2: float, ch3: float, ch4: float, arm: float, ch9: float) -> list[float]:
+        return [ch1, ch2, ch3, ch4, arm, 0.0, 0.0, 0.0, ch9]
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, 0.0),
+                frame(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, -0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, -0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, -0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, -0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, -0.5),
+                frame(1.0, 1.0, 1.0, 1.0, 0.0, -0.5),
+                frame(0.0, 1.0, 0.0, 0.0, 1.0, 1.0),
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame_value = self._frames.pop(0)
+            if not self._frames:
+                main.RUNNING = False
+            return frame_value
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del steering, dt
+            return throttle, throttle
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            applied_outputs.append((left_duty, right_duty))
+            return left_duty, right_duty
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del throttle, steering, dt
+            return (0.0, 0.0)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def sos_beacon(self) -> None:
+            pass
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monotonic_counter = iter(index * 0.5 for index in range(200))
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: next(monotonic_counter))
+    monkeypatch.setattr(main, "_load_saved_motor_trim", lambda: 0.0)
+    monkeypatch.setattr(main, "_save_motor_trim", lambda trim: saved_trims.append(trim))
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "CH_TRIM", 8)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_CONFIRM_HOLD_S", 5.0)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.2)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert saved_trims == [pytest.approx(-0.1)]
+    assert applied_outputs[-1][0] == pytest.approx(0.9)
+    assert applied_outputs[-1][1] == pytest.approx(1.0)
+
+
 def test_main_allows_sos_beacon_while_muted(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     sos_calls: list[str] = []
@@ -843,6 +1204,96 @@ def test_encode_battery_status_bits_preserves_direction_and_sets_flags() -> None
     )
 
     assert status_bits == 0b11110
+
+
+def test_encode_battery_status_bits_includes_trim_mode_flag() -> None:
+    main = importlib.import_module("main")
+
+    status_bits = main._encode_battery_status_bits(
+        current_a=-3.2,
+        armed=True,
+        mute_active=True,
+        beacon_active=True,
+        trim_mode_active=True,
+    )
+
+    assert status_bits == 0b111110
+
+
+def test_apply_motor_trim_leaves_duties_unchanged_when_trim_is_zero() -> None:
+    main = importlib.import_module("main")
+
+    left_duty, right_duty = main._apply_motor_trim(0.65, 0.65, 0.0)
+
+    assert left_duty == pytest.approx(0.65)
+    assert right_duty == pytest.approx(0.65)
+
+
+def test_apply_motor_trim_positive_reduces_only_right_side() -> None:
+    main = importlib.import_module("main")
+
+    left_duty, right_duty = main._apply_motor_trim(0.75, 0.75, 0.20)
+
+    assert left_duty == pytest.approx(0.75)
+    assert right_duty == pytest.approx(0.60)
+
+
+def test_apply_motor_trim_negative_reduces_only_left_side() -> None:
+    main = importlib.import_module("main")
+
+    left_duty, right_duty = main._apply_motor_trim(0.75, 0.75, -0.20)
+
+    assert left_duty == pytest.approx(0.60)
+    assert right_duty == pytest.approx(0.75)
+
+
+def test_apply_motor_trim_clamps_to_maximum_effect() -> None:
+    main = importlib.import_module("main")
+
+    left_duty, right_duty = main._apply_motor_trim(1.0, 1.0, 0.5)
+
+    assert left_duty == pytest.approx(1.0)
+    assert right_duty == pytest.approx(0.8)
+
+
+def test_load_saved_motor_trim_defaults_to_zero_when_file_missing(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_SETTINGS_PATH", str(tmp_path / "motor-trim.json"))
+
+    assert main._load_saved_motor_trim() == pytest.approx(0.0)
+
+
+def test_load_saved_motor_trim_warns_and_defaults_when_file_is_invalid(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    main = importlib.import_module("main")
+    settings_path = tmp_path / "motor-trim.json"
+    settings_path.write_text("{not-json}", encoding="utf-8")
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_SETTINGS_PATH", str(settings_path))
+
+    with caplog.at_level(logging.WARNING, logger="biba-controller"):
+        trim = main._load_saved_motor_trim()
+
+    assert trim == pytest.approx(0.0)
+    assert "Failed to load motor trim settings" in caplog.text
+
+
+def test_save_motor_trim_settings_persists_effective_trim(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    settings_path = tmp_path / "motor-trim.json"
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_SETTINGS_PATH", str(settings_path))
+
+    main._save_motor_trim(0.125)
+
+    assert settings_path.exists() is True
+    saved = settings_path.read_text(encoding="utf-8")
+    assert '"trim": 0.125' in saved
+    assert '"updated_at":' in saved
 
 
 def test_send_battery_telemetry_marks_positive_current_as_charging() -> None:

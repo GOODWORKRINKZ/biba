@@ -5,6 +5,7 @@ local CELL_COUNT = 6
 local LOW_CELL_VOLTAGE = 3.5
 local BATTERY_HOLDOFF_CS = 1200
 local BATTERY_DIRECTION_MASK = 0x03
+local BATTERY_STATUS_TRIM_MODE = 0x20
 local LOG_SERIAL_BAUD = 115200
 local LOG_INTERVAL_CS = 20
 local APP_ARM_CHANNEL = "ch5"
@@ -200,6 +201,13 @@ local function read_local_status_badges()
   if sensor("ch5", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "a" end
   if sensor("ch7", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
   if sensor("ch6", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "b" end
+  return badges
+end
+
+local function read_robot_status_badges()
+  local badges = {}
+  local status_bits = sensor({ "Capa", "Mah", "mAh" }, 0)
+  if bit32.band(status_bits, BATTERY_STATUS_TRIM_MODE) ~= 0 then badges[#badges + 1] = "t" end
   return badges
 end
 
@@ -574,6 +582,9 @@ local function run(event)
   local right_current = raw_right_current
   local battery_direction = raw_battery_direction
   local status_badges = read_local_status_badges()
+  for _, badge in ipairs(read_robot_status_badges()) do
+    status_badges[#status_badges + 1] = badge
+  end
   local mn, mx, delta = cell_stats(cells)
   local holdoff_active = false
 
