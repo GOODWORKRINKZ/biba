@@ -34,8 +34,8 @@ _SPECTRAL_DUTY_MAX = 500_000  # 50 % duty → max fundamental amplitude
 _SPECTRAL_FRAME_MS = 12
 _SPECTRAL_HOP_MS = 6
 _SPECTRAL_N_PEAKS = 2
-_SPEECH_MIN_FREQ = 150
-_SPEECH_MAX_FREQ = 800
+_SPEECH_MIN_FREQ = 100
+_SPEECH_MAX_FREQ = 1200
 _SPECTRAL_CACHE_VERSION = 1
 
 
@@ -269,8 +269,8 @@ def wav_to_tones(
 
     frame_size = int(sample_rate * frame_ms / 1000)
     fft_size = _next_pow2(frame_size)
-    min_bin = max(1, int(min_freq * fft_size / sample_rate))
-    max_bin = min(fft_size // 2, int(max_freq * fft_size / sample_rate))
+    min_bin = max(1, math.ceil(min_freq * fft_size / sample_rate))
+    max_bin = min(fft_size // 2, math.floor(max_freq * fft_size / sample_rate))
 
     # Precompute Hamming window
     hamming = [
@@ -336,8 +336,8 @@ def wav_to_peak_frames(
     frame_size = max(1, int(sample_rate * frame_ms / 1000))
     hop_size = max(1, int(sample_rate * hop_ms / 1000))
     fft_size = _next_pow2(frame_size)
-    min_bin = max(1, int(min_freq * fft_size / sample_rate))
-    max_bin = min(fft_size // 2, int(max_freq * fft_size / sample_rate))
+    min_bin = max(1, math.ceil(min_freq * fft_size / sample_rate))
+    max_bin = min(fft_size // 2, math.floor(max_freq * fft_size / sample_rate))
     hamming = [
         0.54 - 0.46 * math.cos(2 * math.pi * i / (fft_size - 1))
         for i in range(fft_size)

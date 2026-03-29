@@ -489,14 +489,14 @@ class TestWavToPeakFrames:
         assert loud_duty > quiet_duty
 
     def test_default_constants_match_espeak_band(self):
-        """Constants should be narrowed to the eSpeak speech content range."""
-        assert _SPEECH_MIN_FREQ >= 150
-        assert _SPEECH_MAX_FREQ <= 800
+        """Constants should cover the full intended speech analysis band."""
+        assert _SPEECH_MIN_FREQ <= 100
+        assert _SPEECH_MAX_FREQ >= 1200
         assert _SPECTRAL_FRAME_MS <= 12
         assert _SPECTRAL_HOP_MS <= 6
 
     def test_default_analysis_rejects_low_frequency_hum(self, tmp_path):
-        """A 80 Hz tone (below speech band) should not appear in default peaks."""
+        """A tone below the 100 Hz speech band should not appear in default peaks."""
         import math
 
         n = 800
@@ -519,14 +519,14 @@ class TestWavToPeakFrames:
                 assert freq >= 120, f"Low hum {freq} Hz leaked through"
 
     def test_default_analysis_rejects_high_frequency_noise(self, tmp_path):
-        """A 1200 Hz tone (above narrowed speech band) should be excluded."""
+        """A tone above the 1200 Hz speech band should be excluded."""
         import math
 
         n = 800
         samples = [
             int(
                 16000 * math.sin(2 * math.pi * 400 * i / 8000)
-                + 16000 * math.sin(2 * math.pi * 1200 * i / 8000)
+                + 16000 * math.sin(2 * math.pi * 1400 * i / 8000)
             )
             for i in range(n)
         ]
@@ -539,7 +539,7 @@ class TestWavToPeakFrames:
         assert voiced
         peak_freqs = [freq for freq, _duty in voiced[0]]
         assert any(abs(freq - 400) < 100 for freq in peak_freqs)
-        assert all(freq < 850 for freq in peak_freqs), f"High freq leaked: {peak_freqs}"
+        assert all(freq <= 1250 for freq in peak_freqs), f"High freq leaked: {peak_freqs}"
 
     def test_shorter_frames_produce_more_temporal_detail(self, tmp_path):
         """With frame_ms=12 and hop_ms=6, we should get more frames than 18/9."""
