@@ -260,6 +260,16 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
     assert "RIGHT_MOTOR_ENABLED: ${RIGHT_MOTOR_ENABLED:-1}" in compose
 
 
+def test_docker_compose_exposes_motor_inversion_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "MOTOR1_INVERTED:" in compose
+    assert "MOTOR1_INVERTED: ${MOTOR1_INVERTED:-0}" in compose
+    assert "MOTOR2_INVERTED:" in compose
+    assert "MOTOR2_INVERTED: ${MOTOR2_INVERTED:-0}" in compose
+
+
 def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
@@ -306,6 +316,8 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "RIGHT_MOTOR_REN=20" in env_example
     assert "RIGHT_MOTOR_LEN=21" in env_example
     assert "RIGHT_MOTOR_ENABLED=1" in env_example
+    assert "MOTOR1_INVERTED=0" in env_example
+    assert "MOTOR2_INVERTED=0" in env_example
     assert "MOTOR_CURRENT_LIMITING_ENABLED=" in env_example
     assert "MOTOR_CURRENT_SENSE_ENABLED=" in env_example
     assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS=" in env_example
