@@ -286,6 +286,70 @@ def test_run_reads_battery_direction() -> None:
     assert "read_battery_direction()" in body
 
 
+def test_lua_declares_vcp_serial_logging_state() -> None:
+    source = _lua_source()
+
+    assert "local LOG_SERIAL_BAUD" in source
+    assert "local LOG_INTERVAL_CS" in source
+    assert "local next_log_at = 0" in source
+
+
+def test_lua_declares_telemetry_serial_log_helper() -> None:
+    source = _lua_source()
+    body = _extract_function(source, "log_telemetry")
+
+    assert "serialWrite(" in body
+    assert "string.format(" in body
+
+
+def test_format_cells_for_log_does_not_depend_on_table_library() -> None:
+    body = _extract_function(_lua_source(), "format_cells_for_log")
+
+    assert "table.concat" not in body
+
+
+def test_init_configures_lua_serial_baudrate() -> None:
+    body = _extract_function(_lua_source(), "init")
+
+    assert "setSerialBaudrate(" in body
+
+
+def test_run_emits_vcp_telemetry_logs() -> None:
+    body = _extract_function(_lua_source(), "run")
+
+    assert "log_telemetry(" in body
+    assert "battery_holdoff_until" in body
+
+
+def test_log_telemetry_defensively_formats_missing_values() -> None:
+    body = _extract_function(_lua_source(), "log_telemetry")
+
+    assert "raw_rqly or 0" in body
+    assert "raw_voltage or 0" in body
+    assert "raw_current or 0" in body
+    assert "raw_pct or 0" in body
+    assert "text_or_dash(raw_battery_direction)" in body
+    assert "text_or_dash(raw_cell_src)" in body
+    assert "format_cells_for_log(raw_cells)" in body
+    assert "format_current_ma(raw_left_current)" in body
+    assert "format_current_ma(raw_right_current)" in body
+
+
+def test_run_handles_disconnected_state_before_battery_reads() -> None:
+    body = _extract_function(_lua_source(), "run")
+    disconnected_branch = body.split("if not connected then", 1)[1].split("local raw_voltage", 1)[0]
+
+    assert "log_telemetry(now, connected, false," in disconnected_branch
+    assert "draw_disconnected()" in disconnected_branch
+    assert "return 0" in disconnected_branch
+
+
+def test_run_reads_battery_sensors_only_after_connection_guard() -> None:
+    body = _extract_function(_lua_source(), "run")
+
+    assert body.index("if not connected then") < body.index('local raw_voltage = sensor({ "VFAS", "RxBt" }, 0)')
+
+
 def test_lua_declares_current_format_helper() -> None:
     source = _lua_source()
 
