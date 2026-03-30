@@ -220,26 +220,8 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
         def play_spectral_async(self, path: str) -> None:
             del path
 
-        def play_wav(self, path: str) -> None:
-            del path
-
-        def play_spectral(self, path: str) -> None:
-            del path
-
-        def play_wav_async(self, path: str) -> None:
-            del path
-
-        def play_spectral_async(self, path: str) -> None:
-            del path
-
         def play_named_async(self, name: str) -> None:
             del name
-
-        def play_wav(self, path: str) -> None:
-            del path
-
-        def play_spectral(self, path: str) -> None:
-            del path
 
     class FakeBeacon:
         def __init__(self, *args, **kwargs) -> None:
