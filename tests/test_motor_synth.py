@@ -216,6 +216,31 @@ class TestMotorSynth:
         assert right_freqs
         assert left_freqs != right_freqs
 
+    def test_play_named_sos_keeps_alarm_in_unison_for_loudness(self):
+        pi = MagicMock()
+        from buzzer.motor_synth import MotorSynth
+
+        synth = MotorSynth(
+            pi,
+            [12, 19],
+            comp_pins=[18, 13],
+            left_pwm_pins=[12],
+            left_comp_pins=[18],
+            right_pwm_pins=[19],
+            right_comp_pins=[13],
+        )
+        synth._wait_or_interrupted = lambda _delay: False
+        pi.hardware_PWM.reset_mock()
+
+        synth.play_named("sos")
+
+        non_zero_calls = [call.args for call in pi.hardware_PWM.call_args_list if call.args[1] > 0]
+        left_freqs = {args[1] for args in non_zero_calls if args[0] == 12}
+        right_freqs = {args[1] for args in non_zero_calls if args[0] == 19}
+        assert left_freqs
+        assert right_freqs
+        assert left_freqs == right_freqs
+
     @patch("time.sleep")
     def test_play_named_unknown_does_nothing(self, mock_sleep):
         synth, pi = self._make_synth()
