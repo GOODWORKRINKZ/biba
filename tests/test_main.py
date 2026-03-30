@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 
 import pytest
@@ -206,6 +207,30 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
 
         def set_control_active(self, active: bool) -> None:
             del active
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
 
         def play_named_async(self, name: str) -> None:
             del name
@@ -1484,6 +1509,102 @@ def test_create_motor_current_reader_returns_null_reader_when_disabled(monkeypat
     assert right_sample.valid is False
 
 
+def test_motor_current_trace_logs_armed_motor_activity_even_with_zero_bms_current(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_TRACE_POST_ROLL_S", 2.0)
+
+    should_log, last_activity_at_s = main._update_motor_current_trace_window(
+        armed=True,
+        raw_throttle=0.6,
+        steering=0.0,
+        left_duty=0.5,
+        right_duty=0.5,
+        left_sample=MotorCurrentSample(current_a=0.0, valid=True),
+        right_sample=MotorCurrentSample(current_a=0.0, valid=True),
+        now_s=10.0,
+        last_activity_at_s=None,
+    )
+
+    assert should_log is True
+    assert last_activity_at_s == pytest.approx(10.0)
+
+
+def test_motor_current_trace_keeps_logging_during_post_roll(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_TRACE_POST_ROLL_S", 2.0)
+
+    should_log, last_activity_at_s = main._update_motor_current_trace_window(
+        armed=True,
+        raw_throttle=0.0,
+        steering=0.0,
+        left_duty=0.0,
+        right_duty=0.0,
+        left_sample=MotorCurrentSample(current_a=0.0, valid=True),
+        right_sample=MotorCurrentSample(current_a=0.0, valid=True),
+        now_s=11.5,
+        last_activity_at_s=10.0,
+    )
+
+    assert should_log is True
+    assert last_activity_at_s == pytest.approx(10.0)
+
+
+def test_motor_current_trace_record_includes_bms_age_and_sample_details() -> None:
+    main = importlib.import_module("main")
+    state = BatteryState(
+        voltage=24.1,
+        current=1.6,
+        soc=63.0,
+        cells=[3.4, 3.45],
+        temperatures=[22.0],
+        min_cell=3.4,
+        max_cell=3.45,
+        delta=0.05,
+    )
+
+    record = main._build_motor_current_trace_record(
+        session_id="session-1",
+        sample_index=7,
+        now_s=10.5,
+        wall_time_iso="2026-03-30T12:00:00Z",
+        armed=True,
+        raw_throttle=0.6,
+        filtered_throttle=0.55,
+        steering=0.1,
+        control_active=True,
+        requested_left=0.6,
+        requested_right=0.5,
+        limited_left=0.6,
+        limited_right=0.5,
+        trimmed_left=0.58,
+        trimmed_right=0.48,
+        left_duty=0.58,
+        right_duty=0.48,
+        left_sample=MotorCurrentSample(current_a=3.2, valid=True, voltage_v=1.25, raw_adc=10001),
+        right_sample=MotorCurrentSample(current_a=2.8, valid=True, voltage_v=1.10, raw_adc=9002),
+        left_channel=0,
+        right_channel=1,
+        battery_state=state,
+        bms_sample_monotonic_s=9.9,
+        mute_active=False,
+        beacon_active=False,
+        trim_mode_active=False,
+        trace_reason="active",
+    )
+
+    assert record["session_id"] == "session-1"
+    assert record["sample_index"] == 7
+    assert record["bms_current_a"] == pytest.approx(1.6)
+    assert record["bms_age_s"] == pytest.approx(0.6)
+    assert record["left_raw_adc"] == 10001
+    assert record["right_raw_adc"] == 9002
+    assert record["left_voltage_v"] == pytest.approx(1.25)
+    assert record["right_voltage_v"] == pytest.approx(1.10)
+    assert record["trace_reason"] == "active"
+
+
 def test_main_applies_limited_outputs_when_current_limit_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     applied_outputs: list[tuple[float, float, float, float, float]] = []
@@ -1657,6 +1778,185 @@ def test_main_applies_limited_outputs_when_current_limit_enabled(monkeypatch: py
     assert main.main() == 0
     assert applied_outputs[-1][0] == pytest.approx(0.4)
     assert applied_outputs[-1][1] == pytest.approx(0.5)
+
+
+def test_main_writes_motor_current_trace_during_armed_activity(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    main = importlib.import_module("main")
+    trace_path = tmp_path / "current-trace.jsonl"
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                [0.0, 0.8, 0.0, 0.0, 0.98, 0.0],
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame = self._frames.pop(0)
+            main.RUNNING = False
+            return frame
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del steering, dt
+            return throttle, throttle
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            return left_duty, right_duty
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del throttle, steering, dt
+            return (0.0, 0.0)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeCurrentReader:
+        def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+            return (
+                MotorCurrentSample(current_a=3.2, valid=True, voltage_v=1.25, raw_adc=10001),
+                MotorCurrentSample(current_a=2.8, valid=True, voltage_v=1.10, raw_adc=9002),
+            )
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "_create_motor_current_reader", lambda: FakeCurrentReader())
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_TRACE_ENABLED", True)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_TRACE_PATH", str(trace_path))
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_TRACE_POST_ROLL_S", 2.0)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", 0.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+
+    records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 1
+    assert records[0]["armed"] is True
+    assert records[0]["left_raw_adc"] == 10001
+    assert records[0]["bms_present"] is False
+    assert records[0]["trace_reason"] == "active"
 
 
 def test_main_continues_when_pigpio_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -130,6 +130,15 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 Если нужно включить current sense через ADS1115, дополнительно добавьте в `docker-compose.yml` соответствующие env-переменные из `docs/wiring.md`: `MOTOR_CURRENT_SENSE_ENABLED`, `MOTOR_CURRENT_LIMITING_ENABLED`, `MOTOR_CURRENT_SENSE_*`, `LEFT_MOTOR_MAX_CURRENT_A`, `RIGHT_MOTOR_MAX_CURRENT_A`, `LEFT_MOTOR_MAX_POWER_W`, `RIGHT_MOTOR_MAX_POWER_W`.
 
+Для калибровочных заездов доступен отдельный trace-режим current sense:
+
+- `MOTOR_CURRENT_TRACE_ENABLED=0|1` — включает JSONL-лог с motor activity, ADS1115 и BMS snapshot
+- `MOTOR_CURRENT_TRACE_PATH=/data/current-trace.jsonl` — путь к trace-файлу на persistent volume
+- `MOTOR_CURRENT_TRACE_POST_ROLL_S=2.0` — сколько секунд держать запись после окончания motor activity
+- `MOTOR_CURRENT_TRACE_MIN_INTERVAL_S=0.0` — минимальный интервал между sample-записями; `0.0` означает без дополнительного rate limit
+
+Этот trace нужен для офлайн-калибровки токов колёс против более медленного тока BMS и по умолчанию выключен.
+
 `HARDWARE` остаётся дефолтом в коде для совместимых конфигураций, где PWM-линии не конфликтуют между собой. Для текущего робота override на `SOFTWARE` считается временной эксплуатационной конфигурацией.
 
 Если после сборки одно из колёс едет в обратную сторону, достаточно выставить для него значение `1`.

@@ -29,6 +29,10 @@ def test_null_motor_current_reader_returns_invalid_samples() -> None:
     assert right_sample.valid is False
     assert left_sample.current_a is None
     assert right_sample.current_a is None
+    assert left_sample.voltage_v is None
+    assert right_sample.voltage_v is None
+    assert left_sample.raw_adc is None
+    assert right_sample.raw_adc is None
 
 
 def test_ads1115_motor_current_reader_converts_channel_voltage_to_current() -> None:
@@ -50,6 +54,10 @@ def test_ads1115_motor_current_reader_converts_channel_voltage_to_current() -> N
     assert right_sample.valid is True
     assert left_sample.current_a == 15.48
     assert right_sample.current_a == 6.192
+    assert left_sample.voltage_v == 2.048
+    assert right_sample.voltage_v == 1.024
+    assert left_sample.raw_adc == 16384
+    assert right_sample.raw_adc == 8192
     assert bus.write_calls[0][0:2] == (0x48, 0x01)
     assert bus.read_calls == [(0x48, 0x00, 2), (0x48, 0x00, 2)]
 
@@ -78,3 +86,7 @@ def test_ads1115_motor_current_reader_returns_invalid_samples_on_bus_error() -> 
 
     assert left_sample.valid is False
     assert right_sample.valid is False
+    assert left_sample.voltage_v is None
+    assert right_sample.voltage_v is None
+    assert left_sample.raw_adc is None
+    assert right_sample.raw_adc is None
