@@ -74,15 +74,18 @@ class BTS7960MotorDriver:
         self._pwm_mode = self._normalize_pwm_mode(pwm_mode)
         self._software_pwm_range = 0
 
+        if self._pwm_mode == "HARDWARE" and self.ren_pin == self.len_pin:
+            raise ValueError("hardware mode requires distinct REN and LEN pins")
+
         for pin in self._unique_pins(self.ren_pin, self.len_pin):
             self.pi.set_mode(pin, pigpio.OUTPUT)
 
-        for pin in self._unique_pins(self.ren_pin, self.len_pin):
-            self.pi.write(pin, 1)
-
         if self._pwm_mode == "SOFTWARE":
+            for pin in self._unique_pins(self.ren_pin, self.len_pin):
+                self.pi.write(pin, 1)
             self._setup_software_pwm()
         else:
+            self._set_enable_state(False, False)
             self._setup_hardware_pwm()
 
     @staticmethod
@@ -120,9 +123,21 @@ class BTS7960MotorDriver:
             self.pi.set_PWM_range(pin, self._software_pwm_range)
             self.pi.set_PWM_dutycycle(pin, 0)
 
+    def _set_enable_state(self, ren_enabled: bool, len_enabled: bool) -> None:
+        self.pi.write(self.ren_pin, 1 if ren_enabled else 0)
+        self.pi.write(self.len_pin, 1 if len_enabled else 0)
+
     def _set_hardware_direction(self, rpwm_duty: int, lpwm_duty: int) -> None:
-        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, rpwm_duty)
-        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, lpwm_duty)
+        duty = max(rpwm_duty, lpwm_duty)
+        if duty <= 0:
+            self._set_enable_state(False, False)
+        elif rpwm_duty > 0:
+            self._set_enable_state(True, False)
+        else:
+            self._set_enable_state(False, True)
+
+        self.pi.hardware_PWM(self.rpwm_pin, self._frequency, duty)
+        self.pi.hardware_PWM(self.lpwm_pin, self._frequency, duty)
 
     def _set_software_direction(self, rpwm_duty: int, lpwm_duty: int) -> None:
         self.pi.set_PWM_dutycycle(self.rpwm_pin, rpwm_duty)

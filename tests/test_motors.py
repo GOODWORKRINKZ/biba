@@ -85,58 +85,103 @@ def test_motor_driver_can_invert_direction_logic() -> None:
 def test_bts7960_motor_driver_initializes_pwm_and_enable_pins() -> None:
     pi = FakePi()
 
-    BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+    BTS7960MotorDriver(
+        pi,
+        rpwm_pin=18,
+        lpwm_pin=13,
+        ren_pin=23,
+        len_pin=24,
+        pwm_mode="HARDWARE",
+    )
 
     assert pi.mode_calls == [(23, 1), (24, 1)]
     assert pi.frequency_calls == []
     assert pi.hardware_pwm_calls == [(18, 20000, 0), (13, 20000, 0)]
-    assert pi.write_calls == [(23, 1), (24, 1)]
+    assert pi.write_calls == [(23, 0), (24, 0)]
     assert pi.duty_calls == []
 
 
 def test_bts7960_motor_driver_uses_rpwm_for_forward_motion() -> None:
     pi = FakePi()
-    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+    driver = BTS7960MotorDriver(
+        pi,
+        rpwm_pin=18,
+        lpwm_pin=13,
+        ren_pin=23,
+        len_pin=24,
+        pwm_mode="HARDWARE",
+    )
 
     driver.set_speed(0.5)
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 500000), (13, 20000, 0)]
+    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 500000), (13, 20000, 500000)]
+    assert pi.write_calls[-2:] == [(23, 1), (24, 0)]
 
 
 def test_bts7960_motor_driver_uses_lpwm_for_reverse_motion() -> None:
     pi = FakePi()
-    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+    driver = BTS7960MotorDriver(
+        pi,
+        rpwm_pin=18,
+        lpwm_pin=13,
+        ren_pin=23,
+        len_pin=24,
+        pwm_mode="HARDWARE",
+    )
 
     driver.set_speed(-0.5)
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 0), (13, 20000, 500000)]
+    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 500000), (13, 20000, 500000)]
+    assert pi.write_calls[-2:] == [(23, 0), (24, 1)]
 
 
 def test_bts7960_motor_driver_can_invert_direction_logic() -> None:
     pi = FakePi()
-    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24, inverted=True)
+    driver = BTS7960MotorDriver(
+        pi,
+        rpwm_pin=18,
+        lpwm_pin=13,
+        ren_pin=23,
+        len_pin=24,
+        inverted=True,
+        pwm_mode="HARDWARE",
+    )
 
     driver.set_speed(0.5)
 
-    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 0), (13, 20000, 500000)]
+    assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 500000), (13, 20000, 500000)]
+    assert pi.write_calls[-2:] == [(23, 0), (24, 1)]
 
 
 def test_bts7960_motor_driver_stop_disables_both_pwm_channels() -> None:
     pi = FakePi()
-    driver = BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=24)
+    driver = BTS7960MotorDriver(
+        pi,
+        rpwm_pin=18,
+        lpwm_pin=13,
+        ren_pin=23,
+        len_pin=24,
+        pwm_mode="HARDWARE",
+    )
 
     driver.stop()
 
     assert pi.hardware_pwm_calls[-2:] == [(18, 20000, 0), (13, 20000, 0)]
+    assert pi.write_calls[-2:] == [(23, 0), (24, 0)]
 
 
-def test_bts7960_motor_driver_supports_shared_enable_pin() -> None:
+def test_bts7960_motor_driver_rejects_shared_enable_pin_in_hardware_mode() -> None:
     pi = FakePi()
 
-    BTS7960MotorDriver(pi, rpwm_pin=18, lpwm_pin=13, ren_pin=23, len_pin=23)
-
-    assert pi.mode_calls == [(23, 1)]
-    assert pi.write_calls == [(23, 1)]
+    with pytest.raises(ValueError, match="hardware mode requires distinct REN and LEN pins"):
+        BTS7960MotorDriver(
+            pi,
+            rpwm_pin=18,
+            lpwm_pin=13,
+            ren_pin=23,
+            len_pin=23,
+            pwm_mode="HARDWARE",
+        )
 
 
 def test_bts7960_motor_driver_can_use_software_pwm_mode() -> None:
