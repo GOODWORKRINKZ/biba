@@ -8,6 +8,7 @@ import pytest
 
 from bms.daly import BatteryState
 from motors.current_control import MotorCurrentSample
+from motors.current_sense import NullMotorCurrentReader
 
 
 def test_is_armed_uses_configured_channel_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
