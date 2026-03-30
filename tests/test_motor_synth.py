@@ -35,7 +35,7 @@ class TestMotorSynth:
         synth.play_blheli("A4 1/4 P 1/8 C5 1/4", tempo_bpm=120)
         pi.hardware_PWM.assert_any_call(18, 440, 50000)
 
-    def test_play_blheli_on_shared_pwm_channels_uses_primary_pwm_pins_only(self):
+    def test_play_blheli_on_shared_pwm_channels_switches_direction_in_slices(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -51,17 +51,16 @@ class TestMotorSynth:
         synth._wait_or_interrupted = lambda _delay: False
         pi.hardware_PWM.reset_mock()
 
-        with patch("buzzer.motor_synth.parse_blheli", return_value=[(440.0, 0.05), (660.0, 0.05)]):
+        with patch("buzzer.motor_synth.parse_blheli", return_value=[(440.0, 0.12)]):
             synth.play_blheli("ignored", tempo_bpm=120)
 
         non_zero_calls = [entry.args for entry in pi.hardware_PWM.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 12 and args[1] == 440 for args in non_zero_calls)
-        assert any(args[0] == 12 and args[1] == 660 for args in non_zero_calls)
+        assert any(args[0] == 18 and args[1] == 440 for args in non_zero_calls)
         assert any(args[0] == 19 and args[1] == 440 for args in non_zero_calls)
-        assert any(args[0] == 19 and args[1] == 660 for args in non_zero_calls)
-        assert all(args[0] not in {18, 13} for args in non_zero_calls)
+        assert any(args[0] == 13 and args[1] == 440 for args in non_zero_calls)
 
-    def test_play_split_blheli_on_shared_pwm_channels_uses_primary_pwm_pins_only(self):
+    def test_play_split_blheli_on_shared_pwm_channels_switches_direction_in_slices(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -79,16 +78,15 @@ class TestMotorSynth:
 
         with patch(
             "buzzer.motor_synth.parse_blheli",
-            side_effect=[[(523.0, 0.05), (659.0, 0.05)], [(392.0, 0.05), (494.0, 0.05)]],
+            side_effect=[[(523.0, 0.12)], [(392.0, 0.12)]],
         ):
             synth.play_split_blheli("left", "right", tempo_bpm=120)
 
         non_zero_calls = [entry.args for entry in pi.hardware_PWM.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 12 and args[1] == 523 for args in non_zero_calls)
-        assert any(args[0] == 12 and args[1] == 659 for args in non_zero_calls)
+        assert any(args[0] == 18 and args[1] == 523 for args in non_zero_calls)
         assert any(args[0] == 19 and args[1] == 392 for args in non_zero_calls)
-        assert any(args[0] == 19 and args[1] == 494 for args in non_zero_calls)
-        assert all(args[0] not in {18, 13} for args in non_zero_calls)
+        assert any(args[0] == 13 and args[1] == 392 for args in non_zero_calls)
 
     @patch("time.sleep")
     def test_play_named_plays_arm(self, mock_sleep):
