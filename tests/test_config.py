@@ -324,6 +324,34 @@ def test_docker_compose_exposes_motor_inversion_environment_variables() -> None:
     assert "MOTOR2_INVERTED: ${MOTOR2_INVERTED:-0}" in compose
 
 
+def test_docker_compose_exposes_motor_current_sense_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "MOTOR_CURRENT_LIMITING_ENABLED:" in compose
+    assert "MOTOR_CURRENT_LIMITING_ENABLED: ${MOTOR_CURRENT_LIMITING_ENABLED:-0}" in compose
+    assert "MOTOR_CURRENT_SENSE_ENABLED:" in compose
+    assert "MOTOR_CURRENT_SENSE_ENABLED: ${MOTOR_CURRENT_SENSE_ENABLED:-0}" in compose
+    assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS:" in compose
+    assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS: ${MOTOR_CURRENT_SENSE_I2C_ADDRESS:-72}" in compose
+    assert "MOTOR_CURRENT_SENSE_LEFT_CHANNEL:" in compose
+    assert "MOTOR_CURRENT_SENSE_LEFT_CHANNEL: ${MOTOR_CURRENT_SENSE_LEFT_CHANNEL:-0}" in compose
+    assert "MOTOR_CURRENT_SENSE_RIGHT_CHANNEL:" in compose
+    assert "MOTOR_CURRENT_SENSE_RIGHT_CHANNEL: ${MOTOR_CURRENT_SENSE_RIGHT_CHANNEL:-1}" in compose
+    assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:" in compose
+    assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ: ${MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:-25}" in compose
+    assert "MOTOR_CURRENT_SENSE_GAIN:" in compose
+    assert "MOTOR_CURRENT_SENSE_GAIN: ${MOTOR_CURRENT_SENSE_GAIN:-1}" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V:" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V: ${LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V:-0.0}" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V:" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V: ${RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V:-0.0}" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT:" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT: ${LEFT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT:-1.0}" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT:" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT: ${RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT:-1.0}" in compose
+
+
 def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
