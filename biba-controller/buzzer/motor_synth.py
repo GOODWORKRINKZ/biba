@@ -111,9 +111,20 @@ class MotorSynth:
         self._lock = threading.Lock()
         self._interrupt_event = threading.Event()
         self._control_active = False
-        for pin in self.pwm_pins + self.comp_pins:
+        self._bipolar_phase_forward = True
+        for pin in self._all_audio_pins():
             self.pi.set_mode(pin, pigpio.OUTPUT)
         self.off()
+
+    def _all_audio_pins(self) -> list[int]:
+        return list(
+            dict.fromkeys(
+                self.pwm_pins
+                + self.comp_pins
+                + self._raw_left_comp_pins
+                + self._raw_right_comp_pins
+            )
+        )
 
     def _has_split_motor_groups(self) -> bool:
         return bool(
@@ -148,6 +159,10 @@ class MotorSynth:
         for pin in pins:
             self.pi.hardware_PWM(pin, frequency, duty_cycle)
 
+    def _stop_group(self, pins: list[int]) -> None:
+        for pin in pins:
+            self.pi.hardware_PWM(pin, 0, 0)
+
     def _apply_split(
         self,
         left_frequency: int,
@@ -163,7 +178,68 @@ class MotorSynth:
     def _wait_or_interrupted(self, duration_s: float) -> bool:
         return self._interrupt_event.wait(duration_s)
 
+    def _apply_bipolar_side(
+        self,
+        forward_pins: list[int],
+        reverse_pins: list[int],
+        frequency: int,
+        duty_cycle: int,
+        *,
+        forward_active: bool,
+    ) -> None:
+        if frequency <= 0 or duty_cycle <= 0:
+            self._stop_group(forward_pins + reverse_pins)
+            return
+
+        if reverse_pins:
+            active_pins = forward_pins if forward_active else reverse_pins
+            inactive_pins = reverse_pins if forward_active else forward_pins
+            self._apply_group(active_pins, frequency, duty_cycle)
+            self._stop_group(inactive_pins)
+            return
+
+        self._apply_group(forward_pins, frequency, duty_cycle)
+
+    def _bipolar_split_tone(self, left_freq: int, right_freq: int, duration_ms: int) -> bool:
+        if left_freq <= 0 and right_freq <= 0:
+            self.off()
+            return self._wait_or_interrupted(duration_ms / 1000.0)
+
+        remaining_ms = max(duration_ms, 0)
+        slot_ms = 8
+        while remaining_ms > 0:
+            if self._control_active:
+                self.off()
+                return True
+
+            current_slot_ms = min(slot_ms, remaining_ms)
+            forward_active = self._bipolar_phase_forward
+            self._apply_bipolar_side(
+                self.left_pwm_pins,
+                self._raw_left_comp_pins,
+                left_freq,
+                self.duty_cycle if left_freq > 0 else 0,
+                forward_active=forward_active,
+            )
+            self._apply_bipolar_side(
+                self.right_pwm_pins,
+                self._raw_right_comp_pins,
+                right_freq,
+                self.duty_cycle if right_freq > 0 else 0,
+                forward_active=forward_active,
+            )
+            self._bipolar_phase_forward = not self._bipolar_phase_forward
+            if self._wait_or_interrupted(current_slot_ms / 1000.0):
+                self.off()
+                return True
+            remaining_ms -= current_slot_ms
+
+        self.off()
+        return False
+
     def _tone(self, freq: int, duration_ms: int) -> bool:
+        if self._has_shared_channel_direction_groups():
+            return self._bipolar_split_tone(freq, freq, duration_ms)
         if freq > 0:
             self._apply(freq, self.duty_cycle)
         else:
@@ -173,6 +249,8 @@ class MotorSynth:
         return interrupted
 
     def _split_tone(self, left_freq: int, right_freq: int, duration_ms: int) -> bool:
+        if self._has_shared_channel_direction_groups():
+            return self._bipolar_split_tone(left_freq, right_freq, duration_ms)
         left_duty = self.duty_cycle if left_freq > 0 else 0
         right_duty = self.duty_cycle if right_freq > 0 else 0
         self._apply_split(left_freq, left_duty, right_freq, right_duty)
@@ -181,7 +259,7 @@ class MotorSynth:
         return interrupted
 
     def off(self) -> None:
-        self._apply(0, 0)
+        self._stop_group(self._all_audio_pins())
 
     def play(self, sequence: list[tuple[int, int, int]]) -> None:
         if self._control_active:

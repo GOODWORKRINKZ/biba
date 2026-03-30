@@ -54,6 +54,8 @@ All melodies stored as BLHeli format strings in `biba-controller/buzzer/melodies
 
 Startup melody configurable via env var `STARTUP_MELODY` (default: `imperial_march`).
 
+Optional two-channel polyphony is supported through explicit split melody entries, where a named sound can define separate left and right BLHeli parts. If a split entry is absent, playback falls back to the mono melody.
+
 ### 3. BLHeli Parser (`biba-controller/buzzer/blheli_parser.py`)
 
 ```python
@@ -101,7 +103,6 @@ STARTUP_MELODY=imperial_march
 
 ## Out of Scope
 
-- Polyphony (2 motors playing different voices) — future phase
 - Hardware PWM migration for motor drive — future phase (requires GPIO rewiring)
 - Downloading melodies from the internet at runtime
 - RTTTL format support (BLHeli only)
