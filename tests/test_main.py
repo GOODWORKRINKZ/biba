@@ -90,20 +90,20 @@ def test_create_buzzer_preserves_left_and_right_motor_groups(monkeypatch: pytest
     monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main.config, "LEFT_MOTOR_ENABLED", True)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_ENABLED", True)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 12)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 18)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 19)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 13)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 13)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 12)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 19)
 
     main._create_buzzer(fake_pi)
 
     assert captured["pi"] is fake_pi
-    assert captured["pwm_pins"] == [12, 19]
-    assert captured["comp_pins"] == [18, 13]
-    assert captured["left_pwm_pins"] == [12]
-    assert captured["left_comp_pins"] == [18]
-    assert captured["right_pwm_pins"] == [19]
-    assert captured["right_comp_pins"] == [13]
+    assert captured["pwm_pins"] == [18, 12]
+    assert captured["comp_pins"] == [13, 19]
+    assert captured["left_pwm_pins"] == [18]
+    assert captured["left_comp_pins"] == [13]
+    assert captured["right_pwm_pins"] == [12]
+    assert captured["right_comp_pins"] == [19]
 
 
 def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2055,12 +2055,12 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
     monkeypatch.setattr(main.config, "MOTOR_DRIVER_TYPE", "BTS7960")
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 12)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 13)
     monkeypatch.setattr(main.config, "LEFT_MOTOR_REN", 23)
     monkeypatch.setattr(main.config, "LEFT_MOTOR_LEN", 24)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 19)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 13)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 12)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 19)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_REN", 20)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_LEN", 21)
     monkeypatch.setattr(main.config, "MOTOR1_INVERTED", 1)
@@ -2069,10 +2069,10 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
 
     assert main.main() == 0
     assert created == [
-        (12, 18, 23, 24, True),
-        (19, 13, 20, 21, False),
+        (18, 13, 23, 24, True),
+        (12, 19, 20, 21, False),
     ]
-    assert synth_created == [{"pins": (12, 19), "comp": (18, 13)}]
+    assert synth_created == [{"pins": (18, 12), "comp": (13, 19)}]
 
 
 def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2181,16 +2181,16 @@ def test_main_excludes_disabled_motor_from_motor_synth_pins(monkeypatch: pytest.
     monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 12)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 18)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 19)
-    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 13)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 13)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_RPWM", 12)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 19)
     monkeypatch.setattr(main.config, "LEFT_MOTOR_ENABLED", True)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_ENABLED", False)
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0
-    assert synth_created == [{"pins": (12,), "comp": (18,)}]
+    assert synth_created == [{"pins": (18,), "comp": (13,)}]
 
 
 def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_received(

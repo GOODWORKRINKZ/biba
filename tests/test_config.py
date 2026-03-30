@@ -38,13 +38,13 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.BTS7960_PWM_MODE == "HARDWARE"
     assert module.MOTOR1_INVERTED == 0
     assert module.MOTOR2_INVERTED == 0
-    assert module.LEFT_MOTOR_RPWM == 12
-    assert module.LEFT_MOTOR_LPWM == 18
+    assert module.LEFT_MOTOR_RPWM == 18
+    assert module.LEFT_MOTOR_LPWM == 13
     assert module.LEFT_MOTOR_REN == 23
     assert module.LEFT_MOTOR_LEN == 24
     assert module.LEFT_MOTOR_ENABLED is True
-    assert module.RIGHT_MOTOR_RPWM == 19
-    assert module.RIGHT_MOTOR_LPWM == 13
+    assert module.RIGHT_MOTOR_RPWM == 12
+    assert module.RIGHT_MOTOR_LPWM == 19
     assert module.RIGHT_MOTOR_REN == 20
     assert module.RIGHT_MOTOR_LEN == 21
     assert module.RIGHT_MOTOR_ENABLED is True
@@ -280,10 +280,10 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
 
     assert "${MOTOR_DRIVER_TYPE:-BTS7960}" in compose
     assert "BTS7960_PWM_MODE:" in compose
-    assert "BTS7960_PWM_MODE: ${BTS7960_PWM_MODE:-HARDWARE}" in compose
+    assert "BTS7960_PWM_MODE: ${BTS7960_PWM_MODE:-SOFTWARE}" in compose
     assert "MOTOR_DRIVER_TYPE:" in compose
     assert "${LEFT_MOTOR_LEN:-24}" in compose
-    assert "${RIGHT_MOTOR_LPWM:-13}" in compose
+    assert "${RIGHT_MOTOR_LPWM:-19}" in compose
     assert "${RIGHT_MOTOR_LEN:-21}" in compose
     assert "LEFT_MOTOR_RPWM:" in compose
     assert "LEFT_MOTOR_LPWM:" in compose
@@ -339,7 +339,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "CH_BEACON=" in env_example
     assert "CH_MUTE=" in env_example
     assert "MOTOR_DRIVER_TYPE=BTS7960" in env_example
-    assert "BTS7960_PWM_MODE=HARDWARE" in env_example
+    assert "BTS7960_PWM_MODE=SOFTWARE" in env_example
     assert "THROTTLE_FILTER_MODE=NONE" in env_example
     assert "THROTTLE_KALMAN_PROCESS_NOISE=0.02" in env_example
     assert "THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5" in env_example
@@ -350,10 +350,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "LEFT_MOTOR_RPWM=" in env_example
     assert "LEFT_MOTOR_LEN=24" in env_example
     assert "LEFT_MOTOR_ENABLED=1" in env_example
-    assert "LEFT_MOTOR_RPWM=12" in env_example
-    assert "LEFT_MOTOR_LPWM=18" in env_example
-    assert "RIGHT_MOTOR_RPWM=19" in env_example
-    assert "RIGHT_MOTOR_LPWM=13" in env_example
+    assert "RIGHT_MOTOR_LPWM=19" in env_example
     assert "RIGHT_MOTOR_REN=20" in env_example
     assert "RIGHT_MOTOR_LEN=21" in env_example
     assert "RIGHT_MOTOR_ENABLED=1" in env_example

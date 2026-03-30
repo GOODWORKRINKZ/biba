@@ -45,8 +45,8 @@ labels:
     monkeypatch.setattr(main.config, "VOICE_AUDITION_MANIFEST", str(manifest_path))
     monkeypatch.setattr(main.config, "LEFT_MOTOR_ENABLED", True)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_ENABLED", False)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 12)
-    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_RPWM", 18)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_LPWM", 13)
 
     assert main.main() == 0
     assert played[:2] == [
