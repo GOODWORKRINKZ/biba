@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 from motors.current_control import MotorCurrentSample
@@ -104,8 +105,20 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         self._right_reverse_channel = right_reverse_channel
         self._pga_config, self._full_scale_v = self._PGA_BY_GAIN[gain]
         self._sample_rate_config = self._DR_BY_SPS[sample_rate_sps]
+        self._conversion_timeout_s = max(2.0 / sample_rate_sps, 0.01)
+        self._conversion_poll_interval_s = min(max(0.25 / sample_rate_sps, 0.001), 0.005)
         self._left_calibration = left_calibration
         self._right_calibration = right_calibration
+
+    def _wait_for_conversion(self) -> None:
+        deadline = time.monotonic() + self._conversion_timeout_s
+        while time.monotonic() < deadline:
+            config_bytes = self._bus.read_i2c_block_data(self._address, self._REG_CONFIG, 2)
+            config_value = int.from_bytes(bytes(config_bytes), byteorder="big", signed=False)
+            if config_value & self._OS_SINGLE:
+                return
+            time.sleep(self._conversion_poll_interval_s)
+        raise TimeoutError("ADS1115 conversion timed out")
 
     def _read_channel_sample(self, channel: int) -> tuple[int, float]:
         config_value = (
@@ -121,6 +134,7 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
             self._REG_CONFIG,
             [(config_value >> 8) & 0xFF, config_value & 0xFF],
         )
+        self._wait_for_conversion()
         raw_bytes = self._bus.read_i2c_block_data(self._address, self._REG_CONVERSION, 2)
         raw = int.from_bytes(bytes(raw_bytes), byteorder="big", signed=True)
         voltage_v = (raw / 32768.0) * self._full_scale_v

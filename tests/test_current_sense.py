@@ -6,8 +6,9 @@ from motors.current_sense import ADS1115MotorCurrentReader, MotorCurrentCalibrat
 
 
 class FakeSMBus:
-    def __init__(self, responses: list[list[int]]) -> None:
-        self.responses = responses
+    def __init__(self, conversion_responses: list[list[int]], config_responses: list[list[int]] | None = None) -> None:
+        self.conversion_responses = conversion_responses
+        self.config_responses = config_responses or []
         self.write_calls: list[tuple[int, int, list[int]]] = []
         self.read_calls: list[tuple[int, int, int]] = []
 
@@ -16,7 +17,11 @@ class FakeSMBus:
 
     def read_i2c_block_data(self, address: int, register: int, length: int) -> list[int]:
         self.read_calls.append((address, register, length))
-        return self.responses.pop(0)
+        if register == 0x01:
+            if self.config_responses:
+                return self.config_responses.pop(0)
+            return [0x80, 0x00]
+        return self.conversion_responses.pop(0)
 
     def close(self) -> None:
         pass
@@ -40,7 +45,7 @@ def test_null_motor_current_reader_returns_invalid_samples() -> None:
 
 
 def test_ads1115_motor_current_reader_uses_forward_channels_for_positive_duty() -> None:
-    bus = FakeSMBus(responses=[[0x40, 0x00], [0x20, 0x00]])
+    bus = FakeSMBus(conversion_responses=[[0x40, 0x00], [0x20, 0x00]])
     reader = ADS1115MotorCurrentReader(
         bus=bus,
         address=0x48,
@@ -69,11 +74,11 @@ def test_ads1115_motor_current_reader_uses_forward_channels_for_positive_duty() 
     assert bus.write_calls[0][0:2] == (0x48, 0x01)
     assert bus.write_calls[0][2] == [0xE3, 0x83]
     assert bus.write_calls[1][2] == [0xC3, 0x83]
-    assert bus.read_calls == [(0x48, 0x00, 2), (0x48, 0x00, 2)]
+    assert bus.read_calls == [(0x48, 0x01, 2), (0x48, 0x00, 2), (0x48, 0x01, 2), (0x48, 0x00, 2)]
 
 
 def test_ads1115_motor_current_reader_uses_reverse_channels_for_negative_duty() -> None:
-    bus = FakeSMBus(responses=[[0x10, 0x00], [0x08, 0x00]])
+    bus = FakeSMBus(conversion_responses=[[0x10, 0x00], [0x08, 0x00]])
     reader = ADS1115MotorCurrentReader(
         bus=bus,
         address=0x48,
@@ -95,6 +100,36 @@ def test_ads1115_motor_current_reader_uses_reverse_channels_for_negative_duty() 
     assert right_sample.current_a == 2.56
     assert bus.write_calls[0][2] == [0xF3, 0x83]
     assert bus.write_calls[1][2] == [0xD3, 0x83]
+
+
+def test_ads1115_motor_current_reader_waits_for_conversion_ready_bit() -> None:
+    bus = FakeSMBus(
+        conversion_responses=[[0x40, 0x00], [0x20, 0x00]],
+        config_responses=[[0x00, 0x00], [0x80, 0x00], [0x00, 0x00], [0x80, 0x00]],
+    )
+    reader = ADS1115MotorCurrentReader(
+        bus=bus,
+        address=0x48,
+        left_forward_channel=2,
+        left_reverse_channel=3,
+        right_forward_channel=0,
+        right_reverse_channel=1,
+        gain="1",
+        sample_rate_sps=128,
+        left_calibration=MotorCurrentCalibration(),
+        right_calibration=MotorCurrentCalibration(),
+    )
+
+    reader.read_currents(left_duty=0.5, right_duty=0.5)
+
+    assert bus.read_calls == [
+        (0x48, 0x01, 2),
+        (0x48, 0x01, 2),
+        (0x48, 0x00, 2),
+        (0x48, 0x01, 2),
+        (0x48, 0x01, 2),
+        (0x48, 0x00, 2),
+    ]
 
 
 def test_ads1115_motor_current_reader_returns_invalid_samples_on_bus_error() -> None:
