@@ -41,6 +41,29 @@ class TestMotorSynth:
         synth.play_named("arm")
         assert pi.hardware_PWM.called
 
+    def test_play_named_trim_enter_uses_split_left_and_right_groups(self):
+        pi = MagicMock()
+        from buzzer.motor_synth import MotorSynth
+
+        synth = MotorSynth(
+            pi,
+            [18, 12],
+            left_pwm_pins=[18],
+            right_pwm_pins=[12],
+        )
+        synth._wait_or_interrupted = lambda _delay: False
+        pi.hardware_PWM.reset_mock()
+
+        synth.play_named("trim_enter")
+
+        non_zero_calls = [call.args for call in pi.hardware_PWM.call_args_list if call.args[1] > 0]
+        left_calls = [args for args in non_zero_calls if args[0] == 18]
+        right_calls = [args for args in non_zero_calls if args[0] == 12]
+
+        assert left_calls
+        assert right_calls
+        assert left_calls[0][1] != right_calls[0][1]
+
     @patch("time.sleep")
     def test_play_named_unknown_does_nothing(self, mock_sleep):
         synth, pi = self._make_synth()

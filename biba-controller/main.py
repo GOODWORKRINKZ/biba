@@ -882,9 +882,21 @@ def main() -> int:
                             saved_motor_trim = _live_motor_trim_from_channels(channels)
                             _save_motor_trim(saved_motor_trim)
                             trim_mode_active = False
+                            _play_named_async_if_allowed(
+                                buzzer,
+                                "trim_exit",
+                                mute_active=mute_active,
+                                allow_when_muted=True,
+                            )
                             LOGGER.info("Motor trim saved trim=%.3f", saved_motor_trim)
                         else:
                             trim_mode_active = True
+                            _play_named_async_if_allowed(
+                                buzzer,
+                                "trim_enter",
+                                mute_active=mute_active,
+                                allow_when_muted=True,
+                            )
                             LOGGER.info("Motor trim mode enabled")
                         trim_gesture_consumed = True
                 else:

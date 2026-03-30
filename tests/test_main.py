@@ -259,6 +259,7 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
 def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     applied_outputs: list[tuple[float, float]] = []
+    sound_calls: list[str] = []
 
     def frame(ch1: float, ch2: float, ch3: float, ch4: float, arm: float, ch9: float) -> list[float]:
         return [ch1, ch2, ch3, ch4, arm, 0.0, 0.0, 0.0, ch9]
@@ -375,7 +376,7 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
             del active
 
         def play_named_async(self, name: str) -> None:
-            del name
+            sound_calls.append(name)
 
         def play_spectral_async(self, path: str) -> None:
             del path
@@ -430,12 +431,14 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
     assert main.main() == 0
     assert applied_outputs[-1][0] == pytest.approx(1.0)
     assert applied_outputs[-1][1] == pytest.approx(0.9)
+    assert sound_calls == ["trim_enter"]
 
 
 def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     applied_outputs: list[tuple[float, float]] = []
     saved_trims: list[float] = []
+    sound_calls: list[str] = []
 
     def frame(ch1: float, ch2: float, ch3: float, ch4: float, arm: float, ch9: float) -> list[float]:
         return [ch1, ch2, ch3, ch4, arm, 0.0, 0.0, 0.0, ch9]
@@ -559,7 +562,7 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
             del active
 
         def play_named_async(self, name: str) -> None:
-            del name
+            sound_calls.append(name)
 
         def play_spectral_async(self, path: str) -> None:
             del path
@@ -615,6 +618,7 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
     assert saved_trims == [pytest.approx(-0.1)]
     assert applied_outputs[-1][0] == pytest.approx(0.9)
     assert applied_outputs[-1][1] == pytest.approx(1.0)
+    assert sound_calls == ["trim_enter", "trim_exit"]
 
 
 def test_main_allows_sos_beacon_while_muted(monkeypatch: pytest.MonkeyPatch) -> None:

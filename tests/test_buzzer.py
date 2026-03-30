@@ -134,8 +134,15 @@ class TestBlheliMelodyCatalog:
         expected = {
             "startup", "arm", "disarm", "low_voltage",
             "failsafe", "sos", "connected", "disconnected", "shutdown",
+            "trim_enter", "trim_exit",
         }
         assert expected.issubset(set(melodies.BLHELI_CATALOG.keys()))
+
+    def test_blheli_catalog_has_trim_transition_entries(self):
+        for name in ("trim_enter", "trim_exit"):
+            melody_str, tempo = melodies.BLHELI_CATALOG[name]
+            assert melody_str
+            assert tempo > 0
 
     def test_blheli_catalog_has_biba_signature(self):
         assert "biba_signature" in melodies.BLHELI_CATALOG

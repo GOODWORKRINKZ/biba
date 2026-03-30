@@ -135,6 +135,14 @@ BLHELI_CATALOG: dict[str, tuple[str, int]] = {
         "C5 1/8 D5 1/8 E5 1/16 C5 1/16 A4 1/4",
         140,
     ),
+    "trim_enter": (
+        "E5 1/16 G5 1/16 B5 1/8 C6 1/8",
+        176,
+    ),
+    "trim_exit": (
+        "C6 1/16 A5 1/16 F5 1/8 G5 1/8",
+        172,
+    ),
     # ── Fun melodies ───────────────────────────────
     "imperial_march": (
         "G4 1/4 G4 1/4 G4 1/4 D#4 1/8 A#4 1/16 G4 1/4 D#4 1/8 A#4 1/16 G4 1/2 "
@@ -176,6 +184,20 @@ BLHELI_CATALOG: dict[str, tuple[str, int]] = {
         "F#4 1/8 F#4 1/8 D4 1/8 B3 1/8 P 1/8 B3 1/8 P 1/8 E4 1/8 "
         "P 1/8 E4 1/8 P 1/8 E4 1/8 G#4 1/8 G#4 1/8 A4 1/8 B4 1/8",
         160,
+    ),
+}
+
+
+SPLIT_BLHELI_CATALOG: dict[str, tuple[str, str, int]] = {
+    "trim_enter": (
+        "E5 1/16 G5 1/16 B5 1/8 C6 1/8",
+        "B5 1/16 D6 1/16 E6 1/8 G6 1/8",
+        176,
+    ),
+    "trim_exit": (
+        "C6 1/16 A5 1/16 F5 1/8 E5 1/8",
+        "A5 1/16 F5 1/16 D5 1/8 C5 1/8",
+        172,
     ),
 }
 

@@ -75,6 +75,22 @@ class MotorSynth:
         for pin in self.pwm_pins + self.comp_pins:
             self.pi.hardware_PWM(pin, frequency, duty_cycle)
 
+    def _apply_group(self, pins: list[int], frequency: int, duty_cycle: int) -> None:
+        for pin in pins:
+            self.pi.hardware_PWM(pin, frequency, duty_cycle)
+
+    def _apply_split(
+        self,
+        left_frequency: int,
+        left_duty_cycle: int,
+        right_frequency: int,
+        right_duty_cycle: int,
+    ) -> None:
+        left_pins = self.left_pwm_pins + self.left_comp_pins
+        right_pins = self.right_pwm_pins + self.right_comp_pins
+        self._apply_group(left_pins, left_frequency, left_duty_cycle)
+        self._apply_group(right_pins, right_frequency, right_duty_cycle)
+
     def _wait_or_interrupted(self, duration_s: float) -> bool:
         return self._interrupt_event.wait(duration_s)
 
@@ -83,6 +99,14 @@ class MotorSynth:
             self._apply(freq, self.duty_cycle)
         else:
             self.off()
+        interrupted = self._wait_or_interrupted(duration_ms / 1000.0)
+        self.off()
+        return interrupted
+
+    def _split_tone(self, left_freq: int, right_freq: int, duration_ms: int) -> bool:
+        left_duty = self.duty_cycle if left_freq > 0 else 0
+        right_duty = self.duty_cycle if right_freq > 0 else 0
+        self._apply_split(left_freq, left_duty, right_freq, right_duty)
         interrupted = self._wait_or_interrupted(duration_ms / 1000.0)
         self.off()
         return interrupted
@@ -121,7 +145,29 @@ class MotorSynth:
                     break
             self.off()
 
+    def play_split_blheli(self, left_melody_str: str, right_melody_str: str, tempo_bpm: int = 120) -> None:
+        left_notes = parse_blheli(left_melody_str, tempo_bpm=tempo_bpm)
+        right_notes = parse_blheli(right_melody_str, tempo_bpm=tempo_bpm)
+        if self._control_active:
+            return
+        with self._lock:
+            for left_note, right_note in zip(left_notes, right_notes):
+                if self._control_active:
+                    break
+                left_freq, left_duration_s = left_note
+                right_freq, right_duration_s = right_note
+                duration_ms = int(max(left_duration_s, right_duration_s) * 1000)
+                interrupted = self._split_tone(int(left_freq), int(right_freq), duration_ms)
+                if interrupted or self._control_active:
+                    break
+            self.off()
+
     def play_named(self, name: str) -> None:
+        split_entry = melodies.SPLIT_BLHELI_CATALOG.get(name)
+        if split_entry is not None and self._has_split_motor_groups():
+            left_melody_str, right_melody_str, tempo = split_entry
+            self.play_split_blheli(left_melody_str, right_melody_str, tempo_bpm=tempo)
+            return
         entry = melodies.BLHELI_CATALOG.get(name)
         if entry is None:
             return
