@@ -2063,14 +2063,14 @@ def test_main_uses_bts7960_driver_when_configured(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_LPWM", 13)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_REN", 20)
     monkeypatch.setattr(main.config, "RIGHT_MOTOR_LEN", 21)
-    monkeypatch.setattr(main.config, "MOTOR1_INVERTED", 1)
-    monkeypatch.setattr(main.config, "MOTOR2_INVERTED", 0)
+    monkeypatch.setattr(main.config, "MOTOR1_INVERTED", 0)
+    monkeypatch.setattr(main.config, "MOTOR2_INVERTED", 1)
     monkeypatch.setattr(main, "RUNNING", False)
 
     assert main.main() == 0
     assert created == [
-        (12, 18, 23, 24, True),
-        (19, 13, 20, 21, False),
+        (12, 18, 23, 24, False),
+        (19, 13, 20, 21, True),
     ]
     assert synth_created == [{"pins": (12, 19), "comp": (18, 13)}]
 

@@ -20,6 +20,48 @@ from buzzer.wav_player import (
 )
 
 LOGGER = logging.getLogger(__name__)
+_HARDWARE_PWM_CHANNELS = {
+    12: 0,
+    18: 0,
+    13: 1,
+    19: 1,
+}
+
+
+def _hardware_pwm_channel(pin: int) -> int | None:
+    return _HARDWARE_PWM_CHANNELS.get(pin)
+
+
+def _drop_shared_channel_comp_pins(
+    pwm_pins: list[int],
+    comp_pins: list[int],
+    *,
+    group_name: str,
+) -> list[int]:
+    pwm_channels = {
+        channel
+        for pin in pwm_pins
+        if (channel := _hardware_pwm_channel(pin)) is not None
+    }
+    if not pwm_channels:
+        return comp_pins
+
+    filtered: list[int] = []
+    dropped: list[int] = []
+    for pin in comp_pins:
+        channel = _hardware_pwm_channel(pin)
+        if channel is not None and channel in pwm_channels:
+            dropped.append(pin)
+            continue
+        filtered.append(pin)
+
+    if dropped:
+        LOGGER.warning(
+            "Dropping complementary synth pins that share a hardware PWM channel with %s pins: %s",
+            group_name,
+            dropped,
+        )
+    return filtered
 
 
 class MotorSynth:
@@ -39,11 +81,28 @@ class MotorSynth:
     ) -> None:
         self.pi = pi
         self.pwm_pins = list(dict.fromkeys(pwm_pins))
-        self.comp_pins = list(dict.fromkeys(comp_pins)) if comp_pins else []
         self.left_pwm_pins = list(dict.fromkeys(left_pwm_pins)) if left_pwm_pins else []
-        self.left_comp_pins = list(dict.fromkeys(left_comp_pins)) if left_comp_pins else []
         self.right_pwm_pins = list(dict.fromkeys(right_pwm_pins)) if right_pwm_pins else []
+        self.left_comp_pins = list(dict.fromkeys(left_comp_pins)) if left_comp_pins else []
+        self.left_comp_pins = _drop_shared_channel_comp_pins(
+            self.left_pwm_pins,
+            self.left_comp_pins,
+            group_name="left motor synth",
+        )
         self.right_comp_pins = list(dict.fromkeys(right_comp_pins)) if right_comp_pins else []
+        self.right_comp_pins = _drop_shared_channel_comp_pins(
+            self.right_pwm_pins,
+            self.right_comp_pins,
+            group_name="right motor synth",
+        )
+        self.comp_pins = list(dict.fromkeys(comp_pins)) if comp_pins else []
+        self.comp_pins = _drop_shared_channel_comp_pins(
+            self.pwm_pins,
+            self.comp_pins,
+            group_name="combined motor synth",
+        )
+        if self._has_split_motor_groups():
+            self.comp_pins = list(dict.fromkeys(self.left_comp_pins + self.right_comp_pins))
         self.duty_cycle = duty_cycle
         self._lock = threading.Lock()
         self._interrupt_event = threading.Event()

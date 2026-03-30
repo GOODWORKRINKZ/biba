@@ -36,8 +36,8 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR1_PWM == 18
     assert module.MOTOR_DRIVER_TYPE == "BTS7960"
     assert module.BTS7960_PWM_MODE == "SOFTWARE"
-    assert module.MOTOR1_INVERTED == 0
-    assert module.MOTOR2_INVERTED == 0
+    assert module.MOTOR1_INVERTED == 1
+    assert module.MOTOR2_INVERTED == 1
     assert module.LEFT_MOTOR_RPWM == 12
     assert module.LEFT_MOTOR_LPWM == 18
     assert module.LEFT_MOTOR_REN == 23
@@ -195,7 +195,7 @@ def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.M
     module = importlib.reload(config_module)
 
     assert module.MOTOR1_PWM == 18
-    assert module.MOTOR1_INVERTED == 0
+    assert module.MOTOR1_INVERTED == 1
     assert module.FAILSAFE_TIMEOUT_S == pytest.approx(0.5)
 
 
@@ -303,9 +303,9 @@ def test_docker_compose_exposes_motor_inversion_environment_variables() -> None:
         compose = compose_file.read()
 
     assert "MOTOR1_INVERTED:" in compose
-    assert "MOTOR1_INVERTED: ${MOTOR1_INVERTED:-0}" in compose
+    assert "MOTOR1_INVERTED: ${MOTOR1_INVERTED:-1}" in compose
     assert "MOTOR2_INVERTED:" in compose
-    assert "MOTOR2_INVERTED: ${MOTOR2_INVERTED:-0}" in compose
+    assert "MOTOR2_INVERTED: ${MOTOR2_INVERTED:-1}" in compose
 
 
 def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
@@ -354,8 +354,8 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "RIGHT_MOTOR_REN=20" in env_example
     assert "RIGHT_MOTOR_LEN=21" in env_example
     assert "RIGHT_MOTOR_ENABLED=1" in env_example
-    assert "MOTOR1_INVERTED=0" in env_example
-    assert "MOTOR2_INVERTED=0" in env_example
+    assert "MOTOR1_INVERTED=1" in env_example
+    assert "MOTOR2_INVERTED=1" in env_example
     assert "MOTOR_CURRENT_LIMITING_ENABLED=" in env_example
     assert "MOTOR_CURRENT_SENSE_ENABLED=" in env_example
     assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS=" in env_example
