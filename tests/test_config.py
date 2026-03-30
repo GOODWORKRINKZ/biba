@@ -71,7 +71,7 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR_CURRENT_SENSE_I2C_ADDRESS == 0x48
     assert module.MOTOR_CURRENT_SENSE_LEFT_CHANNEL == 0
     assert module.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL == 1
-    assert module.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ == 25.0
+    assert module.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ == 32.0
     assert module.MOTOR_CURRENT_SENSE_GAIN == "1"
     assert module.LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.0)
     assert module.RIGHT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.0)
@@ -339,7 +339,7 @@ def test_docker_compose_exposes_motor_current_sense_environment_variables() -> N
     assert "MOTOR_CURRENT_SENSE_RIGHT_CHANNEL:" in compose
     assert "MOTOR_CURRENT_SENSE_RIGHT_CHANNEL: ${MOTOR_CURRENT_SENSE_RIGHT_CHANNEL:-1}" in compose
     assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:" in compose
-    assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ: ${MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:-25}" in compose
+    assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ: ${MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:-32}" in compose
     assert "MOTOR_CURRENT_SENSE_GAIN:" in compose
     assert "MOTOR_CURRENT_SENSE_GAIN: ${MOTOR_CURRENT_SENSE_GAIN:-1}" in compose
     assert "LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V:" in compose

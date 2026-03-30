@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+
 from motors.current_sense import ADS1115MotorCurrentReader, MotorCurrentCalibration, NullMotorCurrentReader
 
 
@@ -90,3 +92,11 @@ def test_ads1115_motor_current_reader_returns_invalid_samples_on_bus_error() -> 
     assert right_sample.voltage_v is None
     assert left_sample.raw_adc is None
     assert right_sample.raw_adc is None
+
+
+def test_default_configured_ads1115_sample_rate_is_supported(monkeypatch) -> None:
+    monkeypatch.delenv("MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ", raising=False)
+    config = importlib.import_module("config")
+    config = importlib.reload(config)
+
+    assert int(round(config.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ)) in ADS1115MotorCurrentReader._DR_BY_SPS
