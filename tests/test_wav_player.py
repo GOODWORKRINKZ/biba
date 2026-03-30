@@ -26,6 +26,8 @@ from buzzer.wav_player import (
     load_or_build_split_peak_frames,
     load_or_build_peak_frames,
     load_peak_frame_cache,
+    play_bipolar_samples,
+    play_bipolar_split_peak_frames,
     load_wav,
     play_peak_frames,
     play_samples,
@@ -245,6 +247,32 @@ class TestPlaySamples:
 
         assert call(18, 0, 0) in pi.hardware_PWM.call_args_list
         assert call(13, 0, 0) in pi.hardware_PWM.call_args_list
+
+    def test_bipolar_samples_switch_direction_around_waveform_center(self):
+        pi = MagicMock()
+        forward_pins = [12]
+        reverse_pins = [18]
+        samples = bytes([255, 128, 0])
+        stop = threading.Event()
+
+        time_points = iter([0.0, 0.0, 0.0001, 0.0002, 0.0003])
+
+        with patch("buzzer.wav_player.time.monotonic", side_effect=lambda: next(time_points)):
+            play_bipolar_samples(
+                pi,
+                forward_pins,
+                reverse_pins,
+                samples,
+                sample_rate=8000,
+                carrier_freq=25000,
+                interrupt_event=stop,
+            )
+
+        calls = pi.hardware_PWM.call_args_list
+        assert call(12, 25000, 1_000_000) in calls
+        assert call(18, 0, 0) in calls
+        assert call(18, 25000, 1_000_000) in calls
+        assert call(12, 0, 0) in calls
 
 
 # ---------------------------------------------------------------------------
@@ -904,6 +932,34 @@ class TestMotorSynthPlaySpectral:
         assert left_freqs
         assert right_freqs
         assert left_freqs == right_freqs
+
+    def test_bipolar_split_peak_frames_alternates_direction_between_slots(self):
+        pi = MagicMock()
+        left_forward_pins = [12]
+        left_reverse_pins = [18]
+        right_forward_pins = [19]
+        right_reverse_pins = [13]
+        left_frames = [([(420, 120000), (430, 110000)], 10)]
+        right_frames = [([(760, 80000), (770, 70000)], 10)]
+
+        with patch("buzzer.wav_player.time.sleep"):
+            play_bipolar_split_peak_frames(
+                pi,
+                left_forward_pins,
+                left_reverse_pins,
+                right_forward_pins,
+                right_reverse_pins,
+                left_frames,
+                right_frames,
+            )
+
+        calls = pi.hardware_PWM.call_args_list
+        assert call(12, 420, 120000) in calls
+        assert call(18, 0, 0) in calls
+        assert call(18, 430, 110000) in calls
+        assert call(12, 0, 0) in calls
+        assert call(19, 760, 80000) in calls
+        assert call(13, 770, 70000) in calls
 
     def test_play_spectral_default_path_emits_multiple_voiced_frequencies(self, tmp_path):
         synth, pi = self._make_synth()

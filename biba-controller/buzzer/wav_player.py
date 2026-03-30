@@ -238,6 +238,57 @@ def play_samples(
         pi.hardware_PWM(pin, 0, 0)
 
 
+def _stop_pwm_pins(pi: pigpio.pi, pins: list[int]) -> None:
+    for pin in pins:
+        pi.hardware_PWM(pin, 0, 0)
+
+
+def _drive_directional_pwm(
+    pi: pigpio.pi,
+    active_pins: list[int],
+    inactive_pins: list[int],
+    frequency: int,
+    duty_cycle: int,
+) -> None:
+    for pin in active_pins:
+        pi.hardware_PWM(pin, frequency, duty_cycle)
+    _stop_pwm_pins(pi, inactive_pins)
+
+
+def play_bipolar_samples(
+    pi: pigpio.pi,
+    forward_pins: list[int],
+    reverse_pins: list[int],
+    samples: bytes,
+    sample_rate: int,
+    carrier_freq: int = DEFAULT_CARRIER_HZ,
+    interrupt_event: threading.Event | None = None,
+) -> None:
+    """Play PCM samples centered around zero by switching motor direction per sample sign."""
+    n_samples = len(samples)
+    start = time.monotonic()
+    i = 0
+
+    while i < n_samples:
+        if interrupt_event and i % _INTERRUPT_CHECK_INTERVAL == 0 and interrupt_event.is_set():
+            break
+
+        sample = samples[i]
+        if sample > 128:
+            duty = (sample - 128) * _DUTY_MAX // 127
+            _drive_directional_pwm(pi, forward_pins, reverse_pins, carrier_freq, duty)
+        elif sample < 128:
+            duty = (128 - sample) * _DUTY_MAX // 128
+            _drive_directional_pwm(pi, reverse_pins, forward_pins, carrier_freq, duty)
+        else:
+            _stop_pwm_pins(pi, forward_pins + reverse_pins)
+
+        elapsed = time.monotonic() - start
+        i = max(i + 1, int(elapsed * sample_rate))
+
+    _stop_pwm_pins(pi, forward_pins + reverse_pins)
+
+
 # ---------------------------------------------------------------------------
 # Spectral / vocoder playback
 # ---------------------------------------------------------------------------
@@ -631,3 +682,59 @@ def play_split_peak_frames(
 
     for pin in all_left_pins + all_right_pins:
         pi.hardware_PWM(pin, 0, 0)
+
+
+def play_bipolar_split_peak_frames(
+    pi: pigpio.pi,
+    left_forward_pins: list[int],
+    left_reverse_pins: list[int],
+    right_forward_pins: list[int],
+    right_reverse_pins: list[int],
+    left_frames: list[tuple[list[tuple[int, int]], int]],
+    right_frames: list[tuple[list[tuple[int, int]], int]],
+    interrupt_event: threading.Event | None = None,
+) -> None:
+    """Play spectral frames while alternating direction between adjacent slots."""
+    frame_count = max(len(left_frames), len(right_frames))
+    forward_active = True
+
+    for frame_index in range(frame_count):
+        if interrupt_event and interrupt_event.is_set():
+            break
+
+        left_peaks, left_duration_ms = left_frames[frame_index] if frame_index < len(left_frames) else ([], 0)
+        right_peaks, right_duration_ms = right_frames[frame_index] if frame_index < len(right_frames) else ([], 0)
+        duration_ms = left_duration_ms or right_duration_ms
+        slot_count = max(len(left_peaks), len(right_peaks), 1)
+        slot_s = (duration_ms / 1000.0) / slot_count if duration_ms > 0 else 0.0
+
+        for slot_index in range(slot_count):
+            if interrupt_event and interrupt_event.is_set():
+                break
+
+            if slot_index < len(left_peaks):
+                left_freq, left_duty = left_peaks[slot_index]
+                if forward_active:
+                    _drive_directional_pwm(pi, left_forward_pins, left_reverse_pins, left_freq, left_duty)
+                else:
+                    _drive_directional_pwm(pi, left_reverse_pins, left_forward_pins, left_freq, left_duty)
+            else:
+                _stop_pwm_pins(pi, left_forward_pins + left_reverse_pins)
+
+            if slot_index < len(right_peaks):
+                right_freq, right_duty = right_peaks[slot_index]
+                if forward_active:
+                    _drive_directional_pwm(pi, right_forward_pins, right_reverse_pins, right_freq, right_duty)
+                else:
+                    _drive_directional_pwm(pi, right_reverse_pins, right_forward_pins, right_freq, right_duty)
+            else:
+                _stop_pwm_pins(pi, right_forward_pins + right_reverse_pins)
+
+            forward_active = not forward_active
+            if interrupt_event:
+                if interrupt_event.wait(slot_s):
+                    break
+            else:
+                time.sleep(slot_s)
+
+    _stop_pwm_pins(pi, left_forward_pins + left_reverse_pins + right_forward_pins + right_reverse_pins)

@@ -145,8 +145,8 @@ bash ~/biba/scripts/diagnostics.sh
 | `RIGHT_MOTOR_LPWM` | `19` | Правый BTS7960 `LPWM` |
 | `RIGHT_MOTOR_REN` | `20` | Правый BTS7960 `REN` |
 | `RIGHT_MOTOR_LEN` | `21` | Правый BTS7960 `LEN` |
-| `MOTOR1_INVERTED` | `0` | Инверсия мотора 1 |
-| `MOTOR2_INVERTED` | `1` | Инверсия мотора 2 |
+| `MOTOR1_INVERTED` | `1` | Инверсия мотора 1 |
+| `MOTOR2_INVERTED` | `0` | Инверсия мотора 2 |
 
 Тег образа задается в `/etc/default/biba-controller` или `.env`:
 

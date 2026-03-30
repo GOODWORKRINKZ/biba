@@ -14,6 +14,8 @@ from buzzer.wav_player import (
     load_or_build_peak_frames,
     load_or_build_split_peak_frames,
     load_wav,
+    play_bipolar_samples,
+    play_bipolar_split_peak_frames,
     play_peak_frames,
     play_split_peak_frames,
     play_samples,
@@ -83,13 +85,15 @@ class MotorSynth:
         self.pwm_pins = list(dict.fromkeys(pwm_pins))
         self.left_pwm_pins = list(dict.fromkeys(left_pwm_pins)) if left_pwm_pins else []
         self.right_pwm_pins = list(dict.fromkeys(right_pwm_pins)) if right_pwm_pins else []
-        self.left_comp_pins = list(dict.fromkeys(left_comp_pins)) if left_comp_pins else []
+        self._raw_left_comp_pins = list(dict.fromkeys(left_comp_pins)) if left_comp_pins else []
+        self.left_comp_pins = list(self._raw_left_comp_pins)
         self.left_comp_pins = _drop_shared_channel_comp_pins(
             self.left_pwm_pins,
             self.left_comp_pins,
             group_name="left motor synth",
         )
-        self.right_comp_pins = list(dict.fromkeys(right_comp_pins)) if right_comp_pins else []
+        self._raw_right_comp_pins = list(dict.fromkeys(right_comp_pins)) if right_comp_pins else []
+        self.right_comp_pins = list(self._raw_right_comp_pins)
         self.right_comp_pins = _drop_shared_channel_comp_pins(
             self.right_pwm_pins,
             self.right_comp_pins,
@@ -117,6 +121,12 @@ class MotorSynth:
             or self.left_comp_pins
             or self.right_pwm_pins
             or self.right_comp_pins
+        )
+
+    def _has_shared_channel_direction_groups(self) -> bool:
+        return bool(
+            (self.left_pwm_pins and self._raw_left_comp_pins and not self.left_comp_pins)
+            or (self.right_pwm_pins and self._raw_right_comp_pins and not self.right_comp_pins)
         )
 
     def set_control_active(self, active: bool) -> None:
@@ -280,15 +290,26 @@ class MotorSynth:
         with self._lock:
             if self._control_active:
                 return
-            play_samples(
-                self.pi,
-                self.pwm_pins,
-                samples,
-                sample_rate,
-                carrier_freq=DEFAULT_CARRIER_HZ,
-                interrupt_event=self._interrupt_event,
-                comp_pins=self.comp_pins,
-            )
+            if self._has_shared_channel_direction_groups():
+                play_bipolar_samples(
+                    self.pi,
+                    self.left_pwm_pins + self.right_pwm_pins,
+                    self._raw_left_comp_pins + self._raw_right_comp_pins,
+                    samples,
+                    sample_rate,
+                    carrier_freq=DEFAULT_CARRIER_HZ,
+                    interrupt_event=self._interrupt_event,
+                )
+            else:
+                play_samples(
+                    self.pi,
+                    self.pwm_pins,
+                    samples,
+                    sample_rate,
+                    carrier_freq=DEFAULT_CARRIER_HZ,
+                    interrupt_event=self._interrupt_event,
+                    comp_pins=self.comp_pins,
+                )
 
     def play_wav_async(self, path: str) -> threading.Thread:
         """Play a WAV file in a background thread. Returns the thread."""
@@ -316,14 +337,26 @@ class MotorSynth:
             if self._control_active:
                 return
             if self._has_split_motor_groups():
-                play_split_peak_frames(
-                    self.pi,
-                    self.left_pwm_pins + self.left_comp_pins,
-                    self.right_pwm_pins + self.right_comp_pins,
-                    left_frames,
-                    right_frames,
-                    interrupt_event=self._interrupt_event,
-                )
+                if self._has_shared_channel_direction_groups():
+                    play_bipolar_split_peak_frames(
+                        self.pi,
+                        self.left_pwm_pins,
+                        self._raw_left_comp_pins,
+                        self.right_pwm_pins,
+                        self._raw_right_comp_pins,
+                        left_frames,
+                        right_frames,
+                        interrupt_event=self._interrupt_event,
+                    )
+                else:
+                    play_split_peak_frames(
+                        self.pi,
+                        self.left_pwm_pins + self.left_comp_pins,
+                        self.right_pwm_pins + self.right_comp_pins,
+                        left_frames,
+                        right_frames,
+                        interrupt_event=self._interrupt_event,
+                    )
             else:
                 play_peak_frames(
                     self.pi,
