@@ -20,10 +20,10 @@
 
 ## Статус текущей двухмоторной проводки
 
-Текущая распиновка выше считается временной эксплуатационной схемой для двух BTS7960 на Pi Zero 2W.
+Текущая распиновка выше считается рабочей эксплуатационной схемой для двух BTS7960 на Pi Zero 2W.
 
-- `LEFT RPWM=18` и `RIGHT RPWM=12` делят hardware PWM channel 0.
-- `LEFT LPWM=13` и `RIGHT LPWM=19` делят hardware PWM channel 1.
+- `LEFT RPWM=12` и `LEFT LPWM=18` делят hardware PWM channel 0.
+- `RIGHT RPWM=19` и `RIGHT LPWM=13` делят hardware PWM channel 1.
 - Поэтому для одновременной работы двух моторов с этой проводкой нужно явно выставлять `BTS7960_PWM_MODE=SOFTWARE`.
 
 Пример текущего runtime-конфига:
@@ -32,22 +32,22 @@
 BTS7960_PWM_MODE=SOFTWARE
 LEFT_MOTOR_ENABLED=1
 RIGHT_MOTOR_ENABLED=1
-LEFT_MOTOR_RPWM=18
-LEFT_MOTOR_LPWM=13
-RIGHT_MOTOR_RPWM=12
-RIGHT_MOTOR_LPWM=19
+LEFT_MOTOR_RPWM=12
+LEFT_MOTOR_LPWM=18
+RIGHT_MOTOR_RPWM=19
+RIGHT_MOTOR_LPWM=13
 ```
 
 ## Целевая hardware-PWM конфигурация
 
-Кодовый дефолт `BTS7960_PWM_MODE=HARDWARE` оставлен только для конфигураций, где PWM-линии не конфликтуют по hardware-каналам.
+Кодовый дефолт `BTS7960_PWM_MODE=SOFTWARE` оставлен намеренно: это безопасный режим для текущей рабочей проводки.
 
 Для Raspberry Pi Zero 2W это означает одно из двух:
 
 - либо включён только один BTS7960-мотор на паре `RPWM/LPWM`, использующей разные hardware-каналы;
 - либо двухмоторная схема переведена на внешний PWM-генератор или другой драйвер, который не требует четырёх независимых hardware-PWM линий от самой Pi.
 
-С текущей проводкой `18/13` и `12/19` режим `HARDWARE` для двух моторов использовать нельзя.
+С текущей проводкой `12/18` и `19/13` режим `HARDWARE` для двух моторов использовать нельзя.
 
 ## Подключение current sense через ADS1115
 

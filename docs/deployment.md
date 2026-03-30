@@ -166,7 +166,7 @@ MOTOR_TRIM_CONFIRM_HOLD_S=5.0
 MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
 ```
 
-Для текущего робота c проводкой `LEFT 18/13` и `RIGHT 12/19` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. Кодовый дефолт `HARDWARE` сохранён для будущих конфигураций без конфликта hardware-PWM каналов.
+Для текущего робота c проводкой `LEFT 12/18` и `RIGHT 19/13` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. В этой раскладке у левого мотора обе PWM-линии сидят на hardware PWM channel 0, а у правого мотора обе PWM-линии сидят на hardware PWM channel 1, поэтому для движения нужен software PWM.
 
 ### BLE BMS
 
