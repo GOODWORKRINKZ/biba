@@ -155,7 +155,7 @@ BIBA_IMAGE_TAG=latest
 BMS_TRANSPORT=BLE
 BMS_BLE_ADDRESS=
 MOTOR_DRIVER_TYPE=BTS7960
-BTS7960_PWM_MODE=SOFTWARE
+BTS7960_PWM_MODE=HARDWARE
 BEACON_ENABLED=1
 BEACON_DELAY_S=300
 CH_BEACON=7
@@ -166,7 +166,7 @@ MOTOR_TRIM_CONFIRM_HOLD_S=5.0
 MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
 ```
 
-Для текущего робота c проводкой `LEFT 18/13` и `RIGHT 12/19` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. Кодовый дефолт `HARDWARE` сохранён для будущих конфигураций без конфликта hardware-PWM каналов.
+Для текущего робота с новой проводкой `LEFT 12/18` и `RIGHT 19/13` используйте `BTS7960_PWM_MODE=HARDWARE`. Эта раскладка разводит оба мотора по двум hardware-PWM каналам без межмоторного конфликта.
 
 ### BLE BMS
 

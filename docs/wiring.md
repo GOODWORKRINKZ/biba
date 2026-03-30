@@ -8,46 +8,47 @@
 | ELRS RX (Pi <- TX приемника) | 15 | 10 |
 | I2C SDA (ADS1115, опционально) | 2 | 3 |
 | I2C SCL (ADS1115, опционально) | 3 | 5 |
-| Left BTS7960 RPWM | 18 | 12 |
-| Left BTS7960 LPWM | 13 | 33 |
+| Left BTS7960 RPWM | 12 | 32 |
+| Left BTS7960 LPWM | 18 | 12 |
 | Left BTS7960 REN | 23 | 16 |
 | Left BTS7960 LEN | 24 | 18 |
-| Right BTS7960 RPWM | 12 | 32 |
-| Right BTS7960 LPWM | 19 | 35 |
+| Right BTS7960 RPWM | 19 | 35 |
+| Right BTS7960 LPWM | 13 | 33 |
 | Right BTS7960 REN | 20 | 38 |
 | Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
 
 ## Статус текущей двухмоторной проводки
 
-Текущая распиновка выше считается временной эксплуатационной схемой для двух BTS7960 на Pi Zero 2W.
+Текущая распиновка выше уже разведена под одновременную работу двух BTS7960 на Pi Zero 2W в режиме hardware PWM.
 
-- `LEFT RPWM=18` и `RIGHT RPWM=12` делят hardware PWM channel 0.
-- `LEFT LPWM=13` и `RIGHT LPWM=19` делят hardware PWM channel 1.
-- Поэтому для одновременной работы двух моторов с этой проводкой нужно явно выставлять `BTS7960_PWM_MODE=SOFTWARE`.
+- Левый мотор использует `RPWM=12` и `LPWM=18`.
+- Правый мотор использует `RPWM=19` и `LPWM=13`.
+- У каждого мотора одна линия сидит на hardware PWM channel 0 и одна на hardware PWM channel 1.
+- Поэтому двухмоторная схема может работать с `BTS7960_PWM_MODE=HARDWARE`.
 
 Пример текущего runtime-конфига:
 
 ```ini
-BTS7960_PWM_MODE=SOFTWARE
+BTS7960_PWM_MODE=HARDWARE
 LEFT_MOTOR_ENABLED=1
 RIGHT_MOTOR_ENABLED=1
-LEFT_MOTOR_RPWM=18
-LEFT_MOTOR_LPWM=13
-RIGHT_MOTOR_RPWM=12
-RIGHT_MOTOR_LPWM=19
+LEFT_MOTOR_RPWM=12
+LEFT_MOTOR_LPWM=18
+RIGHT_MOTOR_RPWM=19
+RIGHT_MOTOR_LPWM=13
 ```
 
 ## Целевая hardware-PWM конфигурация
 
-Кодовый дефолт `BTS7960_PWM_MODE=HARDWARE` оставлен только для конфигураций, где PWM-линии не конфликтуют по hardware-каналам.
+Кодовый дефолт `BTS7960_PWM_MODE=HARDWARE` соответствует текущей проводке, где двухмоторная схема уже не конфликтует по hardware PWM каналам.
 
-Для Raspberry Pi Zero 2W это означает одно из двух:
+Для Raspberry Pi Zero 2W используется такое разбиение:
 
-- либо включён только один BTS7960-мотор на паре `RPWM/LPWM`, использующей разные hardware-каналы;
-- либо двухмоторная схема переведена на внешний PWM-генератор или другой драйвер, который не требует четырёх независимых hardware-PWM линий от самой Pi.
+- hardware PWM channel 0: GPIO 12 и GPIO 18
+- hardware PWM channel 1: GPIO 19 и GPIO 13
 
-С текущей проводкой `18/13` и `12/19` режим `HARDWARE` для двух моторов использовать нельзя.
+В текущей разводке каждый мотор использует по одному пину из каждого канала, поэтому режим `HARDWARE` допустим для двух моторов одновременно.
 
 ## Подключение current sense через ADS1115
 
