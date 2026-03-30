@@ -238,8 +238,6 @@ class MotorSynth:
         return False
 
     def _tone(self, freq: int, duration_ms: int) -> bool:
-        if self._has_shared_channel_direction_groups():
-            return self._bipolar_split_tone(freq, freq, duration_ms)
         if freq > 0:
             self._apply(freq, self.duty_cycle)
         else:
@@ -249,8 +247,6 @@ class MotorSynth:
         return interrupted
 
     def _split_tone(self, left_freq: int, right_freq: int, duration_ms: int) -> bool:
-        if self._has_shared_channel_direction_groups():
-            return self._bipolar_split_tone(left_freq, right_freq, duration_ms)
         left_duty = self.duty_cycle if left_freq > 0 else 0
         right_duty = self.duty_cycle if right_freq > 0 else 0
         self._apply_split(left_freq, left_duty, right_freq, right_duty)
