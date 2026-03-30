@@ -30,6 +30,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     monkeypatch.delenv("LEFT_MOTOR_MAX_POWER_W", raising=False)
     monkeypatch.delenv("RIGHT_MOTOR_MAX_POWER_W", raising=False)
     monkeypatch.delenv("MOTOR_LIMIT_FALLBACK_VOLTAGE", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_TRACE_ENABLED", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_TRACE_PATH", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_TRACE_POST_ROLL_S", raising=False)
+    monkeypatch.delenv("MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", raising=False)
 
     module = importlib.reload(config_module)
 
@@ -78,6 +82,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.LEFT_MOTOR_MAX_POWER_W == pytest.approx(180.0)
     assert module.RIGHT_MOTOR_MAX_POWER_W == pytest.approx(180.0)
     assert module.MOTOR_LIMIT_FALLBACK_VOLTAGE == pytest.approx(24.0)
+    assert module.MOTOR_CURRENT_TRACE_ENABLED is False
+    assert module.MOTOR_CURRENT_TRACE_PATH == "/data/current-trace.jsonl"
+    assert module.MOTOR_CURRENT_TRACE_POST_ROLL_S == pytest.approx(2.0)
+    assert module.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S == pytest.approx(0.0)
     assert module.LOG_LEVEL == "INFO"
 
 
@@ -147,6 +155,10 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("LEFT_MOTOR_MAX_POWER_W", "110")
     monkeypatch.setenv("RIGHT_MOTOR_MAX_POWER_W", "115")
     monkeypatch.setenv("MOTOR_LIMIT_FALLBACK_VOLTAGE", "22.2")
+    monkeypatch.setenv("MOTOR_CURRENT_TRACE_ENABLED", "1")
+    monkeypatch.setenv("MOTOR_CURRENT_TRACE_PATH", "/tmp/calibration.jsonl")
+    monkeypatch.setenv("MOTOR_CURRENT_TRACE_POST_ROLL_S", "3.5")
+    monkeypatch.setenv("MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", "0.04")
 
     module = importlib.reload(config_module)
 
@@ -185,6 +197,10 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.LEFT_MOTOR_MAX_POWER_W == pytest.approx(110.0)
     assert module.RIGHT_MOTOR_MAX_POWER_W == pytest.approx(115.0)
     assert module.MOTOR_LIMIT_FALLBACK_VOLTAGE == pytest.approx(22.2)
+    assert module.MOTOR_CURRENT_TRACE_ENABLED is True
+    assert module.MOTOR_CURRENT_TRACE_PATH == "/tmp/calibration.jsonl"
+    assert module.MOTOR_CURRENT_TRACE_POST_ROLL_S == pytest.approx(3.5)
+    assert module.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S == pytest.approx(0.04)
 
 
 def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -364,6 +380,10 @@ def test_env_example_documents_beacon_environment_variables() -> None:
     assert "RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT=" in env_example
     assert "LEFT_MOTOR_MAX_CURRENT_A=" in env_example
     assert "RIGHT_MOTOR_MAX_POWER_W=" in env_example
+    assert "MOTOR_CURRENT_TRACE_ENABLED=" in env_example
+    assert "MOTOR_CURRENT_TRACE_PATH=" in env_example
+    assert "MOTOR_CURRENT_TRACE_POST_ROLL_S=" in env_example
+    assert "MOTOR_CURRENT_TRACE_MIN_INTERVAL_S=" in env_example
 
 
 
@@ -374,6 +394,20 @@ def test_docker_compose_uses_matching_default_ramp_rates() -> None:
     assert "RAMP_ACCEL_RATE: ${RAMP_ACCEL_RATE:-2.0}" in compose
     assert "RAMP_DECEL_RATE: ${RAMP_DECEL_RATE:-0.5}" in compose
     assert "RAMP_REVERSE_DECEL_RATE: ${RAMP_REVERSE_DECEL_RATE:-0.5}" in compose
+
+
+def test_docker_compose_exposes_current_trace_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "MOTOR_CURRENT_TRACE_ENABLED:" in compose
+    assert "MOTOR_CURRENT_TRACE_ENABLED: ${MOTOR_CURRENT_TRACE_ENABLED:-0}" in compose
+    assert "MOTOR_CURRENT_TRACE_PATH:" in compose
+    assert "MOTOR_CURRENT_TRACE_PATH: ${MOTOR_CURRENT_TRACE_PATH:-/data/current-trace.jsonl}" in compose
+    assert "MOTOR_CURRENT_TRACE_POST_ROLL_S:" in compose
+    assert "MOTOR_CURRENT_TRACE_POST_ROLL_S: ${MOTOR_CURRENT_TRACE_POST_ROLL_S:-2.0}" in compose
+    assert "MOTOR_CURRENT_TRACE_MIN_INTERVAL_S:" in compose
+    assert "MOTOR_CURRENT_TRACE_MIN_INTERVAL_S: ${MOTOR_CURRENT_TRACE_MIN_INTERVAL_S:-0.0}" in compose
 
 
 def test_docker_compose_exposes_throttle_filter_environment_variables() -> None:

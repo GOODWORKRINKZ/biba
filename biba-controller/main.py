@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import FrameType
 from typing import Optional
@@ -678,6 +679,143 @@ def _telemetry_motor_current_a(sample: MotorCurrentSample) -> float:
     return max(0.0, sample.current_a)
 
 
+def _motor_current_trace_has_activity(
+    *,
+    raw_throttle: float,
+    steering: float,
+    left_duty: float,
+    right_duty: float,
+    left_sample: MotorCurrentSample,
+    right_sample: MotorCurrentSample,
+) -> bool:
+    if abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND:
+        return True
+    if abs(left_duty) > 1e-6 or abs(right_duty) > 1e-6:
+        return True
+    if _telemetry_motor_current_a(left_sample) > 0.0 or _telemetry_motor_current_a(right_sample) > 0.0:
+        return True
+    return False
+
+
+def _update_motor_current_trace_window(
+    *,
+    armed: bool,
+    raw_throttle: float,
+    steering: float,
+    left_duty: float,
+    right_duty: float,
+    left_sample: MotorCurrentSample,
+    right_sample: MotorCurrentSample,
+    now_s: float,
+    last_activity_at_s: float | None,
+) -> tuple[bool, float | None]:
+    if not armed:
+        return False, None
+
+    activity_now = _motor_current_trace_has_activity(
+        raw_throttle=raw_throttle,
+        steering=steering,
+        left_duty=left_duty,
+        right_duty=right_duty,
+        left_sample=left_sample,
+        right_sample=right_sample,
+    )
+    if activity_now:
+        return True, now_s
+
+    if last_activity_at_s is None:
+        return False, None
+
+    if now_s - last_activity_at_s <= config.MOTOR_CURRENT_TRACE_POST_ROLL_S:
+        return True, last_activity_at_s
+
+    return False, None
+
+
+def _build_motor_current_trace_record(
+    *,
+    session_id: str,
+    sample_index: int,
+    now_s: float,
+    wall_time_iso: str,
+    armed: bool,
+    raw_throttle: float,
+    filtered_throttle: float,
+    steering: float,
+    control_active: bool,
+    requested_left: float,
+    requested_right: float,
+    limited_left: float,
+    limited_right: float,
+    trimmed_left: float,
+    trimmed_right: float,
+    left_duty: float,
+    right_duty: float,
+    left_sample: MotorCurrentSample,
+    right_sample: MotorCurrentSample,
+    left_channel: int,
+    right_channel: int,
+    battery_state: Optional[BatteryState],
+    bms_sample_monotonic_s: float | None,
+    mute_active: bool,
+    beacon_active: bool,
+    trim_mode_active: bool,
+    trace_reason: str,
+) -> dict[str, object]:
+    bms_age_s = None if bms_sample_monotonic_s is None else max(0.0, now_s - bms_sample_monotonic_s)
+
+    return {
+        "session_id": session_id,
+        "sample_index": sample_index,
+        "monotonic_s": now_s,
+        "wall_time_iso": wall_time_iso,
+        "armed": armed,
+        "raw_throttle": raw_throttle,
+        "filtered_throttle": filtered_throttle,
+        "steering": steering,
+        "control_active": control_active,
+        "requested_left": requested_left,
+        "requested_right": requested_right,
+        "limited_left": limited_left,
+        "limited_right": limited_right,
+        "trimmed_left": trimmed_left,
+        "trimmed_right": trimmed_right,
+        "left_duty": left_duty,
+        "right_duty": right_duty,
+        "left_current_valid": left_sample.valid,
+        "right_current_valid": right_sample.valid,
+        "left_current_a": left_sample.current_a,
+        "right_current_a": right_sample.current_a,
+        "left_voltage_v": left_sample.voltage_v,
+        "right_voltage_v": right_sample.voltage_v,
+        "left_raw_adc": left_sample.raw_adc,
+        "right_raw_adc": right_sample.raw_adc,
+        "left_channel": left_channel,
+        "right_channel": right_channel,
+        "bms_present": battery_state is not None,
+        "bms_current_a": None if battery_state is None else battery_state.current,
+        "bms_voltage_v": None if battery_state is None else battery_state.voltage,
+        "bms_soc_pct": None if battery_state is None else battery_state.soc,
+        "bms_sample_monotonic_s": bms_sample_monotonic_s,
+        "bms_age_s": bms_age_s,
+        "mute_active": mute_active,
+        "beacon_active": beacon_active,
+        "trim_mode_active": trim_mode_active,
+        "trace_reason": trace_reason,
+    }
+
+
+def _append_jsonl_record(path: str, record: dict[str, object]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("a", encoding="utf-8") as output_file:
+        output_file.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def _current_trace_wall_time_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _create_motor_current_reader():
     if not config.MOTOR_CURRENT_SENSE_ENABLED:
         return NullMotorCurrentReader()
@@ -773,6 +911,10 @@ def main() -> int:
     last_telemetry_send = 0.0
     last_battery_telemetry_log = 0.0
     battery_telemetry_cleared = False
+    trace_session_id = f"{int(time.time() * 1000)}-{os.getpid()}"
+    trace_sample_index = 0
+    trace_last_activity_at_s: float | None = None
+    trace_last_log_at_s: float | None = None
     _last_debug_log = 0.0
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
     throttle_filter = _create_throttle_filter()
@@ -918,6 +1060,13 @@ def main() -> int:
                 buzzer.set_control_active(control_active)
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
                 battery_state = bms_poller.latest_state if bms_poller else None
+                bms_sample_monotonic_s = getattr(bms_poller, "latest_state_timestamp_s", None) if bms_poller else None
+                requested_left = 0.0
+                requested_right = 0.0
+                limited_left = 0.0
+                limited_right = 0.0
+                trimmed_left = 0.0
+                trimmed_right = 0.0
                 if armed:
                     if hasattr(drive, "mix_and_ramp") and hasattr(drive, "apply_output"):
                         requested_left, requested_right = drive.mix_and_ramp(throttle, steering, control_dt)
@@ -936,6 +1085,8 @@ def main() -> int:
                             limited.right_output,
                             motor_trim,
                         )
+                        limited_left = limited.left_output
+                        limited_right = limited.right_output
                         left_duty, right_duty = drive.apply_output(
                             trimmed_left,
                             trimmed_right,
@@ -945,6 +1096,12 @@ def main() -> int:
                         )
                     else:
                         left_duty, right_duty = drive.drive(throttle, steering, control_dt)
+                        requested_left = left_duty
+                        requested_right = right_duty
+                        limited_left = left_duty
+                        limited_right = right_duty
+                        trimmed_left = left_duty
+                        trimmed_right = right_duty
                 else:
                     if throttle_filter is not None:
                         throttle_filter.reset()
@@ -959,9 +1116,79 @@ def main() -> int:
                             steering=0.0,
                             dt=control_dt,
                         )
+                        limited_left = requested_left
+                        limited_right = requested_right
+                        trimmed_left = requested_left
+                        trimmed_right = requested_right
                     else:
                         left_duty, right_duty = drive.drive(0.0, 0.0, control_dt)
+                        requested_left = left_duty
+                        requested_right = right_duty
+                        limited_left = left_duty
+                        limited_right = right_duty
+                        trimmed_left = left_duty
+                        trimmed_right = right_duty
                 last_drive_update_at = loop_started_at
+
+                if config.MOTOR_CURRENT_TRACE_ENABLED:
+                    trace_should_log, trace_last_activity_at_s = _update_motor_current_trace_window(
+                        armed=armed,
+                        raw_throttle=raw_throttle,
+                        steering=steering,
+                        left_duty=left_duty,
+                        right_duty=right_duty,
+                        left_sample=left_current_sample,
+                        right_sample=right_current_sample,
+                        now_s=loop_started_at,
+                        last_activity_at_s=trace_last_activity_at_s,
+                    )
+                    trace_activity_now = _motor_current_trace_has_activity(
+                        raw_throttle=raw_throttle,
+                        steering=steering,
+                        left_duty=left_duty,
+                        right_duty=right_duty,
+                        left_sample=left_current_sample,
+                        right_sample=right_current_sample,
+                    )
+                    if trace_should_log:
+                        if (
+                            trace_last_log_at_s is None
+                            or config.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S <= 0.0
+                            or loop_started_at - trace_last_log_at_s >= config.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S
+                        ):
+                            trace_sample_index += 1
+                            trace_record = _build_motor_current_trace_record(
+                                session_id=trace_session_id,
+                                sample_index=trace_sample_index,
+                                now_s=loop_started_at,
+                                wall_time_iso=_current_trace_wall_time_iso(),
+                                armed=armed,
+                                raw_throttle=raw_throttle,
+                                filtered_throttle=throttle,
+                                steering=steering,
+                                control_active=control_active,
+                                requested_left=requested_left,
+                                requested_right=requested_right,
+                                limited_left=limited_left,
+                                limited_right=limited_right,
+                                trimmed_left=trimmed_left,
+                                trimmed_right=trimmed_right,
+                                left_duty=left_duty,
+                                right_duty=right_duty,
+                                left_sample=left_current_sample,
+                                right_sample=right_current_sample,
+                                left_channel=config.MOTOR_CURRENT_SENSE_LEFT_CHANNEL,
+                                right_channel=config.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL,
+                                battery_state=battery_state,
+                                bms_sample_monotonic_s=bms_sample_monotonic_s,
+                                mute_active=mute_active,
+                                beacon_active=beacon_active,
+                                trim_mode_active=trim_mode_active,
+                                trace_reason="active" if trace_activity_now else "post_roll",
+                            )
+                            _append_jsonl_record(config.MOTOR_CURRENT_TRACE_PATH, trace_record)
+                            trace_last_log_at_s = loop_started_at
+
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]

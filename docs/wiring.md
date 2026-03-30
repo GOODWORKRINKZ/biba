@@ -107,6 +107,22 @@ MOTOR_CURRENT_SENSE_ENABLED=1
 MOTOR_CURRENT_LIMITING_ENABLED=0
 ```
 
+Для калибровочных прогонов можно отдельно включить trace-файл:
+
+```ini
+MOTOR_CURRENT_TRACE_ENABLED=1
+MOTOR_CURRENT_TRACE_PATH=/data/current-trace.jsonl
+MOTOR_CURRENT_TRACE_POST_ROLL_S=2.0
+MOTOR_CURRENT_TRACE_MIN_INTERVAL_S=0.0
+```
+
+Назначение:
+
+- `MOTOR_CURRENT_TRACE_ENABLED=1` включает JSONL-трейс в основном controller loop.
+- `MOTOR_CURRENT_TRACE_PATH` задаёт путь файла на persistent volume.
+- `MOTOR_CURRENT_TRACE_POST_ROLL_S` помогает поймать запаздывающий ток BMS после окончания движения.
+- `MOTOR_CURRENT_TRACE_MIN_INTERVAL_S` позволяет ограничить частоту записи, если trace становится слишком плотным.
+
 ## Калибровка BTS7960 `IS`
 
 `IS` у BTS7960 на дешёвых модулях нельзя считать абсолютно точным датчиком без калибровки. Для первого запуска используйте такой порядок:

@@ -55,6 +55,57 @@ def test_poller_caches_latest_state() -> None:
 
     assert poller.latest_state is not None
     assert poller.latest_state.voltage == 25.5
+    assert poller.latest_state_timestamp_s is not None
+
+
+def test_poller_updates_timestamp_after_successful_poll() -> None:
+    state = _make_state(25.5)
+    bms = FakeBMS(state)
+    poller = BMSPoller(bms, interval_s=0.01)
+
+    assert poller.latest_state_timestamp_s is None
+
+    poller.start()
+    deadline = time.monotonic() + 2.0
+    while poller.latest_state_timestamp_s is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    poller.stop()
+
+    assert poller.latest_state_timestamp_s is not None
+
+
+def test_poller_clears_timestamp_after_read_exception() -> None:
+    state = _make_state(25.5)
+
+    class FlakyBMS:
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def read_state(self) -> Optional[BatteryState]:
+            self.call_count += 1
+            if self.call_count == 1:
+                return state
+            raise OSError("BLE timeout")
+
+    poller = BMSPoller(FlakyBMS(), interval_s=0.01)
+    poller.start()
+
+    deadline = time.monotonic() + 2.0
+    observed_timestamp = False
+    observed_clear = False
+    while time.monotonic() < deadline:
+        latest_timestamp = poller.latest_state_timestamp_s
+        if latest_timestamp is not None:
+            observed_timestamp = True
+        if observed_timestamp and latest_timestamp is None:
+            observed_clear = True
+            break
+        time.sleep(0.01)
+
+    poller.stop()
+
+    assert observed_timestamp is True
+    assert observed_clear is True
 
 
 def test_poller_does_not_block_caller() -> None:

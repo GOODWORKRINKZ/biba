@@ -95,7 +95,7 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         self._left_calibration = left_calibration
         self._right_calibration = right_calibration
 
-    def _read_channel_voltage(self, channel: int) -> float:
+    def _read_channel_sample(self, channel: int) -> tuple[int, float]:
         config_value = (
             self._OS_SINGLE
             | self._MUX_BY_CHANNEL[channel]
@@ -111,25 +111,26 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         )
         raw_bytes = self._bus.read_i2c_block_data(self._address, self._REG_CONVERSION, 2)
         raw = int.from_bytes(bytes(raw_bytes), byteorder="big", signed=True)
-        return (raw / 32768.0) * self._full_scale_v
+        voltage_v = (raw / 32768.0) * self._full_scale_v
+        return raw, voltage_v
 
     @staticmethod
-    def _sample_from_voltage(voltage_v: float, calibration: MotorCurrentCalibration) -> MotorCurrentSample:
+    def _sample_from_voltage(voltage_v: float, raw_adc: int, calibration: MotorCurrentCalibration) -> MotorCurrentSample:
         current_a = max(0.0, (voltage_v - calibration.zero_offset_v) * calibration.amps_per_volt)
-        return MotorCurrentSample(current_a=current_a, valid=True)
+        return MotorCurrentSample(current_a=current_a, valid=True, voltage_v=voltage_v, raw_adc=raw_adc)
 
     def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
         try:
-            left_voltage_v = self._read_channel_voltage(self._left_channel)
-            right_voltage_v = self._read_channel_voltage(self._right_channel)
+            left_raw_adc, left_voltage_v = self._read_channel_sample(self._left_channel)
+            right_raw_adc, right_voltage_v = self._read_channel_sample(self._right_channel)
         except Exception as exc:
             LOGGER.warning("Failed to read ADS1115 motor currents: %s", exc)
             invalid = MotorCurrentSample(current_a=None, valid=False)
             return invalid, invalid
 
         return (
-            self._sample_from_voltage(left_voltage_v, self._left_calibration),
-            self._sample_from_voltage(right_voltage_v, self._right_calibration),
+            self._sample_from_voltage(left_voltage_v, left_raw_adc, self._left_calibration),
+            self._sample_from_voltage(right_voltage_v, right_raw_adc, self._right_calibration),
         )
 
     def close(self) -> None:
