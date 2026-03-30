@@ -35,22 +35,26 @@ def test_null_motor_current_reader_returns_invalid_samples() -> None:
     assert right_sample.voltage_v is None
     assert left_sample.raw_adc is None
     assert right_sample.raw_adc is None
+    assert left_sample.channel is None
+    assert right_sample.channel is None
 
 
-def test_ads1115_motor_current_reader_converts_channel_voltage_to_current() -> None:
+def test_ads1115_motor_current_reader_uses_forward_channels_for_positive_duty() -> None:
     bus = FakeSMBus(responses=[[0x40, 0x00], [0x20, 0x00]])
     reader = ADS1115MotorCurrentReader(
         bus=bus,
         address=0x48,
-        left_channel=0,
-        right_channel=1,
+        left_forward_channel=2,
+        left_reverse_channel=3,
+        right_forward_channel=0,
+        right_reverse_channel=1,
         gain="1",
         sample_rate_sps=128,
         left_calibration=MotorCurrentCalibration(zero_offset_v=0.5, amps_per_volt=10.0),
         right_calibration=MotorCurrentCalibration(zero_offset_v=0.25, amps_per_volt=8.0),
     )
 
-    left_sample, right_sample = reader.read_currents()
+    left_sample, right_sample = reader.read_currents(left_duty=0.7, right_duty=0.2)
 
     assert left_sample.valid is True
     assert right_sample.valid is True
@@ -60,8 +64,37 @@ def test_ads1115_motor_current_reader_converts_channel_voltage_to_current() -> N
     assert right_sample.voltage_v == 1.024
     assert left_sample.raw_adc == 16384
     assert right_sample.raw_adc == 8192
+    assert left_sample.channel == 2
+    assert right_sample.channel == 0
     assert bus.write_calls[0][0:2] == (0x48, 0x01)
+    assert bus.write_calls[0][2] == [0xE3, 0x83]
+    assert bus.write_calls[1][2] == [0xC3, 0x83]
     assert bus.read_calls == [(0x48, 0x00, 2), (0x48, 0x00, 2)]
+
+
+def test_ads1115_motor_current_reader_uses_reverse_channels_for_negative_duty() -> None:
+    bus = FakeSMBus(responses=[[0x10, 0x00], [0x08, 0x00]])
+    reader = ADS1115MotorCurrentReader(
+        bus=bus,
+        address=0x48,
+        left_forward_channel=2,
+        left_reverse_channel=3,
+        right_forward_channel=0,
+        right_reverse_channel=1,
+        gain="1",
+        sample_rate_sps=128,
+        left_calibration=MotorCurrentCalibration(zero_offset_v=0.0, amps_per_volt=10.0),
+        right_calibration=MotorCurrentCalibration(zero_offset_v=0.0, amps_per_volt=10.0),
+    )
+
+    left_sample, right_sample = reader.read_currents(left_duty=-0.4, right_duty=-0.9)
+
+    assert left_sample.channel == 3
+    assert right_sample.channel == 1
+    assert left_sample.current_a == 5.12
+    assert right_sample.current_a == 2.56
+    assert bus.write_calls[0][2] == [0xF3, 0x83]
+    assert bus.write_calls[1][2] == [0xD3, 0x83]
 
 
 def test_ads1115_motor_current_reader_returns_invalid_samples_on_bus_error() -> None:
@@ -76,8 +109,10 @@ def test_ads1115_motor_current_reader_returns_invalid_samples_on_bus_error() -> 
     reader = ADS1115MotorCurrentReader(
         bus=BrokenSMBus(),
         address=0x48,
-        left_channel=0,
-        right_channel=1,
+        left_forward_channel=2,
+        left_reverse_channel=3,
+        right_forward_channel=0,
+        right_reverse_channel=1,
         gain="1",
         sample_rate_sps=128,
         left_calibration=MotorCurrentCalibration(),
@@ -92,6 +127,8 @@ def test_ads1115_motor_current_reader_returns_invalid_samples_on_bus_error() -> 
     assert right_sample.voltage_v is None
     assert left_sample.raw_adc is None
     assert right_sample.raw_adc is None
+    assert left_sample.channel is None
+    assert right_sample.channel is None
 
 
 def test_default_configured_ads1115_sample_rate_is_supported(monkeypatch) -> None:

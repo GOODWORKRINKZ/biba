@@ -13,6 +13,7 @@ class MotorCurrentSample:
     valid: bool = True
     voltage_v: float | None = None
     raw_adc: int | None = None
+    channel: int | None = None
 
 
 @dataclass(frozen=True)

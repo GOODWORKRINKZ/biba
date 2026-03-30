@@ -61,11 +61,13 @@ RIGHT_MOTOR_LPWM=13
 | ADS1115 GND | GND Raspberry Pi |
 | ADS1115 SDA | GPIO 2 / pin 3 |
 | ADS1115 SCL | GPIO 3 / pin 5 |
-| Left BTS7960 `IS` | ADS1115 A0 |
-| Right BTS7960 `IS` | ADS1115 A1 |
+| Left BTS7960 `R_IS` | ADS1115 A2 |
+| Left BTS7960 `L_IS` | ADS1115 A3 |
+| Right BTS7960 `R_IS` | ADS1115 A0 |
+| Right BTS7960 `L_IS` | ADS1115 A1 |
 | Общая земля силовой части | Общая с GND Raspberry Pi и ADS1115 |
 
-Если у вашего BTS7960-модуля доступны отдельные `R_IS` и `L_IS`, используйте тот сигнал, который соответствует фактическому выходу, задействованному в вашей H-мостовой сборке. В текущей реализации ожидается один аналоговый канал на мотор.
+Текущая реализация использует по два ADS1115-канала на мотор: отдельный sense-вход для прямого и обратного направления. Активный канал выбирается по знаку duty в рантайме.
 
 ## Env-переменные current sense и limiter
 
@@ -75,8 +77,10 @@ RIGHT_MOTOR_LPWM=13
 MOTOR_CURRENT_SENSE_ENABLED=1
 MOTOR_CURRENT_LIMITING_ENABLED=1
 MOTOR_CURRENT_SENSE_I2C_ADDRESS=72
-MOTOR_CURRENT_SENSE_LEFT_CHANNEL=0
-MOTOR_CURRENT_SENSE_RIGHT_CHANNEL=1
+LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL=2
+LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL=3
+RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL=0
+RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL=1
 MOTOR_CURRENT_SENSE_GAIN=1
 MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ=32
 LEFT_MOTOR_MAX_CURRENT_A=18
@@ -94,7 +98,7 @@ RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT=1.0
 
 - `MOTOR_CURRENT_SENSE_ENABLED=1` включает чтение ADS1115.
 - `MOTOR_CURRENT_LIMITING_ENABLED=1` включает уменьшение PWM по measured current/power.
-- `*_CHANNEL` задают каналы ADS1115 для левого и правого мотора.
+- `*_FORWARD_CHANNEL` и `*_REVERSE_CHANNEL` задают ADS1115-каналы для каждого направления каждого мотора.
 - `*_MAX_CURRENT_A` ограничивают ток каждого мотора независимо.
 - `*_MAX_POWER_W` ограничивают мощность каждого мотора независимо.
 - `MOTOR_LIMIT_FALLBACK_VOLTAGE` используется для расчёта мощности, если Daly BMS временно недоступен.

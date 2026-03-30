@@ -1491,6 +1491,32 @@ def test_create_motor_current_reader_returns_null_reader_when_disabled(monkeypat
     assert right_sample.valid is False
 
 
+def test_create_motor_current_reader_uses_directional_channel_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    captured: dict[str, object] = {}
+
+    def fake_open_ads1115_current_reader(**kwargs):
+        captured.update(kwargs)
+        return NullMotorCurrentReader()
+
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_SENSE_ENABLED", True)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_SENSE_I2C_ADDRESS", 0x48)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL", 2)
+    monkeypatch.setattr(main.config, "LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL", 3)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL", 0)
+    monkeypatch.setattr(main.config, "RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL", 1)
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_SENSE_GAIN", "1")
+    monkeypatch.setattr(main.config, "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ", 32.0)
+    monkeypatch.setattr(main, "open_ads1115_current_reader", fake_open_ads1115_current_reader)
+
+    main._create_motor_current_reader()
+
+    assert captured["left_forward_channel"] == 2
+    assert captured["left_reverse_channel"] == 3
+    assert captured["right_forward_channel"] == 0
+    assert captured["right_reverse_channel"] == 1
+
+
 def test_motor_current_trace_logs_armed_motor_activity_even_with_zero_bms_current(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
@@ -1564,10 +1590,8 @@ def test_motor_current_trace_record_includes_bms_age_and_sample_details() -> Non
         trimmed_right=0.48,
         left_duty=0.58,
         right_duty=0.48,
-        left_sample=MotorCurrentSample(current_a=3.2, valid=True, voltage_v=1.25, raw_adc=10001),
-        right_sample=MotorCurrentSample(current_a=2.8, valid=True, voltage_v=1.10, raw_adc=9002),
-        left_channel=0,
-        right_channel=1,
+        left_sample=MotorCurrentSample(current_a=3.2, valid=True, voltage_v=1.25, raw_adc=10001, channel=2),
+        right_sample=MotorCurrentSample(current_a=2.8, valid=True, voltage_v=1.10, raw_adc=9002, channel=0),
         battery_state=state,
         bms_sample_monotonic_s=9.9,
         mute_active=False,
@@ -1584,6 +1608,8 @@ def test_motor_current_trace_record_includes_bms_age_and_sample_details() -> Non
     assert record["right_raw_adc"] == 9002
     assert record["left_voltage_v"] == pytest.approx(1.25)
     assert record["right_voltage_v"] == pytest.approx(1.10)
+    assert record["left_active_channel"] == 2
+    assert record["right_active_channel"] == 0
     assert record["trace_reason"] == "active"
 
 
@@ -1633,7 +1659,8 @@ def test_main_applies_limited_outputs_when_current_limit_enabled(monkeypatch: py
             pass
 
     class FakeCurrentReader:
-        def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+        def read_currents(self, left_duty: float = 0.0, right_duty: float = 0.0) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+            del left_duty, right_duty
             return MotorCurrentSample(current_a=20.0), MotorCurrentSample(current_a=5.0)
 
         def close(self) -> None:
@@ -1898,10 +1925,11 @@ def test_main_writes_motor_current_trace_during_armed_activity(monkeypatch: pyte
             return False
 
     class FakeCurrentReader:
-        def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+        def read_currents(self, left_duty: float = 0.0, right_duty: float = 0.0) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+            del left_duty, right_duty
             return (
-                MotorCurrentSample(current_a=3.2, valid=True, voltage_v=1.25, raw_adc=10001),
-                MotorCurrentSample(current_a=2.8, valid=True, voltage_v=1.10, raw_adc=9002),
+                MotorCurrentSample(current_a=3.2, valid=True, voltage_v=1.25, raw_adc=10001, channel=2),
+                MotorCurrentSample(current_a=2.8, valid=True, voltage_v=1.10, raw_adc=9002, channel=0),
             )
 
         def close(self) -> None:
@@ -1937,6 +1965,8 @@ def test_main_writes_motor_current_trace_during_armed_activity(monkeypatch: pyte
     assert len(records) == 1
     assert records[0]["armed"] is True
     assert records[0]["left_raw_adc"] == 10001
+    assert records[0]["left_active_channel"] == 2
+    assert records[0]["right_active_channel"] == 0
     assert records[0]["bms_present"] is False
     assert records[0]["trace_reason"] == "active"
 

@@ -22,8 +22,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     monkeypatch.delenv("MOTOR_CURRENT_LIMITING_ENABLED", raising=False)
     monkeypatch.delenv("MOTOR_CURRENT_SENSE_ENABLED", raising=False)
     monkeypatch.delenv("MOTOR_CURRENT_SENSE_I2C_ADDRESS", raising=False)
-    monkeypatch.delenv("MOTOR_CURRENT_SENSE_LEFT_CHANNEL", raising=False)
-    monkeypatch.delenv("MOTOR_CURRENT_SENSE_RIGHT_CHANNEL", raising=False)
+    monkeypatch.delenv("LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL", raising=False)
+    monkeypatch.delenv("LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL", raising=False)
+    monkeypatch.delenv("RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL", raising=False)
+    monkeypatch.delenv("RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL", raising=False)
     monkeypatch.delenv("MOTOR_CURRENT_SENSE_SAMPLE_RATE", raising=False)
     monkeypatch.delenv("LEFT_MOTOR_MAX_CURRENT_A", raising=False)
     monkeypatch.delenv("RIGHT_MOTOR_MAX_CURRENT_A", raising=False)
@@ -69,8 +71,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR_CURRENT_LIMITING_ENABLED is False
     assert module.MOTOR_CURRENT_SENSE_ENABLED is False
     assert module.MOTOR_CURRENT_SENSE_I2C_ADDRESS == 0x48
-    assert module.MOTOR_CURRENT_SENSE_LEFT_CHANNEL == 0
-    assert module.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL == 1
+    assert module.LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL == 2
+    assert module.LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL == 3
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL == 0
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL == 1
     assert module.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ == 32.0
     assert module.MOTOR_CURRENT_SENSE_GAIN == "1"
     assert module.LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.0)
@@ -142,8 +146,10 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("MOTOR_CURRENT_LIMITING_ENABLED", "1")
     monkeypatch.setenv("MOTOR_CURRENT_SENSE_ENABLED", "1")
     monkeypatch.setenv("MOTOR_CURRENT_SENSE_I2C_ADDRESS", "73")
-    monkeypatch.setenv("MOTOR_CURRENT_SENSE_LEFT_CHANNEL", "2")
-    monkeypatch.setenv("MOTOR_CURRENT_SENSE_RIGHT_CHANNEL", "3")
+    monkeypatch.setenv("LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL", "3")
+    monkeypatch.setenv("LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL", "2")
+    monkeypatch.setenv("RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL", "1")
+    monkeypatch.setenv("RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL", "0")
     monkeypatch.setenv("MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ", "40")
     monkeypatch.setenv("MOTOR_CURRENT_SENSE_GAIN", "2")
     monkeypatch.setenv("LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V", "0.15")
@@ -184,8 +190,10 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.MOTOR_CURRENT_LIMITING_ENABLED is True
     assert module.MOTOR_CURRENT_SENSE_ENABLED is True
     assert module.MOTOR_CURRENT_SENSE_I2C_ADDRESS == 73
-    assert module.MOTOR_CURRENT_SENSE_LEFT_CHANNEL == 2
-    assert module.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL == 3
+    assert module.LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL == 3
+    assert module.LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL == 2
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL == 1
+    assert module.RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL == 0
     assert module.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ == pytest.approx(40.0)
     assert module.MOTOR_CURRENT_SENSE_GAIN == "2"
     assert module.LEFT_MOTOR_CURRENT_SENSE_ZERO_OFFSET_V == pytest.approx(0.15)
@@ -334,10 +342,14 @@ def test_docker_compose_exposes_motor_current_sense_environment_variables() -> N
     assert "MOTOR_CURRENT_SENSE_ENABLED: ${MOTOR_CURRENT_SENSE_ENABLED:-0}" in compose
     assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS:" in compose
     assert "MOTOR_CURRENT_SENSE_I2C_ADDRESS: ${MOTOR_CURRENT_SENSE_I2C_ADDRESS:-72}" in compose
-    assert "MOTOR_CURRENT_SENSE_LEFT_CHANNEL:" in compose
-    assert "MOTOR_CURRENT_SENSE_LEFT_CHANNEL: ${MOTOR_CURRENT_SENSE_LEFT_CHANNEL:-0}" in compose
-    assert "MOTOR_CURRENT_SENSE_RIGHT_CHANNEL:" in compose
-    assert "MOTOR_CURRENT_SENSE_RIGHT_CHANNEL: ${MOTOR_CURRENT_SENSE_RIGHT_CHANNEL:-1}" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL:" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL: ${LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL:-2}" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL:" in compose
+    assert "LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL: ${LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL:-3}" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL:" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL: ${RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL:-0}" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL:" in compose
+    assert "RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL: ${RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL:-1}" in compose
     assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:" in compose
     assert "MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ: ${MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ:-32}" in compose
     assert "MOTOR_CURRENT_SENSE_GAIN:" in compose

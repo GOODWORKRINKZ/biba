@@ -14,7 +14,8 @@ LOGGER = logging.getLogger("biba-controller")
 class MotorCurrentReader:
     """Interface for left/right motor current readers."""
 
-    def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+    def read_currents(self, left_duty: float = 0.0, right_duty: float = 0.0) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+        del left_duty, right_duty
         raise NotImplementedError
 
     def close(self) -> None:
@@ -24,7 +25,8 @@ class MotorCurrentReader:
 class NullMotorCurrentReader(MotorCurrentReader):
     """Disabled or unavailable current-sense backend."""
 
-    def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+    def read_currents(self, left_duty: float = 0.0, right_duty: float = 0.0) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+        del left_duty, right_duty
         invalid = MotorCurrentSample(current_a=None, valid=False)
         return invalid, invalid
 
@@ -38,7 +40,7 @@ class MotorCurrentCalibration:
 
 
 class ADS1115MotorCurrentReader(MotorCurrentReader):
-    """Read left and right motor current via ADS1115 single-ended channels."""
+    """Read left and right motor current via directional ADS1115 single-ended channels."""
 
     _REG_CONVERSION = 0x00
     _REG_CONFIG = 0x01
@@ -72,14 +74,22 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         self,
         bus,
         address: int,
-        left_channel: int,
-        right_channel: int,
+        left_forward_channel: int,
+        left_reverse_channel: int,
+        right_forward_channel: int,
+        right_reverse_channel: int,
         gain: str,
         sample_rate_sps: int,
         left_calibration: MotorCurrentCalibration,
         right_calibration: MotorCurrentCalibration,
     ) -> None:
-        if left_channel not in self._MUX_BY_CHANNEL or right_channel not in self._MUX_BY_CHANNEL:
+        channels = (
+            left_forward_channel,
+            left_reverse_channel,
+            right_forward_channel,
+            right_reverse_channel,
+        )
+        if any(channel not in self._MUX_BY_CHANNEL for channel in channels):
             raise ValueError("ADS1115 channels must be in the range 0..3")
         if gain not in self._PGA_BY_GAIN:
             raise ValueError(f"Unsupported ADS1115 gain: {gain}")
@@ -88,8 +98,10 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
 
         self._bus = bus
         self._address = address
-        self._left_channel = left_channel
-        self._right_channel = right_channel
+        self._left_forward_channel = left_forward_channel
+        self._left_reverse_channel = left_reverse_channel
+        self._right_forward_channel = right_forward_channel
+        self._right_reverse_channel = right_reverse_channel
         self._pga_config, self._full_scale_v = self._PGA_BY_GAIN[gain]
         self._sample_rate_config = self._DR_BY_SPS[sample_rate_sps]
         self._left_calibration = left_calibration
@@ -115,22 +127,33 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         return raw, voltage_v
 
     @staticmethod
-    def _sample_from_voltage(voltage_v: float, raw_adc: int, calibration: MotorCurrentCalibration) -> MotorCurrentSample:
-        current_a = max(0.0, (voltage_v - calibration.zero_offset_v) * calibration.amps_per_volt)
-        return MotorCurrentSample(current_a=current_a, valid=True, voltage_v=voltage_v, raw_adc=raw_adc)
+    def _select_channel(forward_channel: int, reverse_channel: int, duty: float) -> int:
+        return forward_channel if duty >= 0.0 else reverse_channel
 
-    def read_currents(self) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+    @staticmethod
+    def _sample_from_voltage(
+        voltage_v: float,
+        raw_adc: int,
+        channel: int,
+        calibration: MotorCurrentCalibration,
+    ) -> MotorCurrentSample:
+        current_a = max(0.0, (voltage_v - calibration.zero_offset_v) * calibration.amps_per_volt)
+        return MotorCurrentSample(current_a=current_a, valid=True, voltage_v=voltage_v, raw_adc=raw_adc, channel=channel)
+
+    def read_currents(self, left_duty: float = 0.0, right_duty: float = 0.0) -> tuple[MotorCurrentSample, MotorCurrentSample]:
+        left_channel = self._select_channel(self._left_forward_channel, self._left_reverse_channel, left_duty)
+        right_channel = self._select_channel(self._right_forward_channel, self._right_reverse_channel, right_duty)
         try:
-            left_raw_adc, left_voltage_v = self._read_channel_sample(self._left_channel)
-            right_raw_adc, right_voltage_v = self._read_channel_sample(self._right_channel)
+            left_raw_adc, left_voltage_v = self._read_channel_sample(left_channel)
+            right_raw_adc, right_voltage_v = self._read_channel_sample(right_channel)
         except Exception as exc:
             LOGGER.warning("Failed to read ADS1115 motor currents: %s", exc)
             invalid = MotorCurrentSample(current_a=None, valid=False)
             return invalid, invalid
 
         return (
-            self._sample_from_voltage(left_voltage_v, left_raw_adc, self._left_calibration),
-            self._sample_from_voltage(right_voltage_v, right_raw_adc, self._right_calibration),
+            self._sample_from_voltage(left_voltage_v, left_raw_adc, left_channel, self._left_calibration),
+            self._sample_from_voltage(right_voltage_v, right_raw_adc, right_channel, self._right_calibration),
         )
 
     def close(self) -> None:
@@ -142,8 +165,10 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
 def open_ads1115_current_reader(
     *,
     address: int,
-    left_channel: int,
-    right_channel: int,
+    left_forward_channel: int,
+    left_reverse_channel: int,
+    right_forward_channel: int,
+    right_reverse_channel: int,
     gain: str,
     sample_rate_sps: int,
     left_calibration: MotorCurrentCalibration,
@@ -156,8 +181,10 @@ def open_ads1115_current_reader(
     return ADS1115MotorCurrentReader(
         bus=SMBus(1),
         address=address,
-        left_channel=left_channel,
-        right_channel=right_channel,
+        left_forward_channel=left_forward_channel,
+        left_reverse_channel=left_reverse_channel,
+        right_forward_channel=right_forward_channel,
+        right_reverse_channel=right_reverse_channel,
         gain=gain,
         sample_rate_sps=sample_rate_sps,
         left_calibration=left_calibration,

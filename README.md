@@ -128,7 +128,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `RAMP_ZERO_HOLD_S=0.15` — пауза на нуле (секунды) после торможения перед реверсом; даёт мотору физически остановиться и убирает «гавканье» BTS7960
 - `MOTOR_DEADBAND=0.05` — мёртвая зона стика (меньше порога → мотор стоит)
 
-Если нужно включить current sense через ADS1115, дополнительно добавьте в `docker-compose.yml` соответствующие env-переменные из `docs/wiring.md`: `MOTOR_CURRENT_SENSE_ENABLED`, `MOTOR_CURRENT_LIMITING_ENABLED`, `MOTOR_CURRENT_SENSE_*`, `LEFT_MOTOR_MAX_CURRENT_A`, `RIGHT_MOTOR_MAX_CURRENT_A`, `LEFT_MOTOR_MAX_POWER_W`, `RIGHT_MOTOR_MAX_POWER_W`.
+Если нужно включить current sense через ADS1115, дополнительно добавьте в `docker-compose.yml` соответствующие env-переменные из `docs/wiring.md`: `MOTOR_CURRENT_SENSE_ENABLED`, `MOTOR_CURRENT_LIMITING_ENABLED`, directional `*_MOTOR_CURRENT_SENSE_*_CHANNEL`, `LEFT_MOTOR_MAX_CURRENT_A`, `RIGHT_MOTOR_MAX_CURRENT_A`, `LEFT_MOTOR_MAX_POWER_W`, `RIGHT_MOTOR_MAX_POWER_W`.
 
 Для калибровочных заездов доступен отдельный trace-режим current sense:
 

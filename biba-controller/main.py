@@ -753,8 +753,6 @@ def _build_motor_current_trace_record(
     right_duty: float,
     left_sample: MotorCurrentSample,
     right_sample: MotorCurrentSample,
-    left_channel: int,
-    right_channel: int,
     battery_state: Optional[BatteryState],
     bms_sample_monotonic_s: float | None,
     mute_active: bool,
@@ -790,8 +788,10 @@ def _build_motor_current_trace_record(
         "right_voltage_v": right_sample.voltage_v,
         "left_raw_adc": left_sample.raw_adc,
         "right_raw_adc": right_sample.raw_adc,
-        "left_channel": left_channel,
-        "right_channel": right_channel,
+        "left_active_channel": left_sample.channel,
+        "right_active_channel": right_sample.channel,
+        "left_channel": left_sample.channel,
+        "right_channel": right_sample.channel,
         "bms_present": battery_state is not None,
         "bms_current_a": None if battery_state is None else battery_state.current,
         "bms_voltage_v": None if battery_state is None else battery_state.voltage,
@@ -824,8 +824,10 @@ def _create_motor_current_reader():
     try:
         return open_ads1115_current_reader(
             address=config.MOTOR_CURRENT_SENSE_I2C_ADDRESS,
-            left_channel=config.MOTOR_CURRENT_SENSE_LEFT_CHANNEL,
-            right_channel=config.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL,
+            left_forward_channel=config.LEFT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL,
+            left_reverse_channel=config.LEFT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL,
+            right_forward_channel=config.RIGHT_MOTOR_CURRENT_SENSE_FORWARD_CHANNEL,
+            right_reverse_channel=config.RIGHT_MOTOR_CURRENT_SENSE_REVERSE_CHANNEL,
             gain=config.MOTOR_CURRENT_SENSE_GAIN,
             sample_rate_sps=sample_rate_sps,
             left_calibration=MotorCurrentCalibration(
@@ -1070,7 +1072,10 @@ def main() -> int:
                 if armed:
                     if hasattr(drive, "mix_and_ramp") and hasattr(drive, "apply_output"):
                         requested_left, requested_right = drive.mix_and_ramp(throttle, steering, control_dt)
-                        left_sample, right_sample = current_reader.read_currents()
+                        left_sample, right_sample = current_reader.read_currents(
+                            left_duty=requested_left,
+                            right_duty=requested_right,
+                        )
                         left_current_sample = left_sample
                         right_current_sample = right_sample
                         limited = _limit_drive_outputs(
@@ -1177,8 +1182,6 @@ def main() -> int:
                                 right_duty=right_duty,
                                 left_sample=left_current_sample,
                                 right_sample=right_current_sample,
-                                left_channel=config.MOTOR_CURRENT_SENSE_LEFT_CHANNEL,
-                                right_channel=config.MOTOR_CURRENT_SENSE_RIGHT_CHANNEL,
                                 battery_state=battery_state,
                                 bms_sample_monotonic_s=bms_sample_monotonic_s,
                                 mute_active=mute_active,
