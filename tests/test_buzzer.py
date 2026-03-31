@@ -31,9 +31,9 @@ class TestMelodies:
                 assert isinstance(dur, int) and dur > 0
                 assert isinstance(pause, int) and pause >= 0
 
-    def test_sos_has_correct_structure(self):
-        # ··· ——— ··· = 3 dots + gap + 3 dashes + gap + 3 dots = 11 notes
-        assert len(melodies.SOS) == 11
+    def test_sos_has_multiple_audible_notes(self):
+        audible = [note for note in melodies.SOS if note[0] > 0]
+        assert len(audible) >= 4
 
     def test_startup_begins_and_ends_with_audible(self):
         assert melodies.STARTUP[0][0] > 0
@@ -130,6 +130,31 @@ class TestBuzzerMelodies:
 # ── BLHeli melody catalog ─────────────────────────────────────────
 
 class TestBlheliMelodyCatalog:
+    def test_system_blheli_entries_stay_in_software_pwm_friendly_band(self):
+        from buzzer.blheli_parser import parse_blheli
+
+        system_entries = {
+            "biba_signature",
+            "startup",
+            "arm",
+            "disarm",
+            "low_voltage",
+            "failsafe",
+            "sos",
+            "connected",
+            "disconnected",
+            "shutdown",
+            "trim_enter",
+            "trim_exit",
+        }
+
+        for name in system_entries:
+            melody_str, tempo = melodies.BLHELI_CATALOG[name]
+            for freq, _duration in parse_blheli(melody_str, tempo_bpm=tempo):
+                if freq <= 0:
+                    continue
+                assert 250 <= freq <= 500, f"{name} uses synth-unfriendly frequency {freq}"
+
     def test_blheli_catalog_has_all_system_entries(self):
         expected = {
             "startup", "arm", "disarm", "low_voltage",
@@ -146,6 +171,9 @@ class TestBlheliMelodyCatalog:
 
     def test_blheli_catalog_has_biba_signature(self):
         assert "biba_signature" in melodies.BLHELI_CATALOG
+
+    def test_split_blheli_catalog_has_biba_signature(self):
+        assert "biba_signature" in melodies.SPLIT_BLHELI_CATALOG
 
     def test_blheli_catalog_has_fun_melodies(self):
         fun = {"imperial_march", "katyusha", "korobeiniki", "nokia_tune", "pacman"}

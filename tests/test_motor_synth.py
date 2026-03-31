@@ -37,7 +37,7 @@ class TestMotorSynth:
         synth.play_blheli("A4 1/4 P 1/8 C5 1/4", tempo_bpm=120)
         pi.hardware_PWM.assert_any_call(18, 440, 50000)
 
-    def test_play_blheli_on_shared_pwm_channels_switches_direction_in_slices(self):
+    def test_play_blheli_on_shared_pwm_channels_does_not_drive_dropped_comp_pins(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -59,9 +59,9 @@ class TestMotorSynth:
 
         non_zero_calls = [entry.args for entry in pi.hardware_PWM.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 12 and args[1] == 440 for args in non_zero_calls)
-        assert any(args[0] == 18 and args[1] == 440 for args in non_zero_calls)
         assert any(args[0] == 19 and args[1] == 440 for args in non_zero_calls)
-        assert any(args[0] == 13 and args[1] == 440 for args in non_zero_calls)
+        assert all(args[0] != 18 for args in non_zero_calls)
+        assert all(args[0] != 13 for args in non_zero_calls)
 
     def test_play_blheli_on_shared_pwm_channels_uses_software_pwm_when_requested(self):
         pi = MagicMock()
@@ -173,7 +173,7 @@ class TestMotorSynth:
         pi.set_PWM_range.assert_any_call(19, 25)
         pi.set_PWM_range.assert_any_call(13, 25)
 
-    def test_play_split_blheli_on_shared_pwm_channels_switches_direction_in_slices(self):
+    def test_play_split_blheli_on_shared_pwm_channels_does_not_drive_dropped_comp_pins(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -198,9 +198,9 @@ class TestMotorSynth:
 
         non_zero_calls = [entry.args for entry in pi.hardware_PWM.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 12 and args[1] == 523 for args in non_zero_calls)
-        assert any(args[0] == 18 and args[1] == 523 for args in non_zero_calls)
         assert any(args[0] == 19 and args[1] == 392 for args in non_zero_calls)
-        assert any(args[0] == 13 and args[1] == 392 for args in non_zero_calls)
+        assert all(args[0] != 18 for args in non_zero_calls)
+        assert all(args[0] != 13 for args in non_zero_calls)
 
     def test_play_split_blheli_on_shared_pwm_channels_keeps_both_pins_active_in_software_mode(self):
         pi = MagicMock()
@@ -398,7 +398,7 @@ class TestMotorSynth:
         assert right_freqs
         assert left_freqs != right_freqs
 
-    def test_play_named_sos_keeps_alarm_in_unison_for_loudness(self):
+    def test_play_named_sos_uses_distinct_left_and_right_alarm_lines(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -422,7 +422,7 @@ class TestMotorSynth:
         right_freqs = {args[1] for args in non_zero_calls if args[0] == 19}
         assert left_freqs
         assert right_freqs
-        assert left_freqs == right_freqs
+        assert left_freqs != right_freqs
 
     @patch("time.sleep")
     def test_play_named_unknown_does_nothing(self, mock_sleep):
