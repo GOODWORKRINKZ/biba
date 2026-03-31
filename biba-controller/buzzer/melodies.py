@@ -91,8 +91,8 @@ BLHELI_CATALOG: dict[str, tuple[str, int]] = {
         176,
     ),
     "disarm": (
-        "A4 1/16 F4 1/8 D#4 1/8",
-        140,
+        "G4 1/16 D#4 1/8",
+        176,
     ),
     "low_voltage": (
         "D#4 1/8 P 1/16 F4 1/8 P 1/16 D#4 1/8",
@@ -188,9 +188,9 @@ SPLIT_BLHELI_CATALOG: dict[str, tuple[str, str, int]] = {
         176,
     ),
     "disarm": (
+        "G4 1/16 D#4 1/8",
         "A4 1/16 F4 1/8",
-        "F4 1/16 D#4 1/8",
-        140,
+        176,
     ),
     "low_voltage": (
         "D#4 1/8 P 1/16 F4 1/8 P 1/16 D#4 1/8",

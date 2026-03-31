@@ -130,6 +130,42 @@ class TestBuzzerMelodies:
 # ── BLHeli melody catalog ─────────────────────────────────────────
 
 class TestBlheliMelodyCatalog:
+    def test_disarm_is_short_descending_reply_to_arm(self):
+        from buzzer.blheli_parser import parse_blheli
+
+        arm_melody, arm_tempo = melodies.BLHELI_CATALOG["arm"]
+        disarm_melody, disarm_tempo = melodies.BLHELI_CATALOG["disarm"]
+
+        assert disarm_tempo == arm_tempo == 176
+        assert disarm_melody == "G4 1/16 D#4 1/8"
+
+        arm_notes = [freq for freq, _duration in parse_blheli(arm_melody, tempo_bpm=arm_tempo) if freq > 0]
+        disarm_notes = [freq for freq, _duration in parse_blheli(disarm_melody, tempo_bpm=disarm_tempo) if freq > 0]
+
+        assert len(disarm_notes) == len(arm_notes) == 2
+        assert arm_notes[0] < arm_notes[1]
+        assert disarm_notes[0] > disarm_notes[1]
+
+    def test_split_disarm_is_short_descending_reply_to_arm(self):
+        from buzzer.blheli_parser import parse_blheli
+
+        arm_left, arm_right, arm_tempo = melodies.SPLIT_BLHELI_CATALOG["arm"]
+        disarm_left, disarm_right, disarm_tempo = melodies.SPLIT_BLHELI_CATALOG["disarm"]
+
+        assert disarm_tempo == arm_tempo == 176
+        assert disarm_left == "G4 1/16 D#4 1/8"
+        assert disarm_right == "A4 1/16 F4 1/8"
+
+        arm_left_notes = [freq for freq, _duration in parse_blheli(arm_left, tempo_bpm=arm_tempo) if freq > 0]
+        arm_right_notes = [freq for freq, _duration in parse_blheli(arm_right, tempo_bpm=arm_tempo) if freq > 0]
+        disarm_left_notes = [freq for freq, _duration in parse_blheli(disarm_left, tempo_bpm=disarm_tempo) if freq > 0]
+        disarm_right_notes = [freq for freq, _duration in parse_blheli(disarm_right, tempo_bpm=disarm_tempo) if freq > 0]
+
+        assert arm_left_notes[0] < arm_left_notes[1]
+        assert arm_right_notes[0] < arm_right_notes[1]
+        assert disarm_left_notes[0] > disarm_left_notes[1]
+        assert disarm_right_notes[0] > disarm_right_notes[1]
+
     def test_system_blheli_entries_stay_in_software_pwm_friendly_band(self):
         from buzzer.blheli_parser import parse_blheli
 
