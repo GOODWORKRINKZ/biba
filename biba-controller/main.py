@@ -346,6 +346,7 @@ def _create_buzzer(pi: pigpio.pi):
         pi,
         synth_pwm_pins,
         comp_pins=synth_comp_pins,
+        pwm_mode=config.BTS7960_PWM_MODE,
         left_pwm_pins=left_pwm_pins,
         left_comp_pins=left_comp_pins,
         right_pwm_pins=right_pwm_pins,

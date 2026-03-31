@@ -4,10 +4,10 @@ from unittest.mock import MagicMock, patch
 
 
 class TestMotorSynth:
-    def _make_synth(self):
+    def _make_synth(self, pwm_mode="HARDWARE"):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
-        synth = MotorSynth(pi, [18, 13, 12, 19])
+        synth = MotorSynth(pi, [18, 13, 12, 19], pwm_mode=pwm_mode)
         return synth, pi
 
     def test_initializes_all_motor_pwm_pins(self):
@@ -43,6 +43,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -60,6 +61,40 @@ class TestMotorSynth:
         assert any(args[0] == 19 and args[1] == 440 for args in non_zero_calls)
         assert any(args[0] == 13 and args[1] == 440 for args in non_zero_calls)
 
+    def test_play_blheli_on_shared_pwm_channels_uses_software_pwm_when_requested(self):
+        pi = MagicMock()
+        pi.get_PWM_real_range.return_value = 255
+        from buzzer.motor_synth import MotorSynth
+
+        synth = MotorSynth(
+            pi,
+            [12, 19],
+            comp_pins=[18, 13],
+            left_pwm_pins=[12],
+            left_comp_pins=[18],
+            right_pwm_pins=[19],
+            right_comp_pins=[13],
+            pwm_mode="SOFTWARE",
+        )
+        synth._wait_or_interrupted = lambda _delay: False
+        pi.hardware_PWM.reset_mock()
+        pi.set_PWM_frequency.reset_mock()
+        pi.set_PWM_dutycycle.reset_mock()
+
+        with patch("buzzer.motor_synth.parse_blheli", return_value=[(440.0, 0.12)]):
+            synth.play_blheli("ignored", tempo_bpm=120)
+
+        pi.hardware_PWM.assert_not_called()
+        pi.set_PWM_frequency.assert_any_call(12, 440)
+        pi.set_PWM_frequency.assert_any_call(18, 440)
+        pi.set_PWM_frequency.assert_any_call(19, 440)
+        pi.set_PWM_frequency.assert_any_call(13, 440)
+        non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
+        assert any(args[0] == 12 for args in non_zero_calls)
+        assert any(args[0] == 18 for args in non_zero_calls)
+        assert any(args[0] == 19 for args in non_zero_calls)
+        assert any(args[0] == 13 for args in non_zero_calls)
+
     def test_play_split_blheli_on_shared_pwm_channels_switches_direction_in_slices(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
@@ -68,6 +103,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -88,6 +124,43 @@ class TestMotorSynth:
         assert any(args[0] == 19 and args[1] == 392 for args in non_zero_calls)
         assert any(args[0] == 13 and args[1] == 392 for args in non_zero_calls)
 
+    def test_play_split_blheli_on_shared_pwm_channels_keeps_both_pins_active_in_software_mode(self):
+        pi = MagicMock()
+        pi.get_PWM_real_range.return_value = 255
+        from buzzer.motor_synth import MotorSynth
+
+        synth = MotorSynth(
+            pi,
+            [12, 19],
+            comp_pins=[18, 13],
+            left_pwm_pins=[12],
+            left_comp_pins=[18],
+            right_pwm_pins=[19],
+            right_comp_pins=[13],
+            pwm_mode="SOFTWARE",
+        )
+        synth._wait_or_interrupted = lambda _delay: False
+        pi.hardware_PWM.reset_mock()
+        pi.set_PWM_frequency.reset_mock()
+        pi.set_PWM_dutycycle.reset_mock()
+
+        with patch(
+            "buzzer.motor_synth.parse_blheli",
+            side_effect=[[(523.0, 0.12)], [(392.0, 0.12)]],
+        ):
+            synth.play_split_blheli("left", "right", tempo_bpm=120)
+
+        pi.hardware_PWM.assert_not_called()
+        pi.set_PWM_frequency.assert_any_call(12, 523)
+        pi.set_PWM_frequency.assert_any_call(18, 523)
+        pi.set_PWM_frequency.assert_any_call(19, 392)
+        pi.set_PWM_frequency.assert_any_call(13, 392)
+        non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
+        assert any(args[0] == 12 for args in non_zero_calls)
+        assert any(args[0] == 18 for args in non_zero_calls)
+        assert any(args[0] == 19 for args in non_zero_calls)
+        assert any(args[0] == 13 for args in non_zero_calls)
+
     @patch("time.sleep")
     def test_play_named_plays_arm(self, mock_sleep):
         synth, pi = self._make_synth()
@@ -101,6 +174,7 @@ class TestMotorSynth:
         synth = MotorSynth(
             pi,
             [18, 12],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[18],
             right_pwm_pins=[12],
         )
@@ -126,6 +200,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -151,6 +226,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -200,6 +276,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -225,6 +302,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -250,6 +328,7 @@ class TestMotorSynth:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],

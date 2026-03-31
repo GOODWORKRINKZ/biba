@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 
+import config
 import pigpio
 
 from buzzer import melodies
@@ -23,6 +24,7 @@ from buzzer.wav_player import (
 
 LOGGER = logging.getLogger(__name__)
 _BLHELI_BIPOLAR_SLOT_MS = 32
+_SOFTWARE_PWM_RANGE = 255
 _HARDWARE_PWM_CHANNELS = {
     12: 0,
     18: 0,
@@ -76,6 +78,7 @@ class MotorSynth:
         pwm_pins: list[int],
         duty_cycle: int = 50000,
         comp_pins: list[int] | None = None,
+        pwm_mode: str | None = None,
         *,
         left_pwm_pins: list[int] | None = None,
         left_comp_pins: list[int] | None = None,
@@ -83,29 +86,33 @@ class MotorSynth:
         right_comp_pins: list[int] | None = None,
     ) -> None:
         self.pi = pi
+        self._pwm_mode = self._normalize_pwm_mode(pwm_mode)
         self.pwm_pins = list(dict.fromkeys(pwm_pins))
         self.left_pwm_pins = list(dict.fromkeys(left_pwm_pins)) if left_pwm_pins else []
         self.right_pwm_pins = list(dict.fromkeys(right_pwm_pins)) if right_pwm_pins else []
         self._raw_left_comp_pins = list(dict.fromkeys(left_comp_pins)) if left_comp_pins else []
         self.left_comp_pins = list(self._raw_left_comp_pins)
-        self.left_comp_pins = _drop_shared_channel_comp_pins(
-            self.left_pwm_pins,
-            self.left_comp_pins,
-            group_name="left motor synth",
-        )
+        if self._pwm_mode == "HARDWARE":
+            self.left_comp_pins = _drop_shared_channel_comp_pins(
+                self.left_pwm_pins,
+                self.left_comp_pins,
+                group_name="left motor synth",
+            )
         self._raw_right_comp_pins = list(dict.fromkeys(right_comp_pins)) if right_comp_pins else []
         self.right_comp_pins = list(self._raw_right_comp_pins)
-        self.right_comp_pins = _drop_shared_channel_comp_pins(
-            self.right_pwm_pins,
-            self.right_comp_pins,
-            group_name="right motor synth",
-        )
+        if self._pwm_mode == "HARDWARE":
+            self.right_comp_pins = _drop_shared_channel_comp_pins(
+                self.right_pwm_pins,
+                self.right_comp_pins,
+                group_name="right motor synth",
+            )
         self.comp_pins = list(dict.fromkeys(comp_pins)) if comp_pins else []
-        self.comp_pins = _drop_shared_channel_comp_pins(
-            self.pwm_pins,
-            self.comp_pins,
-            group_name="combined motor synth",
-        )
+        if self._pwm_mode == "HARDWARE":
+            self.comp_pins = _drop_shared_channel_comp_pins(
+                self.pwm_pins,
+                self.comp_pins,
+                group_name="combined motor synth",
+            )
         if self._has_split_motor_groups():
             self.comp_pins = list(dict.fromkeys(self.left_comp_pins + self.right_comp_pins))
         self.duty_cycle = duty_cycle
@@ -115,7 +122,21 @@ class MotorSynth:
         self._bipolar_phase_forward = True
         for pin in self._all_audio_pins():
             self.pi.set_mode(pin, pigpio.OUTPUT)
+            if self._pwm_mode == "SOFTWARE":
+                self.pi.set_PWM_range(pin, _SOFTWARE_PWM_RANGE)
+                self.pi.set_PWM_dutycycle(pin, 0)
         self.off()
+
+    @staticmethod
+    def _normalize_pwm_mode(pwm_mode: str | None) -> str:
+        normalized = (pwm_mode or config.BTS7960_PWM_MODE).strip().upper()
+        if normalized in {"HARDWARE", "SOFTWARE"}:
+            return normalized
+        return "HARDWARE"
+
+    @staticmethod
+    def _scale_software_duty(duty_cycle: int) -> int:
+        return max(0, min(_SOFTWARE_PWM_RANGE, int(duty_cycle * _SOFTWARE_PWM_RANGE / 1_000_000)))
 
     def _all_audio_pins(self) -> list[int]:
         return list(
@@ -136,6 +157,8 @@ class MotorSynth:
         )
 
     def _has_shared_channel_direction_groups(self) -> bool:
+        if self._pwm_mode != "HARDWARE":
+            return False
         return bool(
             (self.left_pwm_pins and self._raw_left_comp_pins and not self.left_comp_pins)
             or (self.right_pwm_pins and self._raw_right_comp_pins and not self.right_comp_pins)
@@ -154,15 +177,28 @@ class MotorSynth:
 
     def _apply(self, frequency: int, duty_cycle: int) -> None:
         for pin in self.pwm_pins + self.comp_pins:
-            self.pi.hardware_PWM(pin, frequency, duty_cycle)
+            self._apply_pin(pin, frequency, duty_cycle)
 
     def _apply_group(self, pins: list[int], frequency: int, duty_cycle: int) -> None:
         for pin in pins:
-            self.pi.hardware_PWM(pin, frequency, duty_cycle)
+            self._apply_pin(pin, frequency, duty_cycle)
+
+    def _apply_pin(self, pin: int, frequency: int, duty_cycle: int) -> None:
+        if self._pwm_mode == "SOFTWARE":
+            if frequency <= 0 or duty_cycle <= 0:
+                self.pi.set_PWM_dutycycle(pin, 0)
+                return
+            self.pi.set_PWM_frequency(pin, frequency)
+            self.pi.set_PWM_dutycycle(pin, self._scale_software_duty(duty_cycle))
+            return
+        self.pi.hardware_PWM(pin, frequency, duty_cycle)
 
     def _stop_group(self, pins: list[int]) -> None:
         for pin in pins:
-            self.pi.hardware_PWM(pin, 0, 0)
+            if self._pwm_mode == "SOFTWARE":
+                self.pi.set_PWM_dutycycle(pin, 0)
+            else:
+                self.pi.hardware_PWM(pin, 0, 0)
 
     def _apply_split(
         self,
