@@ -27,6 +27,7 @@ LOGGER = logging.getLogger(__name__)
 _BLHELI_BIPOLAR_SLOT_MS = 32
 _DEFAULT_DUTY_CYCLE = 50_000
 _DEFAULT_SOFTWARE_DUTY_CYCLE = 250_000
+_DEFAULT_SOFTWARE_DETUNE_HZ = 80
 _SOFTWARE_PWM_RANGE = 255
 _HARDWARE_PWM_CHANNELS = {
     12: 0,
@@ -190,6 +191,11 @@ class MotorSynth:
             self._interrupt_event.clear()
 
     def _apply(self, frequency: int, duty_cycle: int) -> None:
+        if self._pwm_mode == "SOFTWARE" and self.comp_pins:
+            forward_frequency, reverse_frequency = self._detune_frequency_pair(frequency)
+            self._apply_group(self.pwm_pins, forward_frequency, duty_cycle)
+            self._apply_group(self.comp_pins, reverse_frequency, duty_cycle)
+            return
         for pin in self.pwm_pins + self.comp_pins:
             self._apply_pin(pin, frequency, duty_cycle)
 
@@ -224,6 +230,13 @@ class MotorSynth:
             else:
                 self.pi.hardware_PWM(pin, 0, 0)
 
+    @staticmethod
+    def _detune_frequency_pair(frequency: int) -> tuple[int, int]:
+        if frequency <= 0:
+            return 0, 0
+        half_detune = _DEFAULT_SOFTWARE_DETUNE_HZ // 2
+        return max(1, frequency - half_detune), frequency + half_detune
+
     def _apply_split(
         self,
         left_frequency: int,
@@ -231,6 +244,15 @@ class MotorSynth:
         right_frequency: int,
         right_duty_cycle: int,
     ) -> None:
+        if self._pwm_mode == "SOFTWARE" and (self.left_comp_pins or self.right_comp_pins):
+            left_forward_frequency, left_reverse_frequency = self._detune_frequency_pair(left_frequency)
+            right_forward_frequency, right_reverse_frequency = self._detune_frequency_pair(right_frequency)
+            self._apply_group(self.left_pwm_pins, left_forward_frequency, left_duty_cycle)
+            self._apply_group(self.left_comp_pins, left_reverse_frequency, left_duty_cycle)
+            self._apply_group(self.right_pwm_pins, right_forward_frequency, right_duty_cycle)
+            self._apply_group(self.right_comp_pins, right_reverse_frequency, right_duty_cycle)
+            return
+
         left_pins = self.left_pwm_pins + self.left_comp_pins
         right_pins = self.right_pwm_pins + self.right_comp_pins
         self._apply_group(left_pins, left_frequency, left_duty_cycle)
