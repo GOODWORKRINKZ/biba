@@ -231,8 +231,12 @@ def test_build_control_page_contains_expected_inputs() -> None:
     page = motor_test_api.build_control_page()
 
     assert "left_frequency_hz" in page
+    assert 'id="left_frequency_hz_input"' in page
+    assert 'name="left_frequency_hz_input"' in page
     assert "left_duty_percent" in page
     assert "right_frequency_hz" in page
+    assert 'id="right_frequency_hz_input"' in page
+    assert 'name="right_frequency_hz_input"' in page
     assert "right_duty_percent" in page
     assert "duration_ms" in page
     assert "/api/motor-test" in page

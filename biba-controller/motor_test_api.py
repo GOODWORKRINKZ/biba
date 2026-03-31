@@ -133,6 +133,8 @@ def build_control_page() -> str:
         body { font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
         form { display: grid; gap: 1rem; }
         label { display: grid; gap: 0.35rem; }
+        .input-row { display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr) 7rem; align-items: center; }
+        .input-row input[type=number] { width: 100%; }
         output { font-weight: 600; }
         button { padding: 0.8rem 1rem; }
         #status { min-height: 1.5rem; }
@@ -141,7 +143,10 @@ def build_control_page() -> str:
 <body>
   <form id=\"motor-test-form\">
         <label for=\"left_frequency_hz\">Left frequency (Hz)
-            <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"100\" max=\"8000\" value=\"1000\">
+            <div class=\"input-row\">
+                <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"100\" max=\"8000\" value=\"1000\">
+                <input id=\"left_frequency_hz_input\" name=\"left_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"1000\">
+            </div>
             <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">1000</output>
         </label>
         <label for=\"left_duty_percent\">Left duty (%)
@@ -149,7 +154,10 @@ def build_control_page() -> str:
             <output for=\"left_duty_percent\" id=\"left_duty_percent_value\">40</output>
         </label>
         <label for=\"right_frequency_hz\">Right frequency (Hz)
-            <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"100\" max=\"8000\" value=\"1200\">
+            <div class=\"input-row\">
+                <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"100\" max=\"8000\" value=\"1200\">
+                <input id=\"right_frequency_hz_input\" name=\"right_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"1200\">
+            </div>
             <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">1200</output>
         </label>
         <label for=\"right_duty_percent\">Right duty (%)
@@ -165,7 +173,30 @@ def build_control_page() -> str:
     <script>
         const form = document.getElementById('motor-test-form');
         const statusNode = document.getElementById('status');
-        for (const id of ['left_frequency_hz', 'left_duty_percent', 'right_frequency_hz', 'right_duty_percent']) {
+        function syncFrequencyInputs(rangeId, numberId) {
+            const rangeInput = document.getElementById(rangeId);
+            const numberInput = document.getElementById(numberId);
+            const output = document.getElementById(`${rangeId}_value`);
+
+            const update = (value) => {
+                rangeInput.value = value;
+                numberInput.value = value;
+                output.textContent = value;
+            };
+
+            rangeInput.addEventListener('input', () => {
+                update(rangeInput.value);
+            });
+
+            numberInput.addEventListener('input', () => {
+                update(numberInput.value);
+            });
+        }
+
+        syncFrequencyInputs('left_frequency_hz', 'left_frequency_hz_input');
+        syncFrequencyInputs('right_frequency_hz', 'right_frequency_hz_input');
+
+        for (const id of ['left_duty_percent', 'right_duty_percent']) {
             const input = document.getElementById(id);
             const output = document.getElementById(`${id}_value`);
             input.addEventListener('input', () => {
