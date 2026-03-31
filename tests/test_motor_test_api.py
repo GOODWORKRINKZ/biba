@@ -230,13 +230,19 @@ def test_build_control_page_contains_expected_inputs() -> None:
 
     page = motor_test_api.build_control_page()
 
+    assert "ALLOWED_FREQUENCIES_HZ" in page
+    assert "[100, 160, 200, 250, 320, 400, 500, 800, 1000, 1600, 2000, 4000, 8000]" in page
     assert "left_frequency_hz" in page
     assert 'id="left_frequency_hz_input"' in page
     assert 'name="left_frequency_hz_input"' in page
+    assert 'id="left_frequency_hz" name="left_frequency_hz" type="range" min="0"' in page
+    assert "document.getElementById('left_frequency_hz_input').value" in page
     assert "left_duty_percent" in page
     assert "right_frequency_hz" in page
     assert 'id="right_frequency_hz_input"' in page
     assert 'name="right_frequency_hz_input"' in page
+    assert 'id="right_frequency_hz" name="right_frequency_hz" type="range" min="0"' in page
+    assert "document.getElementById('right_frequency_hz_input').value" in page
     assert "right_duty_percent" in page
     assert "duration_ms" in page
     assert "/api/motor-test" in page

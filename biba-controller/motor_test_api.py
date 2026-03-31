@@ -18,6 +18,7 @@ _MAX_DUTY_PERCENT = 100.0
 _MIN_DURATION_MS = 100
 _MAX_DURATION_MS = 10_000
 _PIGPIO_DUTY_RANGE = 1_000_000
+_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ = [100, 160, 200, 250, 320, 400, 500, 800, 1000, 1600, 2000, 4000, 8000]
 
 
 LOGGER = logging.getLogger(__name__)
@@ -81,6 +82,13 @@ def percent_to_motor_synth_duty(duty_percent: float) -> int:
     return round(duty_percent * _PIGPIO_DUTY_RANGE / 100.0)
 
 
+def _nearest_frequency_option_index(frequency_hz: int) -> int:
+    return min(
+        range(len(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ)),
+        key=lambda index: abs(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ[index] - frequency_hz),
+    )
+
+
 class MotorTestExecutor:
     def __init__(self, synth, before_run=None) -> None:
         self._synth = synth
@@ -123,31 +131,38 @@ class MotorTestExecutor:
 
 
 def build_control_page() -> str:
-    return """<!DOCTYPE html>
+    allowed_frequencies_json = json.dumps(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ)
+    left_default_frequency_hz = 1000
+    right_default_frequency_hz = 1200
+    left_default_index = _nearest_frequency_option_index(left_default_frequency_hz)
+    right_default_index = _nearest_frequency_option_index(right_default_frequency_hz)
+    last_frequency_index = len(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ) - 1
+
+    return f"""<!DOCTYPE html>
 <html lang=\"en\">
 <head>
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
   <title>BiBa Motor Test</title>
     <style>
-        body { font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
-        form { display: grid; gap: 1rem; }
-        label { display: grid; gap: 0.35rem; }
-        .input-row { display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr) 7rem; align-items: center; }
-        .input-row input[type=number] { width: 100%; }
-        output { font-weight: 600; }
-        button { padding: 0.8rem 1rem; }
-        #status { min-height: 1.5rem; }
+        body {{ font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }}
+        form {{ display: grid; gap: 1rem; }}
+        label {{ display: grid; gap: 0.35rem; }}
+        .input-row {{ display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr) 7rem; align-items: center; }}
+        .input-row input[type=number] {{ width: 100%; }}
+        output {{ font-weight: 600; }}
+        button {{ padding: 0.8rem 1rem; }}
+        #status {{ min-height: 1.5rem; }}
     </style>
 </head>
 <body>
   <form id=\"motor-test-form\">
         <label for=\"left_frequency_hz\">Left frequency (Hz)
             <div class=\"input-row\">
-                <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"100\" max=\"8000\" value=\"1000\">
-                <input id=\"left_frequency_hz_input\" name=\"left_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"1000\">
+                <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"0\" max=\"{last_frequency_index}\" step=\"1\" value=\"{left_default_index}\">
+                <input id=\"left_frequency_hz_input\" name=\"left_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"{left_default_frequency_hz}\">
             </div>
-            <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">1000</output>
+            <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">{left_default_frequency_hz}</output>
         </label>
         <label for=\"left_duty_percent\">Left duty (%)
             <input id=\"left_duty_percent\" name=\"left_duty_percent\" type=\"range\" min=\"0\" max=\"100\" value=\"40\">
@@ -155,10 +170,10 @@ def build_control_page() -> str:
         </label>
         <label for=\"right_frequency_hz\">Right frequency (Hz)
             <div class=\"input-row\">
-                <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"100\" max=\"8000\" value=\"1200\">
-                <input id=\"right_frequency_hz_input\" name=\"right_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"1200\">
+                <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"0\" max=\"{last_frequency_index}\" step=\"1\" value=\"{right_default_index}\">
+                <input id=\"right_frequency_hz_input\" name=\"right_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"{right_default_frequency_hz}\">
             </div>
-            <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">1200</output>
+            <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">{right_default_frequency_hz}</output>
         </label>
         <label for=\"right_duty_percent\">Right duty (%)
             <input id=\"right_duty_percent\" name=\"right_duty_percent\" type=\"range\" min=\"0\" max=\"100\" value=\"55\">
@@ -173,63 +188,96 @@ def build_control_page() -> str:
     <script>
         const form = document.getElementById('motor-test-form');
         const statusNode = document.getElementById('status');
-        function syncFrequencyInputs(rangeId, numberId) {
+        const ALLOWED_FREQUENCIES_HZ = {allowed_frequencies_json};
+
+        function clampFrequency(value) {{
+            if (!Number.isFinite(value)) {{
+                return ALLOWED_FREQUENCIES_HZ[0];
+            }}
+            return Math.min(ALLOWED_FREQUENCIES_HZ[ALLOWED_FREQUENCIES_HZ.length - 1], Math.max(ALLOWED_FREQUENCIES_HZ[0], value));
+        }}
+
+        function nearestFrequencyIndex(value) {{
+            const clampedValue = clampFrequency(value);
+            let nearestIndex = 0;
+            let nearestDistance = Math.abs(ALLOWED_FREQUENCIES_HZ[0] - clampedValue);
+            for (let index = 1; index < ALLOWED_FREQUENCIES_HZ.length; index += 1) {{
+                const distance = Math.abs(ALLOWED_FREQUENCIES_HZ[index] - clampedValue);
+                if (distance < nearestDistance) {{
+                    nearestIndex = index;
+                    nearestDistance = distance;
+                }}
+            }}
+            return nearestIndex;
+        }}
+
+        function syncFrequencyInputs(rangeId, numberId) {{
             const rangeInput = document.getElementById(rangeId);
             const numberInput = document.getElementById(numberId);
-            const output = document.getElementById(`${rangeId}_value`);
+            const output = document.getElementById(`${{rangeId}}_value`);
 
-            const update = (value) => {
-                rangeInput.value = value;
-                numberInput.value = value;
-                output.textContent = value;
-            };
+            const updateFromIndex = (index) => {{
+                const frequency = ALLOWED_FREQUENCIES_HZ[Number(index)];
+                rangeInput.value = String(index);
+                numberInput.value = String(frequency);
+                output.textContent = String(frequency);
+            }};
 
-            rangeInput.addEventListener('input', () => {
-                update(rangeInput.value);
-            });
+            const updateFromNumber = (value) => {{
+                const numericValue = clampFrequency(Number(value));
+                numberInput.value = String(numericValue);
+                output.textContent = String(numericValue);
+                rangeInput.value = String(nearestFrequencyIndex(numericValue));
+            }};
 
-            numberInput.addEventListener('input', () => {
-                update(numberInput.value);
-            });
-        }
+            rangeInput.addEventListener('input', () => {{
+                updateFromIndex(rangeInput.value);
+            }});
+
+            numberInput.addEventListener('input', () => {{
+                updateFromNumber(numberInput.value);
+            }});
+
+            updateFromNumber(numberInput.value);
+        }}
 
         syncFrequencyInputs('left_frequency_hz', 'left_frequency_hz_input');
         syncFrequencyInputs('right_frequency_hz', 'right_frequency_hz_input');
 
-        for (const id of ['left_duty_percent', 'right_duty_percent']) {
+        for (const id of ['left_duty_percent', 'right_duty_percent']) {{
             const input = document.getElementById(id);
-            const output = document.getElementById(`${id}_value`);
-            input.addEventListener('input', () => {
+            const output = document.getElementById(`${{id}}_value`);
+            input.addEventListener('input', () => {{
                 output.textContent = input.value;
-            });
-        }
+            }});
+        }}
 
-        form.addEventListener('submit', async (event) => {
+        form.addEventListener('submit', async (event) => {{
             event.preventDefault();
             statusNode.textContent = 'Sending...';
-            const payload = {
-                left_frequency_hz: Number(document.getElementById('left_frequency_hz').value),
+            const payload = {{
+                left_frequency_hz: Number(document.getElementById('left_frequency_hz_input').value),
                 left_duty_percent: Number(document.getElementById('left_duty_percent').value),
-                right_frequency_hz: Number(document.getElementById('right_frequency_hz').value),
+                right_frequency_hz: Number(document.getElementById('right_frequency_hz_input').value),
                 right_duty_percent: Number(document.getElementById('right_duty_percent').value),
                 duration_ms: Number(document.getElementById('duration_ms').value),
-            };
+            }};
 
-            try {
-                const response = await fetch('/api/motor-test', {
+            try {{
+                const response = await fetch('/api/motor-test', {{
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify(payload),
-                });
+                }});
                 const body = await response.json();
-                if (!response.ok) {
-                    throw new Error(body.error || `HTTP ${response.status}`);
-                }
+                if (!response.ok) {{
+                        throw new Error(body.error || `HTTP ${{response.status}}`);
+                }}
                 statusNode.textContent = 'Command sent';
-            } catch (error) {
-                statusNode.textContent = `Error: ${error.message}`;
-            }
-        });
+            }} catch (error) {{
+                    statusNode.textContent = `Error: ${{error.message}}`;
+            }}
+        }});
     </script>
 </body>
 </html>
