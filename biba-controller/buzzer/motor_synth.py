@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass
 
 import config
 import pigpio
@@ -31,6 +32,12 @@ _HARDWARE_PWM_CHANNELS = {
     13: 1,
     19: 1,
 }
+
+
+@dataclass(frozen=True)
+class _SoftwarePinState:
+    frequency: int
+    pwm_range: int
 
 
 def _hardware_pwm_channel(pin: int) -> int | None:
@@ -120,11 +127,14 @@ class MotorSynth:
         self._interrupt_event = threading.Event()
         self._control_active = False
         self._bipolar_phase_forward = True
+        self._software_pin_states: dict[int, _SoftwarePinState] = {}
         for pin in self._all_audio_pins():
             self.pi.set_mode(pin, pigpio.OUTPUT)
             if self._pwm_mode == "SOFTWARE":
-                self.pi.set_PWM_range(pin, _SOFTWARE_PWM_RANGE)
-                self.pi.set_PWM_dutycycle(pin, 0)
+                self._software_pin_states[pin] = _SoftwarePinState(
+                    frequency=self.pi.get_PWM_frequency(pin),
+                    pwm_range=self.pi.get_PWM_range(pin),
+                )
         self.off()
 
     @staticmethod
@@ -186,17 +196,27 @@ class MotorSynth:
     def _apply_pin(self, pin: int, frequency: int, duty_cycle: int) -> None:
         if self._pwm_mode == "SOFTWARE":
             if frequency <= 0 or duty_cycle <= 0:
-                self.pi.set_PWM_dutycycle(pin, 0)
+                self._restore_software_pin(pin)
                 return
+            self.pi.set_PWM_range(pin, _SOFTWARE_PWM_RANGE)
             self.pi.set_PWM_frequency(pin, frequency)
             self.pi.set_PWM_dutycycle(pin, self._scale_software_duty(duty_cycle))
             return
         self.pi.hardware_PWM(pin, frequency, duty_cycle)
 
+    def _restore_software_pin(self, pin: int) -> None:
+        self.pi.set_PWM_dutycycle(pin, 0)
+        state = self._software_pin_states.get(pin)
+        if state is None:
+            return
+        self.pi.set_PWM_frequency(pin, state.frequency)
+        self.pi.set_PWM_range(pin, state.pwm_range)
+        self.pi.set_PWM_dutycycle(pin, 0)
+
     def _stop_group(self, pins: list[int]) -> None:
         for pin in pins:
             if self._pwm_mode == "SOFTWARE":
-                self.pi.set_PWM_dutycycle(pin, 0)
+                self._restore_software_pin(pin)
             else:
                 self.pi.hardware_PWM(pin, 0, 0)
 
