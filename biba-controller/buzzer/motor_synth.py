@@ -26,7 +26,8 @@ from buzzer.wav_player import (
 LOGGER = logging.getLogger(__name__)
 _DEFAULT_DUTY_CYCLE = 50_000
 _DEFAULT_SOFTWARE_DUTY_CYCLE = 250_000
-_DEFAULT_SOFTWARE_DETUNE_HZ = 80
+_DEFAULT_SOFTWARE_DETUNE_RATIO = 0.20
+_DEFAULT_SOFTWARE_DETUNE_MIN_HZ = 60
 _SOFTWARE_PWM_RANGE = 255
 _HARDWARE_PWM_CHANNELS = {
     12: 0,
@@ -231,8 +232,13 @@ class MotorSynth:
     def _detune_frequency_pair(frequency: int) -> tuple[int, int]:
         if frequency <= 0:
             return 0, 0
-        half_detune = _DEFAULT_SOFTWARE_DETUNE_HZ // 2
-        return max(1, frequency - half_detune), frequency + half_detune
+        delta_hz = max(
+            _DEFAULT_SOFTWARE_DETUNE_MIN_HZ,
+            round(frequency * _DEFAULT_SOFTWARE_DETUNE_RATIO),
+        )
+        lower_half = delta_hz // 2
+        upper_half = delta_hz - lower_half
+        return max(1, frequency - lower_half), frequency + upper_half
 
     def _apply_split(
         self,

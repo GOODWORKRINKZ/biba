@@ -87,10 +87,10 @@ class TestMotorSynth:
             synth.play_blheli("ignored", tempo_bpm=120)
 
         pi.hardware_PWM.assert_not_called()
-        pi.set_PWM_frequency.assert_any_call(12, 400)
-        pi.set_PWM_frequency.assert_any_call(18, 480)
-        pi.set_PWM_frequency.assert_any_call(19, 400)
-        pi.set_PWM_frequency.assert_any_call(13, 480)
+        pi.set_PWM_frequency.assert_any_call(12, 396)
+        pi.set_PWM_frequency.assert_any_call(18, 484)
+        pi.set_PWM_frequency.assert_any_call(19, 396)
+        pi.set_PWM_frequency.assert_any_call(13, 484)
         non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 12 for args in non_zero_calls)
         assert any(args[0] == 18 for args in non_zero_calls)
@@ -162,7 +162,7 @@ class TestMotorSynth:
         with patch("buzzer.motor_synth.parse_blheli", return_value=[(440.0, 0.12)]):
             synth.play_blheli("ignored", tempo_bpm=120)
 
-        pi.set_PWM_frequency.assert_any_call(12, 400)
+        pi.set_PWM_frequency.assert_any_call(12, 396)
         pi.set_PWM_frequency.assert_any_call(12, config.PWM_FREQUENCY_HZ)
         pi.set_PWM_range.assert_any_call(12, 255)
         pi.set_PWM_range.assert_any_call(12, 25)
@@ -229,10 +229,10 @@ class TestMotorSynth:
             synth.play_split_blheli("left", "right", tempo_bpm=120)
 
         pi.hardware_PWM.assert_not_called()
-        pi.set_PWM_frequency.assert_any_call(12, 483)
-        pi.set_PWM_frequency.assert_any_call(18, 563)
-        pi.set_PWM_frequency.assert_any_call(19, 352)
-        pi.set_PWM_frequency.assert_any_call(13, 432)
+        pi.set_PWM_frequency.assert_any_call(12, 471)
+        pi.set_PWM_frequency.assert_any_call(18, 576)
+        pi.set_PWM_frequency.assert_any_call(19, 353)
+        pi.set_PWM_frequency.assert_any_call(13, 431)
         non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 12 for args in non_zero_calls)
         assert any(args[0] == 18 for args in non_zero_calls)
