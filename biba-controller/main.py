@@ -368,6 +368,32 @@ def _create_motor_test_server(buzzer):
     )
 
 
+def _create_motor_test_executor(buzzer, drive):
+    if not config.MOTOR_TEST_API_ENABLED:
+        return None
+    if not hasattr(buzzer, "play_manual_split_pwm"):
+        return None
+    before_run = getattr(drive, "emergency_stop", None)
+    return MotorTestExecutor(
+        buzzer,
+        before_run=before_run,
+    )
+
+
+def _motor_test_active(executor) -> bool:
+    return bool(executor is not None and getattr(executor, "is_active", False))
+
+
+def _create_motor_test_server(executor):
+    if executor is None:
+        return None
+    return create_motor_test_server(
+        executor,
+        host=config.MOTOR_TEST_API_HOST,
+        port=config.MOTOR_TEST_API_PORT,
+    )
+
+
 def _start_motor_test_server(server) -> threading.Thread | None:
     if server is None:
         return None
@@ -944,7 +970,8 @@ def main() -> int:
         LOGGER.warning("Could not connect to pigpio daemon, starting in telemetry-only mode")
         drive = _NullDrive()
         buzzer = _NullBuzzer()
-    motor_test_server = _create_motor_test_server(buzzer)
+    motor_test_executor = _create_motor_test_executor(buzzer, drive)
+    motor_test_server = _create_motor_test_server(motor_test_executor)
     motor_test_server_thread = _start_motor_test_server(motor_test_server)
     beacon = BeaconManager(
         delay_s=config.BEACON_DELAY_S,
@@ -1129,6 +1156,7 @@ def main() -> int:
                 motor_trim = _live_motor_trim_from_channels(channels) if trim_mode_active else saved_motor_trim
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
+                manual_motor_test_active = _motor_test_active(motor_test_executor)
 
                 throttle = raw_throttle
                 if throttle_filter is not None:
@@ -1138,7 +1166,7 @@ def main() -> int:
                 control_active = armed and (
                     abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
                 )
-                buzzer.set_control_active(control_active)
+                buzzer.set_control_active(False if manual_motor_test_active else control_active)
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
                 battery_state = bms_poller.latest_state if bms_poller else None
                 bms_sample_monotonic_s = getattr(bms_poller, "latest_state_timestamp_s", None) if bms_poller else None
@@ -1148,7 +1176,14 @@ def main() -> int:
                 limited_right = 0.0
                 trimmed_left = 0.0
                 trimmed_right = 0.0
-                if armed:
+                if manual_motor_test_active:
+                    if throttle_filter is not None:
+                        throttle_filter.reset()
+                    left_current_sample = MotorCurrentSample(current_a=0.0)
+                    right_current_sample = MotorCurrentSample(current_a=0.0)
+                    left_duty = 0.0
+                    right_duty = 0.0
+                elif armed:
                     if hasattr(drive, "mix_and_ramp") and hasattr(drive, "apply_output"):
                         requested_left, requested_right = drive.mix_and_ramp(throttle, steering, control_dt)
                         left_sample, right_sample = current_reader.read_currents(
@@ -1302,7 +1337,7 @@ def main() -> int:
                                 mute_active=mute_active,
                             )
 
-            if not received_frame and drive.check_failsafe(last_frame_time):
+            if not received_frame and not _motor_test_active(motor_test_executor) and drive.check_failsafe(last_frame_time):
                 if armed:
                     LOGGER.warning("Failsafe triggered, disarming platform")
                     if not _play_grouped_voice_async_if_allowed(

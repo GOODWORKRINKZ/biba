@@ -176,6 +176,55 @@ def test_executor_rejects_concurrent_requests() -> None:
     assert not worker.is_alive()
 
 
+def test_executor_reports_active_and_runs_before_run_callback() -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+    entered = threading.Event()
+    release = threading.Event()
+    before_run_calls: list[str] = []
+
+    class FakeSynth:
+        def play_manual_split_pwm(
+            self,
+            left_frequency_hz: int,
+            left_duty_cycle: int,
+            right_frequency_hz: int,
+            right_duty_cycle: int,
+            duration_ms: int,
+        ) -> None:
+            del left_frequency_hz, left_duty_cycle, right_frequency_hz, right_duty_cycle, duration_ms
+            entered.set()
+            release.wait(timeout=2.0)
+
+        def off(self) -> None:
+            pass
+
+    executor = motor_test_api.MotorTestExecutor(
+        FakeSynth(),
+        before_run=lambda: before_run_calls.append("before_run"),
+    )
+    request = motor_test_api.parse_motor_test_request(
+        {
+            "left_frequency_hz": 1000,
+            "left_duty_percent": 40,
+            "right_frequency_hz": 1200,
+            "right_duty_percent": 55,
+            "duration_ms": 2000,
+        }
+    )
+
+    worker = threading.Thread(target=executor.run, args=(request,), daemon=True)
+    worker.start()
+    assert entered.wait(timeout=1.0)
+
+    assert executor.is_active is True
+    assert before_run_calls == ["before_run"]
+
+    release.set()
+    worker.join(timeout=1.0)
+    assert not worker.is_alive()
+    assert executor.is_active is False
+
+
 def test_build_control_page_contains_expected_inputs() -> None:
     motor_test_api = importlib.import_module("motor_test_api")
 

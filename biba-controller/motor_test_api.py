@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Lock
+from threading import Event, Lock
 from typing import Any
 
 
@@ -17,6 +18,9 @@ _MAX_DUTY_PERCENT = 100.0
 _MIN_DURATION_MS = 100
 _MAX_DURATION_MS = 10_000
 _PIGPIO_DUTY_RANGE = 1_000_000
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MotorTestBusyError(RuntimeError):
@@ -78,15 +82,32 @@ def percent_to_motor_synth_duty(duty_percent: float) -> int:
 
 
 class MotorTestExecutor:
-    def __init__(self, synth) -> None:
+    def __init__(self, synth, before_run=None) -> None:
         self._synth = synth
+        self._before_run = before_run
         self._lock = Lock()
+        self._active_event = Event()
+
+    @property
+    def is_active(self) -> bool:
+        return self._active_event.is_set()
 
     def run(self, request: MotorTestRequest) -> None:
         if not self._lock.acquire(blocking=False):
             raise MotorTestBusyError("motor test already active")
 
         try:
+            self._active_event.set()
+            if self._before_run is not None:
+                self._before_run()
+            LOGGER.info(
+                "Manual motor test started left=%sHz/%s%% right=%sHz/%s%% duration=%sms",
+                request.left_frequency_hz,
+                request.left_duty_percent,
+                request.right_frequency_hz,
+                request.right_duty_percent,
+                request.duration_ms,
+            )
             self._synth.play_manual_split_pwm(
                 request.left_frequency_hz,
                 percent_to_motor_synth_duty(request.left_duty_percent),
@@ -96,7 +117,9 @@ class MotorTestExecutor:
             )
         finally:
             self._synth.off()
+            self._active_event.clear()
             self._lock.release()
+            LOGGER.info("Manual motor test finished")
 
 
 def build_control_page() -> str:

@@ -198,18 +198,54 @@ def test_create_buzzer_preserves_left_and_right_motor_groups(monkeypatch: pytest
     assert captured["right_comp_pins"] == [13]
 
 
-def test_create_motor_test_server_uses_buzzer_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_motor_test_executor_uses_buzzer_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     captured: dict[str, object] = {}
-    fake_server = object()
 
     class FakeBuzzer:
         def play_manual_split_pwm(self, *args, **kwargs) -> None:
             del args, kwargs
 
-    def fake_executor(synth):
+    class FakeDrive:
+        def emergency_stop(self) -> None:
+            pass
+
+    def fake_executor(synth, before_run=None):
         captured["synth"] = synth
+        captured["before_run"] = before_run
         return "executor"
+
+    monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
+    monkeypatch.setattr(main, "MotorTestExecutor", fake_executor)
+
+    buzzer = FakeBuzzer()
+    drive = FakeDrive()
+    executor = main._create_motor_test_executor(buzzer, drive)
+
+    assert executor == "executor"
+    assert captured["synth"] is buzzer
+    assert callable(captured["before_run"])
+
+
+def test_create_motor_test_executor_returns_none_for_unsupported_buzzer(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    class FakeBuzzer:
+        pass
+
+    class FakeDrive:
+        def emergency_stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
+
+    assert main._create_motor_test_executor(FakeBuzzer(), FakeDrive()) is None
+
+
+def test_create_motor_test_server_uses_executor_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    captured: dict[str, object] = {}
+    fake_server = object()
 
     def fake_server_factory(executor, *, host: str, port: int):
         captured["executor"] = executor
@@ -217,31 +253,17 @@ def test_create_motor_test_server_uses_buzzer_when_enabled(monkeypatch: pytest.M
         captured["port"] = port
         return fake_server
 
-    monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
     monkeypatch.setattr(main.config, "MOTOR_TEST_API_HOST", "0.0.0.0")
     monkeypatch.setattr(main.config, "MOTOR_TEST_API_PORT", 8765)
-    monkeypatch.setattr(main, "MotorTestExecutor", fake_executor)
     monkeypatch.setattr(main, "create_motor_test_server", fake_server_factory)
 
-    buzzer = FakeBuzzer()
-    server = main._create_motor_test_server(buzzer)
+    executor = object()
+    server = main._create_motor_test_server(executor)
 
     assert server is fake_server
-    assert captured["synth"] is buzzer
-    assert captured["executor"] == "executor"
+    assert captured["executor"] is executor
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 8765
-
-
-def test_create_motor_test_server_returns_none_for_unsupported_buzzer(monkeypatch: pytest.MonkeyPatch) -> None:
-    main = importlib.import_module("main")
-
-    class FakeBuzzer:
-        pass
-
-    monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
-
-    assert main._create_motor_test_server(FakeBuzzer()) is None
 
 
 def test_shutdown_motor_test_server_closes_server() -> None:
@@ -258,6 +280,159 @@ def test_shutdown_motor_test_server_closes_server() -> None:
     main._shutdown_motor_test_server(FakeServer())
 
     assert calls == ["shutdown", "server_close"]
+
+
+def test_main_skips_drive_updates_while_manual_motor_test_is_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    mix_calls: list[tuple[float, float, float]] = []
+    apply_calls: list[tuple[float, float]] = []
+    drive_calls: list[tuple[float, float, float]] = []
+    control_calls: list[bool] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [[0.0, 0.0, 0.0, 0.0, -0.98, 0.0]]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame = self._frames.pop(0)
+            main.RUNNING = False
+            return frame
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            mix_calls.append((throttle, steering, dt))
+            return (0.0, 0.0)
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            apply_calls.append((left_duty, right_duty))
+            return (left_duty, right_duty)
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            drive_calls.append((throttle, steering, dt))
+            return (0.0, 0.0)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            control_calls.append(active)
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeMotorTestExecutor:
+        is_active = True
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "_create_buzzer", lambda pi: FakeMotorSynth())
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "_create_motor_test_executor", lambda buzzer, drive: FakeMotorTestExecutor())
+    monkeypatch.setattr(main, "_create_motor_test_server", lambda executor: None)
+    monkeypatch.setattr(main, "_start_motor_test_server", lambda server: None)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert mix_calls == []
+    assert apply_calls == []
+    assert drive_calls == []
+    assert control_calls and control_calls[-1] is False
 
 
 def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.MonkeyPatch) -> None:
