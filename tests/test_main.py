@@ -55,6 +55,96 @@ def test_play_grouped_voice_async_if_allowed_skips_when_muted() -> None:
     assert played == []
 
 
+def test_play_grouped_voice_uses_wav_in_voice_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeSelector:
+        def choose(self, event: str, voices: list[str]) -> str | None:
+            assert event == "connected"
+            return voices[0]
+
+    class FakeBuzzer:
+        def play_wav(self, path: str) -> None:
+            played.append(f"wav:{path}")
+
+        def play_spectral(self, path: str) -> None:
+            played.append(f"spectral:{path}")
+
+    monkeypatch.setattr(main.config, "SOUND_MODE", "voice", raising=False)
+
+    result = main._play_grouped_voice(
+        FakeSelector(),
+        "connected",
+        ["/app/voice/connected_online.wav"],
+        FakeBuzzer(),
+    )
+
+    assert result is True
+    assert played == ["wav:/app/voice/connected_online.wav"]
+
+
+def test_play_grouped_voice_uses_spectral_in_spectral_voice_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeSelector:
+        def choose(self, event: str, voices: list[str]) -> str | None:
+            assert event == "connected"
+            return voices[0]
+
+    class FakeBuzzer:
+        def play_wav(self, path: str) -> None:
+            played.append(f"wav:{path}")
+
+        def play_spectral(self, path: str) -> None:
+            played.append(f"spectral:{path}")
+
+    monkeypatch.setattr(main.config, "SOUND_MODE", "spectral_voice", raising=False)
+
+    result = main._play_grouped_voice(
+        FakeSelector(),
+        "connected",
+        ["/app/voice/connected_online.wav"],
+        FakeBuzzer(),
+    )
+
+    assert result is True
+    assert played == ["spectral:/app/voice/connected_online.wav"]
+
+
+def test_play_grouped_voice_async_uses_named_synth_in_synth_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeSelector:
+        def choose(self, event: str, voices: list[str]) -> str | None:
+            assert event == "connected"
+            return voices[0]
+
+    class FakeBuzzer:
+        def play_named_async(self, name: str) -> None:
+            played.append(f"named:{name}")
+
+        def play_wav_async(self, path: str) -> None:
+            played.append(f"wav:{path}")
+
+        def play_spectral_async(self, path: str) -> None:
+            played.append(f"spectral:{path}")
+
+    monkeypatch.setattr(main.config, "SOUND_MODE", "synth", raising=False)
+
+    result = main._play_grouped_voice_async(
+        FakeSelector(),
+        "connected",
+        ["/app/voice/connected_online.wav"],
+        FakeBuzzer(),
+    )
+
+    assert result is True
+    assert played == ["named:connected"]
+
+
 def test_play_named_async_if_allowed_skips_when_muted() -> None:
     main = importlib.import_module("main")
     played: list[str] = []

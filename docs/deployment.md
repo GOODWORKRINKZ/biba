@@ -131,6 +131,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `ENABLE_RC_MELODIES` | `0` | Включает выбор BLHeli-мелодий с передатчика |
 | `CH_MELODY` | `8` | Канал выбора мелодии при `ENABLE_RC_MELODIES=1` |
 | `STARTUP_MELODY` | `biba_signature` | Стартовая BLHeli-мелодия |
+| `SOUND_MODE` | `synth` | Режим системных звуков: `voice`, `spectral_voice` или `synth` |
 | `RAMP_ACCEL_RATE` | `2.0` | Макс. скорость разгона мотора (ед/сек); 0→100% за 0.5с |
 | `PWM_FREQUENCY_HZ` | `20000` | Частота PWM для motor runtime |
 | `RAMP_DECEL_RATE` | `0.5` | Макс. скорость отпускания/торможения (ед/сек); 100%→0 за 2с |
@@ -161,6 +162,7 @@ BEACON_DELAY_S=300
 CH_BEACON=7
 CH_MUTE=6
 CH_TRIM=8
+SOUND_MODE=synth
 MOTOR_TRIM_MAX_EFFECT=0.20
 MOTOR_TRIM_CONFIRM_HOLD_S=5.0
 MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
@@ -194,6 +196,14 @@ BiBa использует моторный synth/audio runtime для:
 - low-voltage warning
 - сигнала потери связи
 - SOS-маяка после длительного failsafe
+
+Параметр `SOUND_MODE` управляет backend системных звуков:
+
+- `voice` - прямое WAV-воспроизведение
+- `spectral_voice` - FFT/spectral motor speech playback
+- `synth` - только синтовые мелодии и сигналы
+
+Текущий production compose по умолчанию запускается с `SOUND_MODE=synth`, чтобы системные события не использовали voice WAV.
 
 На передатчике EdgeTX Lua-скрипт дополнительно проигрывает `playTone` события при старте, восстановлении/потере связи и low battery.
 

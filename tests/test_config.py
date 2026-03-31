@@ -123,6 +123,39 @@ def test_config_defaults_to_single_voice_asset_per_event(
     assert module.SOS_VOICES == ["/app/voice/sos_comply.wav"]
 
 
+def test_config_defaults_sound_mode_to_spectral_voice(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    monkeypatch.delenv("SOUND_MODE", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.SOUND_MODE == "spectral_voice"
+
+
+def test_config_accepts_supported_sound_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    monkeypatch.setenv("SOUND_MODE", "synth")
+
+    module = importlib.reload(config_module)
+
+    assert module.SOUND_MODE == "synth"
+
+
+def test_config_rejects_invalid_sound_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    monkeypatch.setenv("SOUND_MODE", "chirp")
+
+    module = importlib.reload(config_module)
+
+    assert module.SOUND_MODE == "spectral_voice"
+
+
 def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.setenv("MOTOR1_PWM", "19")
     monkeypatch.setenv("MOTOR_DRIVER_TYPE", "BTS7960")

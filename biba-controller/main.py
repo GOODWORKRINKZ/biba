@@ -41,6 +41,15 @@ _BATTERY_STATUS_BEACON = 0b10000
 _BATTERY_STATUS_TRIM_MODE = 0b100000
 _TRIM_GESTURE_CHANNEL_COUNT = 4
 _TRIM_GESTURE_HIGH_THRESHOLD = 0.9
+_SYNTH_EVENT_NAMES = {
+    "startup": "startup",
+    "arm": "arm",
+    "disarm": "disarm",
+    "connected": "connected",
+    "disconnected": "disconnected",
+    "failsafe": "failsafe",
+    "low_voltage": "low_voltage",
+}
 
 
 def _clamp_motor_trim(trim: float) -> float:
@@ -141,12 +150,19 @@ def _play_grouped_voice(
     voices: list[str],
     buzzer,
 ) -> bool:
+    if config.SOUND_MODE == "synth":
+        synth_name = _resolve_synth_sound_name(event)
+        if synth_name is None:
+            return False
+        buzzer.play_named(synth_name)
+        return True
+
     path = selector.choose(event, voices)
     if path is None:
         return False
-    player = getattr(buzzer, "play_spectral", None)
+    player = _resolve_voice_player(buzzer, async_mode=False)
     if player is None:
-        player = buzzer.play_wav
+        return False
     player(path)
     return True
 
@@ -157,22 +173,47 @@ def _play_grouped_voice_async(
     voices: list[str],
     buzzer,
 ) -> bool:
+    if config.SOUND_MODE == "synth":
+        synth_name = _resolve_synth_sound_name(event)
+        if synth_name is None:
+            return False
+
+        player = getattr(buzzer, "play_named_async", None)
+        if player is not None:
+            player(synth_name)
+            return True
+
+        threading.Thread(target=buzzer.play_named, args=(synth_name,), daemon=True).start()
+        return True
+
     path = selector.choose(event, voices)
     if path is None:
         return False
 
-    player = getattr(buzzer, "play_spectral_async", None)
-    if player is None:
-        player = getattr(buzzer, "play_wav_async", None)
+    player = _resolve_voice_player(buzzer, async_mode=True)
     if player is not None:
         player(path)
         return True
 
-    player = getattr(buzzer, "play_spectral", None)
+    player = _resolve_voice_player(buzzer, async_mode=False)
     if player is None:
-        player = buzzer.play_wav
+        return False
     threading.Thread(target=player, args=(path,), daemon=True).start()
     return True
+
+
+def _resolve_synth_sound_name(event: str) -> str | None:
+    if event == "startup":
+        return config.STARTUP_MELODY or _SYNTH_EVENT_NAMES[event]
+    return _SYNTH_EVENT_NAMES.get(event)
+
+
+def _resolve_voice_player(buzzer, *, async_mode: bool):
+    if config.SOUND_MODE == "voice":
+        return getattr(buzzer, "play_wav_async" if async_mode else "play_wav", None)
+    if config.SOUND_MODE == "spectral_voice":
+        return getattr(buzzer, "play_spectral_async" if async_mode else "play_spectral", None)
+    return None
 
 
 def _play_grouped_voice_if_allowed(
@@ -247,7 +288,7 @@ def _replay_current_audio_state_after_unmute(
     armed: bool,
 ) -> bool:
     if armed:
-        if config.ARM_VOICE_ENABLED and _play_grouped_voice_async_if_allowed(
+        if (config.SOUND_MODE == "synth" or config.ARM_VOICE_ENABLED) and _play_grouped_voice_async_if_allowed(
             voice_selector,
             "arm",
             config.ARM_VOICES,
@@ -924,7 +965,7 @@ def main() -> int:
     voice_selector = VoiceSelector(config.VOICE_SELECTION_MODE)
 
     LOGGER.info("BiBa controller started")
-    if config.STARTUP_VOICE_ENABLED and _play_grouped_voice(
+    if (config.SOUND_MODE == "synth" or config.STARTUP_VOICE_ENABLED) and _play_grouped_voice(
         voice_selector,
         "startup",
         config.STARTUP_VOICES,
@@ -978,7 +1019,7 @@ def main() -> int:
                     armed = requested_armed
                     if armed:
                         LOGGER.info("Platform armed")
-                        if config.ARM_VOICE_ENABLED and _play_grouped_voice_async_if_allowed(
+                        if (config.SOUND_MODE == "synth" or config.ARM_VOICE_ENABLED) and _play_grouped_voice_async_if_allowed(
                             voice_selector,
                             "arm",
                             config.ARM_VOICES,

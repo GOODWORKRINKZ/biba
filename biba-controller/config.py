@@ -137,6 +137,7 @@ MOTOR_TRIM_SETTINGS_PATH = os.getenv("MOTOR_TRIM_SETTINGS_PATH", "/data/motor-tr
 ENABLE_RC_MELODIES = bool(_get_env_int("ENABLE_RC_MELODIES", 0))
 CH_MELODY = _get_env_int("CH_MELODY", 8)
 STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")
+SOUND_MODE = _get_env_choice("SOUND_MODE", "SPECTRAL_VOICE", {"VOICE", "SPECTRAL_VOICE", "SYNTH"}).lower()
 
 # Voice (WAV playback through motor coils)
 VOICE_SELECTION_MODE = _get_env_choice("VOICE_SELECTION_MODE", "ROUND_ROBIN", {"ROUND_ROBIN", "RANDOM"})
