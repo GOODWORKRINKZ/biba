@@ -24,7 +24,7 @@ from buzzer.melodies import FUN_PLAYLIST
 from buzzer.motor_synth import MotorSynth
 from buzzer.voice_selector import VoiceSelector
 from crsf.receiver import CRSFReceiver
-from crsf.telemetry import CRSFTelemetry
+from crsf.telemetry import CRSFTelemetry, build_biba_system_metrics
 from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLimitResult, apply_motor_limits
 from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -461,12 +461,13 @@ def _send_system_telemetry(
     left_current_a: float = 0.0,
     right_current_a: float = 0.0,
 ) -> None:
-    telemetry.send_system_stats(
+    metrics = build_biba_system_metrics(
         cpu_pct=stats.cpu_percent(),
         mem_pct=stats.memory_percent(),
         left_motor_current_a=max(0.0, left_current_a),
         right_motor_current_a=max(0.0, right_current_a),
     )
+    telemetry.send_system_stats(metrics=metrics)
 
 
 def _battery_telemetry_current_a(current_a: float) -> float:

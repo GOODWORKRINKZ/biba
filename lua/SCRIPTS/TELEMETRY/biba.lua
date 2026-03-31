@@ -15,6 +15,8 @@ local APP_SWITCH_THRESHOLD = 300
 local HEADER_BADGE_W = 10
 local HEADER_BADGE_H = 8
 local HEADER_BADGE_GAP = 2
+local RIGHT_WHEEL_CURRENT_ALTITUDE_OFFSET = 1000.0
+local RIGHT_WHEEL_CURRENT_ALTITUDE_SCALE = 100.0
 
 -- Sound state tracking
 local prev_connected = nil  -- nil = first run, true/false after
@@ -58,6 +60,10 @@ local function format_current_ma(current_a)
   return string.format("%05dmA", to_ma(current_a))
 end
 
+local function format_milliamps(current_ma)
+  return string.format("%05dmA", math.max(0, math.floor((current_ma or 0) + 0.5)))
+end
+
 local function text_or_dash(value)
   if value == nil or value == "" then return "-" end
   return value
@@ -94,16 +100,16 @@ local function log_telemetry(now, connected, holdoff_active,
     text_or_dash(raw_battery_direction),
     text_or_dash(raw_cell_src),
     format_cells_for_log(raw_cells),
-    format_current_ma(raw_left_current),
-    format_current_ma(raw_right_current),
+    format_milliamps(raw_left_current),
+    format_milliamps(raw_right_current),
     voltage or 0,
     current or 0,
     pct or 0,
     text_or_dash(battery_direction),
     text_or_dash(cell_src),
     format_cells_for_log(cells),
-    format_current_ma(left_current),
-    format_current_ma(right_current)
+    format_milliamps(left_current),
+    format_milliamps(right_current)
   ))
 end
 
@@ -183,9 +189,18 @@ local function read_system()
   return math.floor(cpu_raw + 0.5), math.floor(ram)
 end
 
+local function read_left_wheel_current_ma()
+  return math.max(0, sensor("Hdg", 0) * 100)
+end
+
+local function read_right_wheel_current_ma()
+  local altitude_current = sensor("Alt", 0)
+  return math.max(0, (altitude_current - RIGHT_WHEEL_CURRENT_ALTITUDE_OFFSET) * RIGHT_WHEEL_CURRENT_ALTITUDE_SCALE)
+end
+
 local function read_motor_currents()
-  local left_current = sensor("Hdg", 0)
-  local right_current = sensor("Alt", 0)
+  local left_current = read_left_wheel_current_ma()
+  local right_current = read_right_wheel_current_ma()
   return left_current, right_current
 end
 
@@ -413,8 +428,8 @@ local function draw_compact(voltage, current, battery_direction, pct, rssi, rqly
   lcd.drawText(59, 35, string.format("%d%%", pct), SMLSIZE)
 
   -- Wheel currents (left / right)
-  lcd.drawText(12, 56, format_current_ma(left_current), SMLSIZE)
-  lcd.drawText(81, 56, format_current_ma(right_current), SMLSIZE)
+  lcd.drawText(12, 56, format_milliamps(left_current), SMLSIZE)
+  lcd.drawText(81, 56, format_milliamps(right_current), SMLSIZE)
 
   -- SOC bar at bottom of body
   draw_soc_bar(14, 42, 100, 6, pct)
@@ -467,8 +482,8 @@ local function draw_wide(voltage, current, battery_direction, pct, rssi, rqly, c
   end
 
   -- Wheel currents use position instead of L/R text prefixes.
-  lcd.drawText(ix, wheel_current_row_y, format_current_ma(left_current), SMLSIZE)
-  lcd.drawText(right_current_x, wheel_current_row_y, format_current_ma(right_current), SMLSIZE)
+  lcd.drawText(ix, wheel_current_row_y, format_milliamps(left_current), SMLSIZE)
+  lcd.drawText(right_current_x, wheel_current_row_y, format_milliamps(right_current), SMLSIZE)
 
   local cell_y = iy + 55
   local col_w = math.floor((body_w - 12) / 3)

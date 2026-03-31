@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from crsf.protocol import FRAME_TYPE_BATTERY_SENSOR, FRAME_TYPE_GPS, parse_frame
-from crsf.telemetry import CRSFTelemetry
+from crsf.telemetry import BIBASystemMetrics, CRSFTelemetry, build_biba_system_metrics
 
 
 class FakeSerial:
@@ -117,3 +117,53 @@ def test_send_system_stats_encodes_motor_currents_in_heading_and_altitude() -> N
     # altitude = 1000 offset + right current in deci-amps = 1000 + 78 = 1078 = 0x0436
     assert payload[12] == 0x04
     assert payload[13] == 0x36
+
+
+def test_build_biba_system_metrics_uses_symmetric_wheel_current_ma() -> None:
+    metrics = build_biba_system_metrics(
+        cpu_pct=11.2,
+        mem_pct=22.8,
+        left_motor_current_a=1.234,
+        right_motor_current_a=1.234,
+    )
+
+    assert metrics == BIBASystemMetrics(
+        cpu_pct=11,
+        mem_pct=23,
+        left_wheel_current_ma=1234,
+        right_wheel_current_ma=1234,
+    )
+
+
+def test_build_biba_system_metrics_clamps_negative_wheel_current_to_zero() -> None:
+    metrics = build_biba_system_metrics(
+        cpu_pct=12.0,
+        mem_pct=34.0,
+        left_motor_current_a=-0.5,
+        right_motor_current_a=0.0,
+    )
+
+    assert metrics.left_wheel_current_ma == 0
+    assert metrics.right_wheel_current_ma == 0
+
+
+def test_send_system_stats_accepts_canonical_metrics_and_applies_transport_offset_only_in_payload() -> None:
+    serial_port = FakeSerial()
+    telemetry = CRSFTelemetry(serial_port)
+    metrics = BIBASystemMetrics(
+        cpu_pct=30,
+        mem_pct=40,
+        left_wheel_current_ma=1500,
+        right_wheel_current_ma=2700,
+    )
+
+    telemetry.send_system_stats(metrics=metrics)
+
+    parsed = parse_frame(serial_port.writes[-1])
+    assert parsed is not None
+    _, payload = parsed
+
+    assert payload[8:10] == bytes.fromhex("012c")
+    assert payload[10:12] == bytes.fromhex("000f")
+    assert payload[12:14] == bytes.fromhex("0403")
+    assert metrics.right_wheel_current_ma == 2700

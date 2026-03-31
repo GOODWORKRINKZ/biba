@@ -109,11 +109,38 @@ def test_run_applies_battery_holdoff_on_startup_and_reconnect() -> None:
     assert "if now < battery_holdoff_until then" in body
 
 
-def test_read_motor_currents_uses_gps_heading_and_altitude_sensors() -> None:
-    body = _extract_function(_lua_source(), "read_motor_currents")
+def test_lua_declares_wheel_current_adapter_helpers() -> None:
+    source = _lua_source()
+
+    assert "local function read_left_wheel_current_ma()" in source
+    assert "local function read_right_wheel_current_ma()" in source
+
+
+def test_read_left_wheel_current_ma_uses_heading_sensor_and_returns_ma() -> None:
+    body = _extract_function(_lua_source(), "read_left_wheel_current_ma")
 
     assert 'sensor("Hdg", 0)' in body
+    assert "* 100" in body
+    assert "math.max(0" in body
+
+
+def test_read_right_wheel_current_ma_normalizes_altitude_offset() -> None:
+    body = _extract_function(_lua_source(), "read_right_wheel_current_ma")
+    source = _lua_source()
+
     assert 'sensor("Alt", 0)' in body
+    assert "RIGHT_WHEEL_CURRENT_ALTITUDE_OFFSET" in body
+    assert "RIGHT_WHEEL_CURRENT_ALTITUDE_SCALE" in body
+    assert "math.max(0" in body
+    assert "local RIGHT_WHEEL_CURRENT_ALTITUDE_OFFSET = 1000.0" in source
+    assert "local RIGHT_WHEEL_CURRENT_ALTITUDE_SCALE = 100.0" in source
+
+
+def test_read_motor_currents_delegates_to_canonical_wheel_current_helpers() -> None:
+    body = _extract_function(_lua_source(), "read_motor_currents")
+
+    assert "read_left_wheel_current_ma()" in body
+    assert "read_right_wheel_current_ma()" in body
 
 
 def test_read_battery_direction_uses_capacity_sensor_flag() -> None:
@@ -185,7 +212,7 @@ def test_draw_compact_displays_motor_currents() -> None:
 
     assert "left_current" in body
     assert "right_current" in body
-    assert "format_current_ma" in body
+    assert "format_milliamps" in body
 
 
 def test_draw_compact_formats_total_current_in_milliamps() -> None:
@@ -216,7 +243,9 @@ def test_draw_wide_displays_motor_currents() -> None:
 def test_draw_wide_formats_wheel_currents_in_milliamps() -> None:
     body = _extract_function(_lua_source(), "draw_wide")
 
-    assert body.count("format_current_ma(") >= 3
+    assert "format_milliamps(left_current)" in body
+    assert "format_milliamps(right_current)" in body
+    assert "format_current_ma(current)" in body
 
 
 def test_draw_wide_displays_battery_direction_label() -> None:
@@ -359,8 +388,8 @@ def test_log_telemetry_defensively_formats_missing_values() -> None:
     assert "text_or_dash(raw_battery_direction)" in body
     assert "text_or_dash(raw_cell_src)" in body
     assert "format_cells_for_log(raw_cells)" in body
-    assert "format_current_ma(raw_left_current)" in body
-    assert "format_current_ma(raw_right_current)" in body
+    assert "format_milliamps(raw_left_current)" in body
+    assert "format_milliamps(raw_right_current)" in body
 
 
 def test_run_handles_disconnected_state_before_battery_reads() -> None:
@@ -382,6 +411,12 @@ def test_lua_declares_current_format_helper() -> None:
     source = _lua_source()
 
     assert "local function format_current_ma(" in source
+
+
+def test_lua_declares_milliamps_format_helper() -> None:
+    source = _lua_source()
+
+    assert "local function format_milliamps(" in source
 
 
 def test_format_current_ma_zero_pads_to_five_digits() -> None:
