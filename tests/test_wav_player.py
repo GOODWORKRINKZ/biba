@@ -812,10 +812,10 @@ class TestSpectralCache:
 # ---------------------------------------------------------------------------
 
 class TestMotorSynthPlaySpectral:
-    def _make_synth(self):
+    def _make_synth(self, pwm_mode="HARDWARE"):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
-        synth = MotorSynth(pi, [18, 13])
+        synth = MotorSynth(pi, [18, 13], pwm_mode=pwm_mode)
         return synth, pi
 
     def test_shared_hardware_pwm_channel_drops_complementary_pins(self):
@@ -826,6 +826,7 @@ class TestMotorSynthPlaySpectral:
             pi,
             [12, 19],
             comp_pins=[18, 13],
+            pwm_mode="HARDWARE",
             left_pwm_pins=[12],
             left_comp_pins=[18],
             right_pwm_pins=[19],
@@ -839,13 +840,14 @@ class TestMotorSynthPlaySpectral:
         assert synth.right_pwm_pins == [19]
         assert synth.right_comp_pins == []
 
-    def _make_split_synth(self):
+    def _make_split_synth(self, pwm_mode="HARDWARE"):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
         synth = MotorSynth(
             pi,
             [18, 12],
             comp_pins=[13, 19],
+            pwm_mode=pwm_mode,
             left_pwm_pins=[18],
             left_comp_pins=[13],
             right_pwm_pins=[12],
