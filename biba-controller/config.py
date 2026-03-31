@@ -139,6 +139,11 @@ CH_MELODY = _get_env_int("CH_MELODY", 8)
 STARTUP_MELODY = os.getenv("STARTUP_MELODY", "biba_signature")
 SOUND_MODE = _get_env_choice("SOUND_MODE", "SPECTRAL_VOICE", {"VOICE", "SPECTRAL_VOICE", "SYNTH"}).lower()
 
+# Manual motor test HTTP API
+MOTOR_TEST_API_ENABLED = bool(_get_env_int("MOTOR_TEST_API_ENABLED", 1))
+MOTOR_TEST_API_HOST = os.getenv("MOTOR_TEST_API_HOST", "0.0.0.0")
+MOTOR_TEST_API_PORT = _get_env_int("MOTOR_TEST_API_PORT", 8765)
+
 # Voice (WAV playback through motor coils)
 VOICE_SELECTION_MODE = _get_env_choice("VOICE_SELECTION_MODE", "ROUND_ROBIN", {"ROUND_ROBIN", "RANDOM"})
 VOICE_AUDITION_ENABLED = bool(_get_env_int("VOICE_AUDITION_ENABLED", 0))

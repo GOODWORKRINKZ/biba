@@ -156,6 +156,36 @@ def test_config_rejects_invalid_sound_mode(
     assert module.SOUND_MODE == "spectral_voice"
 
 
+def test_config_defaults_motor_test_api_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    monkeypatch.delenv("MOTOR_TEST_API_ENABLED", raising=False)
+    monkeypatch.delenv("MOTOR_TEST_API_HOST", raising=False)
+    monkeypatch.delenv("MOTOR_TEST_API_PORT", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.MOTOR_TEST_API_ENABLED is True
+    assert module.MOTOR_TEST_API_HOST == "0.0.0.0"
+    assert module.MOTOR_TEST_API_PORT == 8765
+
+
+def test_config_applies_motor_test_api_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+    config_module,
+) -> None:
+    monkeypatch.setenv("MOTOR_TEST_API_ENABLED", "0")
+    monkeypatch.setenv("MOTOR_TEST_API_HOST", "127.0.0.1")
+    monkeypatch.setenv("MOTOR_TEST_API_PORT", "9001")
+
+    module = importlib.reload(config_module)
+
+    assert module.MOTOR_TEST_API_ENABLED is False
+    assert module.MOTOR_TEST_API_HOST == "127.0.0.1"
+    assert module.MOTOR_TEST_API_PORT == 9001
+
+
 def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.setenv("MOTOR1_PWM", "19")
     monkeypatch.setenv("MOTOR_DRIVER_TYPE", "BTS7960")

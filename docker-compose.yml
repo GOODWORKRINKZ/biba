@@ -12,6 +12,8 @@ services:
       - /dev/gpiomem:/dev/gpiomem
       - /dev/vcio:/dev/vcio
       - /dev/mem:/dev/mem
+    ports:
+      - ${MOTOR_TEST_API_PORT:-8765}:${MOTOR_TEST_API_PORT:-8765}
     volumes:
       - biba-controller-data:/data
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
@@ -51,6 +53,9 @@ services:
       CH_MELODY: ${CH_MELODY:-8}
       STARTUP_MELODY: ${STARTUP_MELODY:-biba_signature}
       SOUND_MODE: ${SOUND_MODE:-synth}
+      MOTOR_TEST_API_ENABLED: ${MOTOR_TEST_API_ENABLED:-1}
+      MOTOR_TEST_API_HOST: ${MOTOR_TEST_API_HOST:-0.0.0.0}
+      MOTOR_TEST_API_PORT: ${MOTOR_TEST_API_PORT:-8765}
       RAMP_ACCEL_RATE: ${RAMP_ACCEL_RATE:-2.0}
       PWM_FREQUENCY_HZ: ${PWM_FREQUENCY_HZ:-20000}
       RAMP_DECEL_RATE: ${RAMP_DECEL_RATE:-0.5}

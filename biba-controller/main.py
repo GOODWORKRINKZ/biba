@@ -29,6 +29,7 @@ from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLi
 from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 from motors.ramping import ScalarKalmanFilter
+from motor_test_api import MotorTestExecutor, create_motor_test_server
 from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
@@ -352,6 +353,39 @@ def _create_buzzer(pi: pigpio.pi):
         right_pwm_pins=right_pwm_pins,
         right_comp_pins=right_comp_pins,
     )
+
+
+def _create_motor_test_server(buzzer):
+    if not config.MOTOR_TEST_API_ENABLED:
+        return None
+    if not hasattr(buzzer, "play_manual_split_pwm"):
+        return None
+    executor = MotorTestExecutor(buzzer)
+    return create_motor_test_server(
+        executor,
+        host=config.MOTOR_TEST_API_HOST,
+        port=config.MOTOR_TEST_API_PORT,
+    )
+
+
+def _start_motor_test_server(server) -> threading.Thread | None:
+    if server is None:
+        return None
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    LOGGER.info(
+        "Motor test API listening on http://%s:%s/motor-test",
+        config.MOTOR_TEST_API_HOST,
+        getattr(server, "server_port", config.MOTOR_TEST_API_PORT),
+    )
+    return thread
+
+
+def _shutdown_motor_test_server(server) -> None:
+    if server is None:
+        return
+    server.shutdown()
+    server.server_close()
 
 
 def _load_voice_audition_candidates(path: str) -> list[str]:
@@ -910,6 +944,8 @@ def main() -> int:
         LOGGER.warning("Could not connect to pigpio daemon, starting in telemetry-only mode")
         drive = _NullDrive()
         buzzer = _NullBuzzer()
+    motor_test_server = _create_motor_test_server(buzzer)
+    motor_test_server_thread = _start_motor_test_server(motor_test_server)
     beacon = BeaconManager(
         delay_s=config.BEACON_DELAY_S,
         enabled=config.BEACON_ENABLED,
@@ -1383,6 +1419,9 @@ def main() -> int:
             bms_poller.stop()
         current_reader.close()
         drive.emergency_stop()
+        _shutdown_motor_test_server(motor_test_server)
+        if motor_test_server_thread is not None:
+            motor_test_server_thread.join(timeout=1.0)
         buzzer.shutdown_tone()
         buzzer.off()
         receiver.close()

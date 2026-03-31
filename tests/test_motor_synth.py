@@ -321,6 +321,36 @@ class TestMotorSynth:
         assert any(args[0] == 19 for args in non_zero_calls)
         assert {args[1] for args in non_zero_calls if args[0] == 12} == {args[1] for args in non_zero_calls if args[0] == 19}
 
+    def test_play_manual_split_pwm_applies_independent_left_and_right_outputs(self):
+        pi = MagicMock()
+        from buzzer.motor_synth import MotorSynth
+
+        synth = MotorSynth(
+            pi,
+            [12, 19],
+            comp_pins=[18, 13],
+            left_pwm_pins=[12],
+            left_comp_pins=[18],
+            right_pwm_pins=[19],
+            right_comp_pins=[13],
+            pwm_mode="SOFTWARE",
+        )
+        synth._wait_or_interrupted = lambda _delay: False
+        pi.set_PWM_frequency.reset_mock()
+        pi.set_PWM_dutycycle.reset_mock()
+
+        synth.play_manual_split_pwm(1000, 400_000, 1200, 550_000, 250)
+
+        pi.set_PWM_frequency.assert_any_call(12, 900)
+        pi.set_PWM_frequency.assert_any_call(18, 1100)
+        pi.set_PWM_frequency.assert_any_call(19, 1080)
+        pi.set_PWM_frequency.assert_any_call(13, 1320)
+        non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
+        assert any(args[0] == 12 for args in non_zero_calls)
+        assert any(args[0] == 18 for args in non_zero_calls)
+        assert any(args[0] == 19 for args in non_zero_calls)
+        assert any(args[0] == 13 for args in non_zero_calls)
+
     def test_system_polyphonic_melodies_exist(self):
         from buzzer import melodies
 

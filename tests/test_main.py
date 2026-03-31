@@ -198,6 +198,68 @@ def test_create_buzzer_preserves_left_and_right_motor_groups(monkeypatch: pytest
     assert captured["right_comp_pins"] == [13]
 
 
+def test_create_motor_test_server_uses_buzzer_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    captured: dict[str, object] = {}
+    fake_server = object()
+
+    class FakeBuzzer:
+        def play_manual_split_pwm(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+    def fake_executor(synth):
+        captured["synth"] = synth
+        return "executor"
+
+    def fake_server_factory(executor, *, host: str, port: int):
+        captured["executor"] = executor
+        captured["host"] = host
+        captured["port"] = port
+        return fake_server
+
+    monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
+    monkeypatch.setattr(main.config, "MOTOR_TEST_API_HOST", "0.0.0.0")
+    monkeypatch.setattr(main.config, "MOTOR_TEST_API_PORT", 8765)
+    monkeypatch.setattr(main, "MotorTestExecutor", fake_executor)
+    monkeypatch.setattr(main, "create_motor_test_server", fake_server_factory)
+
+    buzzer = FakeBuzzer()
+    server = main._create_motor_test_server(buzzer)
+
+    assert server is fake_server
+    assert captured["synth"] is buzzer
+    assert captured["executor"] == "executor"
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 8765
+
+
+def test_create_motor_test_server_returns_none_for_unsupported_buzzer(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    class FakeBuzzer:
+        pass
+
+    monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
+
+    assert main._create_motor_test_server(FakeBuzzer()) is None
+
+
+def test_shutdown_motor_test_server_closes_server() -> None:
+    main = importlib.import_module("main")
+    calls: list[str] = []
+
+    class FakeServer:
+        def shutdown(self) -> None:
+            calls.append("shutdown")
+
+        def server_close(self) -> None:
+            calls.append("server_close")
+
+    main._shutdown_motor_test_server(FakeServer())
+
+    assert calls == ["shutdown", "server_close"]
+
+
 def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     drive_calls: list[tuple[float, float, float]] = []

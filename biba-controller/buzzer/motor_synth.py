@@ -332,6 +332,23 @@ class MotorSynth:
                     break
             self.off()
 
+    def play_manual_split_pwm(
+        self,
+        left_frequency_hz: int,
+        left_duty_cycle: int,
+        right_frequency_hz: int,
+        right_duty_cycle: int,
+        duration_ms: int,
+    ) -> None:
+        if self._control_active:
+            return
+        with self._lock:
+            self._apply_split(left_frequency_hz, left_duty_cycle, right_frequency_hz, right_duty_cycle)
+            try:
+                self._wait_or_interrupted(duration_ms / 1000.0)
+            finally:
+                self.off()
+
     def play_named(self, name: str) -> None:
         split_entry = melodies.SPLIT_BLHELI_CATALOG.get(name)
         if split_entry is not None and self._has_split_motor_groups():
