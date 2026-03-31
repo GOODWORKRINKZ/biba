@@ -97,6 +97,18 @@ class TestMotorSynth:
         assert any(args[0] == 19 for args in non_zero_calls)
         assert any(args[0] == 13 for args in non_zero_calls)
 
+    @patch("time.sleep")
+    def test_software_pwm_mode_uses_louder_default_duty_cycle(self, mock_sleep):
+        synth, pi = self._make_synth(pwm_mode="SOFTWARE")
+
+        pi.set_PWM_dutycycle.reset_mock()
+
+        synth.play([(1000, 100, 50)])
+
+        non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
+        assert non_zero_calls
+        assert (18, 63) in non_zero_calls
+
     def test_software_pwm_mode_constructor_preserves_existing_drive_pwm_state(self):
         pi = MagicMock()
         pi.get_PWM_real_range.return_value = 25

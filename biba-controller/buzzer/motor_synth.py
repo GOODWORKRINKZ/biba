@@ -25,6 +25,8 @@ from buzzer.wav_player import (
 
 LOGGER = logging.getLogger(__name__)
 _BLHELI_BIPOLAR_SLOT_MS = 32
+_DEFAULT_DUTY_CYCLE = 50_000
+_DEFAULT_SOFTWARE_DUTY_CYCLE = 250_000
 _SOFTWARE_PWM_RANGE = 255
 _HARDWARE_PWM_CHANNELS = {
     12: 0,
@@ -83,7 +85,7 @@ class MotorSynth:
         self,
         pi: pigpio.pi,
         pwm_pins: list[int],
-        duty_cycle: int = 50000,
+        duty_cycle: int = _DEFAULT_DUTY_CYCLE,
         comp_pins: list[int] | None = None,
         pwm_mode: str | None = None,
         *,
@@ -123,6 +125,8 @@ class MotorSynth:
         if self._has_split_motor_groups():
             self.comp_pins = list(dict.fromkeys(self.left_comp_pins + self.right_comp_pins))
         self.duty_cycle = duty_cycle
+        if self._pwm_mode == "SOFTWARE" and duty_cycle == _DEFAULT_DUTY_CYCLE:
+            self.duty_cycle = _DEFAULT_SOFTWARE_DUTY_CYCLE
         self._lock = threading.Lock()
         self._interrupt_event = threading.Event()
         self._control_active = False
