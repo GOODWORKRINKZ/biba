@@ -18,8 +18,8 @@ CATALOG: dict[str, tuple[str, str, int]] = {
         152,
     ),
     "arm": (
+        "G4 1/16 D#4 1/8",
         "F4 1/16 A4 1/8",
-        "D#4 1/16 G4 1/8",
         176,
     ),
     "disarm": (
