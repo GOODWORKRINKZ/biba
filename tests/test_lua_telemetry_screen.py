@@ -538,6 +538,14 @@ def test_draw_status_badge_uses_rounded_rect_and_lowercase_text() -> None:
     assert "lcd.drawText(" in body
 
 
+def test_draw_status_badge_offsets_speed_mode_digits_down_by_one_pixel() -> None:
+    body = _extract_function(_lua_source(), "draw_status_badge")
+
+    assert 'if label == "1" or label == "2" or label == "3" then' in body
+    assert 'lcd.drawText(x + 3, y + 1, label, SMLSIZE)' in body
+    assert 'lcd.drawText(x + 3, y, label, SMLSIZE)' in body
+
+
 def test_draw_status_badges_draws_charging_badge_separately() -> None:
     body = _extract_function(_lua_source(), "draw_status_badges")
 

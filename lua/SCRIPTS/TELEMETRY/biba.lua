@@ -340,7 +340,11 @@ local function draw_soc_bar(x, y, w, h, pct)
 end
 
 local function draw_status_badge(x, y, label)
-  lcd.drawText(x + 3, y, label, SMLSIZE)
+  if label == "1" or label == "2" or label == "3" then
+    lcd.drawText(x + 3, y + 1, label, SMLSIZE)
+  else
+    lcd.drawText(x + 3, y, label, SMLSIZE)
+  end
   draw_rounded_rect(x, y, HEADER_BADGE_W, HEADER_BADGE_H)
   return x + HEADER_BADGE_W + HEADER_BADGE_GAP
 end
