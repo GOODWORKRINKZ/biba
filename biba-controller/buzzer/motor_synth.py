@@ -261,6 +261,23 @@ class MotorSynth:
         self._apply_group(left_pins, left_frequency, left_duty_cycle)
         self._apply_group(right_pins, right_frequency, right_duty_cycle)
 
+    def _apply_manual_split(
+        self,
+        left_frequency: int,
+        left_duty_cycle: int,
+        right_frequency: int,
+        right_duty_cycle: int,
+    ) -> None:
+        # Manual motor-test PWM should drive both BTS7960 inputs per motor with the
+        # exact user-requested frequency rather than the audio detune path.
+        left_pins = list(dict.fromkeys(self.left_pwm_pins + self._raw_left_comp_pins))
+        right_pins = list(dict.fromkeys(self.right_pwm_pins + self._raw_right_comp_pins))
+        if not left_pins and not right_pins:
+            self._apply_split(left_frequency, left_duty_cycle, right_frequency, right_duty_cycle)
+            return
+        self._apply_group(left_pins, left_frequency, left_duty_cycle)
+        self._apply_group(right_pins, right_frequency, right_duty_cycle)
+
     def _wait_or_interrupted(self, duration_s: float) -> bool:
         return self._interrupt_event.wait(duration_s)
 
@@ -343,7 +360,7 @@ class MotorSynth:
         if self._control_active:
             return
         with self._lock:
-            self._apply_split(left_frequency_hz, left_duty_cycle, right_frequency_hz, right_duty_cycle)
+            self._apply_manual_split(left_frequency_hz, left_duty_cycle, right_frequency_hz, right_duty_cycle)
             try:
                 self._wait_or_interrupted(duration_ms / 1000.0)
             finally:
