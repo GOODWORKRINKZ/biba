@@ -286,7 +286,7 @@ class TestMotorSynthPlayWav:
         synth = MotorSynth(pi, [18, 13])
         return synth, pi
 
-    def test_play_wav_calls_hardware_pwm(self, tmp_path):
+    def test_play_wav_is_temporary_noop(self, tmp_path):
         synth, pi = self._make_synth()
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(_make_wav(samples=[0, 32767], sample_rate=8000))
@@ -294,7 +294,7 @@ class TestMotorSynthPlayWav:
 
         synth.play_wav(str(wav_path))
 
-        assert pi.hardware_PWM.called
+        pi.hardware_PWM.assert_not_called()
 
     def test_play_wav_respects_control_active(self, tmp_path):
         synth, pi = self._make_synth()
@@ -319,11 +319,13 @@ class TestMotorSynthPlayWav:
         synth, pi = self._make_synth()
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(_make_wav(samples=[0], sample_rate=8000))
+        pi.hardware_PWM.reset_mock()
 
         t = synth.play_wav_async(str(wav_path))
         t.join(timeout=2.0)
 
         assert not t.is_alive()
+        pi.hardware_PWM.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -818,7 +820,7 @@ class TestMotorSynthPlaySpectral:
         synth = MotorSynth(pi, [18, 13], pwm_mode=pwm_mode)
         return synth, pi
 
-    def test_shared_hardware_pwm_channel_drops_complementary_pins(self):
+    def test_hardware_mode_pin_groups_are_left_unchanged_in_phase_one(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -834,11 +836,11 @@ class TestMotorSynthPlaySpectral:
         )
 
         assert synth.pwm_pins == [12, 19]
-        assert synth.comp_pins == []
+        assert synth.comp_pins == [18, 13]
         assert synth.left_pwm_pins == [12]
-        assert synth.left_comp_pins == []
+        assert synth.left_comp_pins == [18]
         assert synth.right_pwm_pins == [19]
-        assert synth.right_comp_pins == []
+        assert synth.right_comp_pins == [13]
 
     def _make_split_synth(self, pwm_mode="HARDWARE"):
         pi = MagicMock()
@@ -855,7 +857,7 @@ class TestMotorSynthPlaySpectral:
         )
         return synth, pi
 
-    def test_play_spectral_calls_hardware_pwm(self, tmp_path):
+    def test_play_spectral_is_temporary_noop(self, tmp_path):
         synth, pi = self._make_synth()
         import math
         samples = [int(32767 * math.sin(2 * math.pi * 500 * i / 8000)) for i in range(400)]
@@ -866,74 +868,7 @@ class TestMotorSynthPlaySpectral:
         with patch("buzzer.wav_player.time.sleep"):
             synth.play_spectral(str(wav_path))
 
-        assert pi.hardware_PWM.called
-
-    def test_play_spectral_uses_cache_aware_loader(self, tmp_path):
-        synth, pi = self._make_synth()
-        wav_path = tmp_path / "cached.wav"
-        wav_path.write_bytes(_make_wav(samples=[0, 32767, -32768, 0] * 40))
-        frames = [([(420, 120000), (760, 80000)], 10)]
-        pi.hardware_PWM.reset_mock()
-
-        with patch("buzzer.motor_synth.load_or_build_peak_frames", return_value=frames) as loader:
-            with patch("buzzer.wav_player.time.sleep"):
-                synth.play_spectral(str(wav_path))
-
-        loader.assert_called_once_with(str(wav_path))
-        assert pi.hardware_PWM.called
-
-    def test_play_spectral_with_motor_groups_uses_split_cache_loader(self, tmp_path):
-        synth, pi = self._make_split_synth()
-        wav_path = tmp_path / "cached.wav"
-        wav_path.write_bytes(_make_wav(samples=[0, 32767, -32768, 0] * 40))
-        left_frames = [([(420, 120000)], 10)]
-        right_frames = [([(760, 80000)], 10)]
-        pi.hardware_PWM.reset_mock()
-
-        with patch(
-            "buzzer.motor_synth.load_or_build_split_peak_frames",
-            return_value=(left_frames, right_frames),
-        ) as loader:
-            with patch("buzzer.wav_player.time.sleep"):
-                synth.play_spectral(str(wav_path))
-
-        loader.assert_called_once_with(str(wav_path))
-        assert call(18, 420, 120000) in pi.hardware_PWM.call_args_list
-        assert call(13, 420, 120000) in pi.hardware_PWM.call_args_list
-        assert call(12, 760, 80000) in pi.hardware_PWM.call_args_list
-        assert call(19, 760, 80000) in pi.hardware_PWM.call_args_list
-        assert call(12, 420, 120000) not in pi.hardware_PWM.call_args_list
-        assert call(18, 760, 80000) not in pi.hardware_PWM.call_args_list
-
-    def test_play_spectral_with_motor_groups_mirrors_voice_speech_to_both_sides(self, tmp_path):
-        synth, pi = self._make_split_synth()
-        voice_dir = tmp_path / "voice"
-        voice_dir.mkdir()
-        import math
-
-        samples = [
-            int(
-                14000 * math.sin(2 * math.pi * 258 * i / 8000)
-                + 11000 * math.sin(2 * math.pi * 516 * i / 8000)
-                + 9000 * math.sin(2 * math.pi * 904 * i / 8000)
-            )
-            for i in range(800)
-        ]
-        wav_path = voice_dir / "arm.wav"
-        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
-        pi.hardware_PWM.reset_mock()
-
-        with patch("buzzer.wav_player.time.sleep"):
-            synth.play_spectral(str(wav_path))
-
-        calls = pi.hardware_PWM.call_args_list
-        assert call(18, 258, 0) not in calls
-        positive_calls = [entry.args for entry in calls if entry.args[1] > 0 and entry.args[2] > 0]
-        left_freqs = {freq for pin, freq, duty in positive_calls if pin in {18, 13}}
-        right_freqs = {freq for pin, freq, duty in positive_calls if pin in {12, 19}}
-        assert left_freqs
-        assert right_freqs
-        assert left_freqs == right_freqs
+        pi.hardware_PWM.assert_not_called()
 
     def test_bipolar_split_peak_frames_alternates_direction_between_slots(self):
         pi = MagicMock()
@@ -962,34 +897,6 @@ class TestMotorSynthPlaySpectral:
         assert call(12, 0, 0) in calls
         assert call(19, 760, 80000) in calls
         assert call(13, 770, 70000) in calls
-
-    def test_play_spectral_default_path_emits_multiple_voiced_frequencies(self, tmp_path):
-        synth, pi = self._make_synth()
-        import math
-
-        samples = [
-            int(
-                14000 * math.sin(2 * math.pi * 300 * i / 8000)
-                + 12000 * math.sin(2 * math.pi * 700 * i / 8000)
-            )
-            for i in range(800)
-        ]
-        wav_path = tmp_path / "dual-tone-defaults.wav"
-        wav_path.write_bytes(_make_wav(samples=samples, sample_rate=8000))
-        pi.hardware_PWM.reset_mock()
-
-        with patch("buzzer.wav_player.time.sleep"):
-            synth.play_spectral(str(wav_path))
-
-        voiced_frequencies = {
-            freq
-            for _pin, freq, duty in (call.args for call in pi.hardware_PWM.call_args_list)
-            if freq > 0 and duty > 0
-        }
-
-        assert len(voiced_frequencies) >= 2
-        assert any(abs(freq - 300) < 120 for freq in voiced_frequencies)
-        assert any(abs(freq - 700) < 180 for freq in voiced_frequencies)
 
     def test_play_spectral_respects_control_active(self, tmp_path):
         synth, pi = self._make_synth()
