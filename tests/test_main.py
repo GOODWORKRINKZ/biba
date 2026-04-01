@@ -657,6 +657,15 @@ def test_get_speed_mode_scale_uses_configured_thresholds_and_scales(monkeypatch:
     assert main._get_speed_mode_scale([0.0, 0.0, 0.0, 0.0, 0.0, 0.9]) == pytest.approx(1.0)
 
 
+def test_scale_drive_inputs_applies_speed_limit_after_arcade_mix() -> None:
+    main = importlib.import_module("main")
+
+    throttle, steering = main._scale_drive_inputs_for_speed_mode(0.9, 0.6, 1.0 / 3.0)
+
+    assert throttle + steering == pytest.approx(1.0 / 3.0)
+    assert throttle - steering == pytest.approx(0.1)
+
+
 def test_main_scales_drive_input_from_speed_mode_channel(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     mix_calls: list[tuple[float, float, float]] = []
@@ -820,7 +829,7 @@ def test_main_scales_drive_input_from_speed_mode_channel(monkeypatch: pytest.Mon
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert mix_calls == [(pytest.approx(0.3), pytest.approx(0.2), pytest.approx(mix_calls[0][2]))]
+    assert mix_calls == [(pytest.approx(0.21666666666666667), pytest.approx(0.11666666666666665), pytest.approx(mix_calls[0][2]))]
 
 
 def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.MonkeyPatch) -> None:

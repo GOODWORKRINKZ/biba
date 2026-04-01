@@ -546,6 +546,14 @@ def _get_speed_mode_scale(channels: list[float]) -> float:
     return config.SPEED_MODE_MEDIUM_SCALE
 
 
+def _scale_drive_inputs_for_speed_mode(throttle: float, steering: float, speed_mode_scale: float) -> tuple[float, float]:
+    mixed_left = max(-1.0, min(1.0, throttle + steering))
+    mixed_right = max(-1.0, min(1.0, throttle - steering))
+    scaled_left = mixed_left * speed_mode_scale
+    scaled_right = mixed_right * speed_mode_scale
+    return (scaled_left + scaled_right) / 2.0, (scaled_left - scaled_right) / 2.0
+
+
 def _battery_is_low(state: BatteryState) -> bool:
     if state.cells and state.min_cell > 0:
         return state.min_cell <= config.LOW_CELL_VOLTAGE
@@ -1238,8 +1246,7 @@ def main() -> int:
                     throttle = throttle_filter.update(raw_throttle)
                 steering = _get_channel(channels, config.CH_STEERING)
                 speed_mode_scale = _get_speed_mode_scale(channels)
-                throttle *= speed_mode_scale
-                steering *= speed_mode_scale
+                throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, steering, speed_mode_scale)
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
                     abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
