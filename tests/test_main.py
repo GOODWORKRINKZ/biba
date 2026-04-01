@@ -769,7 +769,7 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
 
     assert main.main() == 0
     assert applied_outputs[-1][0] == pytest.approx(1.0)
-    assert applied_outputs[-1][1] == pytest.approx(0.9)
+    assert applied_outputs[-1][1] == pytest.approx(0.85)
     assert sound_calls == ["trim_enter"]
 
 
@@ -954,8 +954,8 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert saved_trims == [pytest.approx(-0.1)]
-    assert applied_outputs[-1][0] == pytest.approx(0.9)
+    assert saved_trims == [pytest.approx(-0.15)]
+    assert applied_outputs[-1][0] == pytest.approx(0.85)
     assert applied_outputs[-1][1] == pytest.approx(1.0)
     assert sound_calls == ["trim_enter", "trim_exit"]
 
@@ -1596,7 +1596,7 @@ def test_apply_motor_trim_clamps_to_maximum_effect() -> None:
     left_duty, right_duty = main._apply_motor_trim(1.0, 1.0, 0.5)
 
     assert left_duty == pytest.approx(1.0)
-    assert right_duty == pytest.approx(0.8)
+    assert right_duty == pytest.approx(0.7)
 
 
 def test_load_saved_motor_trim_defaults_to_zero_when_file_missing(
