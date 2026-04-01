@@ -321,7 +321,7 @@ class TestMotorSynth:
         assert any(args[0] == 19 for args in non_zero_calls)
         assert {args[1] for args in non_zero_calls if args[0] == 12} == {args[1] for args in non_zero_calls if args[0] == 19}
 
-    def test_play_manual_split_pwm_applies_independent_left_and_right_outputs(self):
+    def test_play_manual_split_pwm_routes_pwm_and_comp_groups_independently_in_software_mode(self):
         pi = MagicMock()
         from buzzer.motor_synth import MotorSynth
 
@@ -342,12 +342,14 @@ class TestMotorSynth:
         synth.play_manual_split_pwm(1000, 400_000, 1200, 550_000, 250)
 
         pi.set_PWM_frequency.assert_any_call(18, 1000)
-        pi.set_PWM_frequency.assert_any_call(19, 1200)
+        pi.set_PWM_frequency.assert_any_call(19, 1000)
+        pi.set_PWM_frequency.assert_any_call(12, 1200)
+        pi.set_PWM_frequency.assert_any_call(13, 1200)
         non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
         assert any(args[0] == 18 for args in non_zero_calls)
         assert any(args[0] == 19 for args in non_zero_calls)
-        assert all(args[0] != 12 for args in non_zero_calls)
-        assert all(args[0] != 13 for args in non_zero_calls)
+        assert any(args[0] == 12 for args in non_zero_calls)
+        assert any(args[0] == 13 for args in non_zero_calls)
 
     def test_play_manual_split_pwm_hardware_drives_both_driver_inputs_per_motor(self):
         pi = MagicMock()
