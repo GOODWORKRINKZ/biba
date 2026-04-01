@@ -168,8 +168,36 @@ def test_lua_declares_local_app_channel_constants() -> None:
     source = _lua_source()
 
     assert 'local APP_ARM_CHANNEL = "ch5"' in source
-    assert 'local APP_BEACON_CHANNEL = "ch7"' in source
-    assert 'local APP_MUTE_CHANNEL = "ch6"' in source
+    assert 'local APP_BEACON_CHANNEL = "ch8"' in source
+    assert 'local APP_MUTE_CHANNEL = "ch7"' in source
+
+
+def test_lua_declares_speed_mode_constants() -> None:
+    source = _lua_source()
+
+    assert 'local APP_SPEED_MODE_CHANNEL = "ch6"' in source
+    assert "local APP_SPEED_MODE_SLOW_SCALE" in source
+    assert "local APP_SPEED_MODE_MEDIUM_SCALE" in source
+    assert "local APP_SPEED_MODE_FAST_SCALE" in source
+    assert "local APP_SPEED_MODE_LOW_THRESHOLD" in source
+    assert "local APP_SPEED_MODE_HIGH_THRESHOLD" in source
+
+
+def test_lua_declares_speed_mode_helper() -> None:
+    source = _lua_source()
+
+    assert "local function read_speed_mode()" in source
+
+
+def test_read_speed_mode_reads_selector_channel_and_returns_all_modes() -> None:
+    body = _extract_function(_lua_source(), "read_speed_mode")
+
+    assert 'sensor(APP_SPEED_MODE_CHANNEL, 0)' in body
+    assert "APP_SPEED_MODE_LOW_THRESHOLD" in body
+    assert "APP_SPEED_MODE_HIGH_THRESHOLD" in body
+    assert 'return "1", APP_SPEED_MODE_SLOW_SCALE' in body
+    assert 'return "2", APP_SPEED_MODE_MEDIUM_SCALE' in body
+    assert 'return "3", APP_SPEED_MODE_FAST_SCALE' in body
 
 
 def test_read_local_status_badges_reads_app_switch_channels() -> None:
@@ -178,9 +206,23 @@ def test_read_local_status_badges_reads_app_switch_channels() -> None:
     assert 'sensor(APP_ARM_CHANNEL, 0)' in body
     assert 'sensor(APP_MUTE_CHANNEL, 0)' in body
     assert 'sensor(APP_BEACON_CHANNEL, 0)' in body
+    assert 'read_speed_mode()' in body
     assert 'badges[#badges + 1] = "a"' in body
     assert 'badges[#badges + 1] = "m"' in body
     assert 'badges[#badges + 1] = "b"' in body
+    assert 'badges[#badges + 1] = speed_mode' in body
+
+
+def test_read_drive_scales_sticks_via_speed_mode_helper() -> None:
+    body = _extract_function(_lua_source(), "read_drive")
+
+    assert 'local _, speed_scale = read_speed_mode()' in body
+    assert 'local thr_scaled = thr * speed_scale' in body
+    assert 'local str_scaled = str * speed_scale' in body
+    assert 'local thr_n = thr_scaled / 1024' in body
+    assert 'local str_n = str_scaled / 1024' in body
+    assert 'local left  = clamp(thr_n + str_n, -1, 1)' in body
+    assert 'local right = clamp(thr_n - str_n, -1, 1)' in body
 
 
 def test_lua_declares_trim_mode_status_bit_constant() -> None:

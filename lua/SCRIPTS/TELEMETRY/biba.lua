@@ -11,7 +11,13 @@ local LOG_INTERVAL_CS = 20
 local APP_ARM_CHANNEL = "ch5"
 local APP_BEACON_CHANNEL = "ch8"
 local APP_MUTE_CHANNEL = "ch7"
+local APP_SPEED_MODE_CHANNEL = "ch6"
 local APP_SWITCH_THRESHOLD = 300
+local APP_SPEED_MODE_SLOW_SCALE = 1 / 3
+local APP_SPEED_MODE_MEDIUM_SCALE = 2 / 3
+local APP_SPEED_MODE_FAST_SCALE = 1.0
+local APP_SPEED_MODE_LOW_THRESHOLD = -300
+local APP_SPEED_MODE_HIGH_THRESHOLD = 300
 local HEADER_BADGE_W = 10
 local HEADER_BADGE_H = 8
 local HEADER_BADGE_GAP = 2
@@ -166,12 +172,26 @@ end
 -- Wheel direction/speed from RC channels
 -- ──────────────────────────────────────────────────
 
+local function read_speed_mode()
+  local selector = sensor(APP_SPEED_MODE_CHANNEL, 0)
+  if selector < APP_SPEED_MODE_LOW_THRESHOLD then
+    return "1", APP_SPEED_MODE_SLOW_SCALE
+  end
+  if selector > APP_SPEED_MODE_HIGH_THRESHOLD then
+    return "3", APP_SPEED_MODE_FAST_SCALE
+  end
+  return "2", APP_SPEED_MODE_MEDIUM_SCALE
+end
+
 local function read_drive()
   local thr = sensor("ch2", 0)
   local str = sensor("ch4", 0)
+  local _, speed_scale = read_speed_mode()
+  local thr_scaled = thr * speed_scale
+  local str_scaled = str * speed_scale
   -- ch values are -1024..1024 in EdgeTX
-  local thr_n = thr / 1024
-  local str_n = str / 1024
+  local thr_n = thr_scaled / 1024
+  local str_n = str_scaled / 1024
   local left  = clamp(thr_n + str_n, -1, 1)
   local right = clamp(thr_n - str_n, -1, 1)
   return left, right
@@ -213,9 +233,11 @@ end
 
 local function read_local_status_badges()
   local badges = {}
+  local speed_mode = read_speed_mode()
   if sensor(APP_ARM_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "a" end
   if sensor(APP_MUTE_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
   if sensor(APP_BEACON_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "b" end
+  badges[#badges + 1] = speed_mode
   return badges
 end
 
