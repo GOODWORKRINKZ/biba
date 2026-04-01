@@ -67,13 +67,17 @@ class Buzzer:
             for freq, duration_s in notes:
                 self._tone(int(freq), int(duration_s * 1000))
 
-    def play_named(self, name: str) -> None:
-        """Play a melody from BLHELI_CATALOG by name (blocking)."""
-        entry = melodies.BLHELI_CATALOG.get(name)
+    def _play_catalog_side(self, name: str, side_index: int = 0) -> None:
+        entry = melodies.CATALOG.get(name)
         if entry is None:
             return
-        melody_str, tempo = entry
+        melody_str = entry[side_index]
+        tempo = entry[2]
         self.play_blheli(melody_str, tempo_bpm=tempo)
+
+    def play_named(self, name: str) -> None:
+        """Play the left-side melody from the unified split catalog (blocking)."""
+        self._play_catalog_side(name, side_index=0)
 
     def play_named_async(self, name: str) -> None:
         """Play a named melody in a background thread."""
@@ -85,28 +89,28 @@ class Buzzer:
     # ------------------------------------------------------------------
 
     def startup_tone(self) -> None:
-        self.play(melodies.STARTUP)
+        self.play_named("startup")
 
     def shutdown_tone(self) -> None:
-        self.play(melodies.SHUTDOWN)
+        self.play_named("shutdown")
 
     def arm_tone(self) -> None:
-        self.play(melodies.ARM)
+        self.play_named("arm")
 
     def disarm_tone(self) -> None:
-        self.play(melodies.DISARM)
+        self.play_named("disarm")
 
     def low_voltage_alarm(self) -> None:
-        self.play(melodies.LOW_VOLTAGE)
+        self.play_named("low_voltage")
 
     def failsafe_tone(self) -> None:
-        self.play(melodies.FAILSAFE)
+        self.play_named("failsafe")
 
     def sos_beacon(self) -> None:
-        self.play(melodies.SOS)
+        self.play_named("sos")
 
     def connected_tone(self) -> None:
-        self.play_async(melodies.CONNECTED)
+        self.play_named_async("connected")
 
     def disconnected_tone(self) -> None:
-        self.play_async(melodies.DISCONNECTED)
+        self.play_named_async("disconnected")

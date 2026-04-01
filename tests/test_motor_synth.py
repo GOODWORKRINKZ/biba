@@ -136,15 +136,14 @@ class TestMotorSynth:
         observed = {call.args for call in pi.set_PWM_frequency.call_args_list if call.args[1] in {471, 576, 353, 431}}
         assert expected.issubset(observed)
 
-    def test_play_named_prefers_split_catalog_entry(self, monkeypatch):
+    def test_play_named_uses_current_catalog_split_entry(self, monkeypatch):
         synth, pi = self._make_synth()
         synth._wait_or_interrupted = lambda _delay: False
 
         from buzzer import melodies
 
         pi.set_PWM_frequency.reset_mock()
-        monkeypatch.setitem(melodies.SPLIT_BLHELI_CATALOG, "poly_test", ("C5 1/8", "E5 1/8", 120))
-        monkeypatch.setitem(melodies.BLHELI_CATALOG, "poly_test", ("A4 1/8", 120))
+        monkeypatch.setitem(melodies.CATALOG, "poly_test", ("C5 1/8", "E5 1/8", 120))
 
         synth.play_named("poly_test")
 
@@ -157,25 +156,18 @@ class TestMotorSynth:
         observed = {call.args for call in pi.set_PWM_frequency.call_args_list if call.args[1] in {471, 576, 593, 725}}
         assert expected.issubset(observed)
 
-    def test_play_named_falls_back_to_mono_catalog(self, monkeypatch):
+    def test_play_named_ignores_names_missing_from_unified_catalog(self, monkeypatch):
         synth, pi = self._make_synth()
         synth._wait_or_interrupted = lambda _delay: False
 
         from buzzer import melodies
 
         pi.set_PWM_frequency.reset_mock()
-        monkeypatch.setitem(melodies.BLHELI_CATALOG, "mono_test", ("A4 1/8", 120))
+        monkeypatch.delitem(melodies.CATALOG, "mono_test", raising=False)
 
         synth.play_named("mono_test")
 
-        expected = {
-            (18, 396),
-            (12, 484),
-            (19, 396),
-            (13, 484),
-        }
-        observed = {call.args for call in pi.set_PWM_frequency.call_args_list if call.args[1] in {396, 484}}
-        assert expected.issubset(observed)
+        pi.set_PWM_frequency.assert_not_called()
 
     def test_play_named_unknown_does_nothing(self):
         synth, pi = self._make_synth()

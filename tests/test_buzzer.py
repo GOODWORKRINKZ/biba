@@ -18,26 +18,32 @@ class TestMelodies:
             "startup", "arm", "disarm", "low_voltage",
             "failsafe", "sos", "connected", "disconnected", "shutdown",
         }
-        assert set(melodies.CATALOG.keys()) == expected
+        assert expected.issubset(set(melodies.CATALOG.keys()))
 
-    def test_each_melody_is_non_empty_list_of_tuples(self):
-        for name, seq in melodies.CATALOG.items():
-            assert isinstance(seq, list), f"{name} is not a list"
-            assert len(seq) > 0, f"{name} is empty"
-            for note in seq:
-                assert len(note) == 3, f"{name} has bad tuple: {note}"
-                freq, dur, pause = note
-                assert isinstance(freq, int) and freq >= 0
-                assert isinstance(dur, int) and dur > 0
-                assert isinstance(pause, int) and pause >= 0
+    def test_each_melody_is_split_blheli_tuple(self):
+        for name, entry in melodies.CATALOG.items():
+            assert isinstance(entry, tuple), f"{name} is not a tuple"
+            assert len(entry) == 3, f"{name} must be (left, right, tempo)"
+            left, right, tempo = entry
+            assert isinstance(left, str) and left
+            assert isinstance(right, str) and right
+            assert isinstance(tempo, int) and tempo > 0
 
     def test_sos_has_multiple_audible_notes(self):
-        audible = [note for note in melodies.SOS if note[0] > 0]
+        from buzzer.blheli_parser import parse_blheli
+
+        left, right, tempo = melodies.CATALOG["sos"]
+        audible = [freq for freq, _duration in parse_blheli(left, tempo_bpm=tempo) if freq > 0]
+        audible += [freq for freq, _duration in parse_blheli(right, tempo_bpm=tempo) if freq > 0]
         assert len(audible) >= 4
 
     def test_startup_begins_and_ends_with_audible(self):
-        assert melodies.STARTUP[0][0] > 0
-        assert melodies.STARTUP[-1][0] > 0
+        from buzzer.blheli_parser import parse_blheli
+
+        left, _right, tempo = melodies.CATALOG["startup"]
+        notes = [freq for freq, _duration in parse_blheli(left, tempo_bpm=tempo)]
+        assert notes[0] > 0
+        assert notes[-1] > 0
 
 
 # ── BeaconManager ──────────────────────────────────────────────────
@@ -116,14 +122,22 @@ class TestBuzzerMelodies:
     def test_startup_tone_plays_startup_melody(self, mock_sleep):
         buzzer, pi = self._make_buzzer()
         buzzer.startup_tone()
-        # Should have been called multiple times for the melody
-        assert pi.set_PWM_frequency.call_count == len(melodies.STARTUP)
+
+        from buzzer.blheli_parser import parse_blheli
+
+        left, _right, tempo = melodies.CATALOG["startup"]
+        expected_count = len([freq for freq, _dur in parse_blheli(left, tempo_bpm=tempo) if freq > 0])
+        assert pi.set_PWM_frequency.call_count == expected_count
 
     @patch("time.sleep")
     def test_sos_beacon_plays_all_notes(self, mock_sleep):
         buzzer, pi = self._make_buzzer()
         buzzer.sos_beacon()
-        audible = [n for n in melodies.SOS if n[0] > 0]
+
+        from buzzer.blheli_parser import parse_blheli
+
+        left, _right, tempo = melodies.CATALOG["sos"]
+        audible = [freq for freq, _dur in parse_blheli(left, tempo_bpm=tempo) if freq > 0]
         assert pi.set_PWM_frequency.call_count == len(audible)
 
 
@@ -133,24 +147,8 @@ class TestBlheliMelodyCatalog:
     def test_disarm_is_short_descending_reply_to_arm(self):
         from buzzer.blheli_parser import parse_blheli
 
-        arm_melody, arm_tempo = melodies.BLHELI_CATALOG["arm"]
-        disarm_melody, disarm_tempo = melodies.BLHELI_CATALOG["disarm"]
-
-        assert disarm_tempo == arm_tempo == 176
-        assert disarm_melody == "G4 1/16 D#4 1/8"
-
-        arm_notes = [freq for freq, _duration in parse_blheli(arm_melody, tempo_bpm=arm_tempo) if freq > 0]
-        disarm_notes = [freq for freq, _duration in parse_blheli(disarm_melody, tempo_bpm=disarm_tempo) if freq > 0]
-
-        assert len(disarm_notes) == len(arm_notes) == 2
-        assert arm_notes[0] < arm_notes[1]
-        assert disarm_notes[0] > disarm_notes[1]
-
-    def test_split_disarm_is_short_descending_reply_to_arm(self):
-        from buzzer.blheli_parser import parse_blheli
-
-        arm_left, arm_right, arm_tempo = melodies.SPLIT_BLHELI_CATALOG["arm"]
-        disarm_left, disarm_right, disarm_tempo = melodies.SPLIT_BLHELI_CATALOG["disarm"]
+        arm_left, arm_right, arm_tempo = melodies.CATALOG["arm"]
+        disarm_left, disarm_right, disarm_tempo = melodies.CATALOG["disarm"]
 
         assert disarm_tempo == arm_tempo == 176
         assert disarm_left == "G4 1/16 D#4 1/8"
@@ -185,51 +183,43 @@ class TestBlheliMelodyCatalog:
         }
 
         for name in system_entries:
-            melody_str, tempo = melodies.BLHELI_CATALOG[name]
-            for freq, _duration in parse_blheli(melody_str, tempo_bpm=tempo):
-                if freq <= 0:
-                    continue
-                assert 250 <= freq <= 500, f"{name} uses synth-unfriendly frequency {freq}"
+            left, right, tempo = melodies.CATALOG[name]
+            for melody_str in (left, right):
+                for freq, _duration in parse_blheli(melody_str, tempo_bpm=tempo):
+                    if freq <= 0:
+                        continue
+                    assert 250 <= freq <= 500, f"{name} uses synth-unfriendly frequency {freq}"
 
-    def test_blheli_catalog_has_all_system_entries(self):
-        expected = {
-            "startup", "arm", "disarm", "low_voltage",
-            "failsafe", "sos", "connected", "disconnected", "shutdown",
-            "trim_enter", "trim_exit",
-        }
-        assert expected.issubset(set(melodies.BLHELI_CATALOG.keys()))
-
-    def test_blheli_catalog_has_trim_transition_entries(self):
+    def test_catalog_has_trim_transition_entries(self):
         for name in ("trim_enter", "trim_exit"):
-            melody_str, tempo = melodies.BLHELI_CATALOG[name]
-            assert melody_str
+            left, right, tempo = melodies.CATALOG[name]
+            assert left
+            assert right
             assert tempo > 0
 
-    def test_blheli_catalog_has_biba_signature(self):
-        assert "biba_signature" in melodies.BLHELI_CATALOG
-
-    def test_split_blheli_catalog_has_biba_signature(self):
-        assert "biba_signature" in melodies.SPLIT_BLHELI_CATALOG
+    def test_catalog_has_biba_signature(self):
+        assert "biba_signature" in melodies.CATALOG
 
     def test_blheli_catalog_has_fun_melodies(self):
         fun = {"imperial_march", "katyusha", "korobeiniki", "nokia_tune", "pacman"}
-        assert fun.issubset(set(melodies.BLHELI_CATALOG.keys()))
+        assert fun.issubset(set(melodies.CATALOG.keys()))
 
     def test_all_blheli_melodies_parseable(self):
         from buzzer.blheli_parser import parse_blheli
-        for name, (melody_str, tempo) in melodies.BLHELI_CATALOG.items():
-            notes = parse_blheli(melody_str, tempo_bpm=tempo)
-            assert len(notes) > 0, f"{name} parsed to empty"
-            for freq, dur in notes:
-                assert freq >= 0, f"{name}: negative freq {freq}"
-                assert dur > 0, f"{name}: non-positive duration {dur}"
+        for name, (left, right, tempo) in melodies.CATALOG.items():
+            for melody_str in (left, right):
+                notes = parse_blheli(melody_str, tempo_bpm=tempo)
+                assert len(notes) > 0, f"{name} parsed to empty"
+                for freq, dur in notes:
+                    assert freq >= 0, f"{name}: negative freq {freq}"
+                    assert dur > 0, f"{name}: non-positive duration {dur}"
 
     def test_fun_playlist_only_has_fun_melodies(self):
         system = {"startup", "arm", "disarm", "low_voltage", "failsafe",
                   "sos", "connected", "disconnected", "shutdown"}
         for name in melodies.FUN_PLAYLIST:
             assert name not in system, f"{name} is a system melody"
-            assert name in melodies.BLHELI_CATALOG, f"{name} not in catalog"
+            assert name in melodies.CATALOG, f"{name} not in catalog"
 
 
 # ── Buzzer BLHeli playback ─────────────────────────────────────────

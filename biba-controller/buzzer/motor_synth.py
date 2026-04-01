@@ -254,16 +254,18 @@ class MotorSynth:
 				self.off()
 
 	def play_named(self, name: str) -> None:
-		split_entry = melodies.SPLIT_BLHELI_CATALOG.get(name)
-		if split_entry is not None:
-			left_melody_str, right_melody_str, tempo = split_entry
-			self.play_split_blheli(left_melody_str, right_melody_str, tempo_bpm=tempo)
-			return
-		entry = melodies.BLHELI_CATALOG.get(name)
-		if entry is None:
-			return
-		melody_str, tempo = entry
-		self.play_blheli(melody_str, tempo_bpm=tempo)
+		catalog = getattr(melodies, "CATALOG", {})
+		entry = catalog.get(name)
+		if entry is not None:
+			if isinstance(entry, tuple) and len(entry) == 3:
+				left_melody_str, right_melody_str, tempo = entry
+				self.play_split_blheli(left_melody_str, right_melody_str, tempo_bpm=tempo)
+				return
+			if isinstance(entry, tuple) and len(entry) == 2:
+				melody_str, tempo = entry
+				self.play_blheli(melody_str, tempo_bpm=tempo)
+				return
+		return
 
 	def play_named_async(self, name: str) -> None:
 		threading.Thread(target=self.play_named, args=(name,), daemon=True).start()
