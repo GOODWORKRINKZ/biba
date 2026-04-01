@@ -347,6 +347,10 @@ def test_build_control_page_contains_expected_inputs() -> None:
     assert "/api/motor-test" in page
     assert "fetch(" in page
     assert "Type any integer frequency; the slider stays on preset steps." in page
+    assert "numberInput.addEventListener('input', () => {" in page
+    assert "output.textContent = numberInput.value;" in page
+    assert "numberInput.addEventListener('change', () => {" in page
+    assert "updateFromNumber(numberInput.value);" in page
 
 
 def test_http_server_serves_control_page() -> None:

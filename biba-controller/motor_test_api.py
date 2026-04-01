@@ -306,6 +306,26 @@ def build_control_page() -> str:
                 rangeInput.value = String(numericValue);
             };
 
+            const previewFromNumber = (value) => {
+                if (value === '') {
+                    output.textContent = numberInput.value;
+                    return;
+                }
+
+                const numericValue = Number(value);
+                if (!Number.isFinite(numericValue)) {
+                    output.textContent = numberInput.value;
+                    return;
+                }
+
+                output.textContent = String(numericValue);
+                if (MODE_CONFIG[currentMode()].discrete) {
+                    rangeInput.value = String(nearestFrequencyIndex(numericValue));
+                    return;
+                }
+                rangeInput.value = String(clampFrequency(currentMode(), numericValue));
+            };
+
             rangeInput.addEventListener('input', () => {
                 if (!MODE_CONFIG[currentMode()].discrete) {
                     updateFromNumber(rangeInput.value);
@@ -315,6 +335,10 @@ def build_control_page() -> str:
             });
 
             numberInput.addEventListener('input', () => {
+                previewFromNumber(numberInput.value);
+            });
+
+            numberInput.addEventListener('change', () => {
                 updateFromNumber(numberInput.value);
             });
 
