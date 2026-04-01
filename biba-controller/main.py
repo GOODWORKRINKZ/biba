@@ -355,6 +355,36 @@ def _create_buzzer(pi: pigpio.pi):
     )
 
 
+def _create_test_motor_synth(buzzer, pwm_mode: str):
+    normalized_mode = str(pwm_mode).strip().upper()
+    current_mode = str(getattr(buzzer, "_pwm_mode", normalized_mode)).upper()
+    if normalized_mode == current_mode:
+        return buzzer
+
+    if not all(hasattr(buzzer, attr) for attr in ("pi", "pwm_pins", "duty_cycle")):
+        return None
+
+    left_pwm_pins = list(getattr(buzzer, "left_pwm_pins", []))
+    right_pwm_pins = list(getattr(buzzer, "right_pwm_pins", []))
+    left_comp_pins = list(getattr(buzzer, "_raw_left_comp_pins", getattr(buzzer, "left_comp_pins", [])))
+    right_comp_pins = list(getattr(buzzer, "_raw_right_comp_pins", getattr(buzzer, "right_comp_pins", [])))
+    comp_pins = list(dict.fromkeys(left_comp_pins + right_comp_pins))
+    if not comp_pins:
+        comp_pins = list(getattr(buzzer, "comp_pins", []))
+
+    return MotorSynth(
+        buzzer.pi,
+        list(getattr(buzzer, "pwm_pins", [])),
+        duty_cycle=getattr(buzzer, "duty_cycle", 50_000),
+        comp_pins=comp_pins,
+        pwm_mode=normalized_mode,
+        left_pwm_pins=left_pwm_pins,
+        left_comp_pins=left_comp_pins,
+        right_pwm_pins=right_pwm_pins,
+        right_comp_pins=right_comp_pins,
+    )
+
+
 def _create_motor_test_server(buzzer):
     if not config.MOTOR_TEST_API_ENABLED:
         return None
@@ -377,6 +407,7 @@ def _create_motor_test_executor(buzzer, drive):
     return MotorTestExecutor(
         buzzer,
         before_run=before_run,
+        synth_factory=lambda pwm_mode: _create_test_motor_synth(buzzer, pwm_mode),
     )
 
 

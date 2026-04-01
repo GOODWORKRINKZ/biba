@@ -14,6 +14,7 @@ def test_parse_motor_test_request_accepts_valid_payload() -> None:
 
     request = motor_test_api.parse_motor_test_request(
         {
+            "pwm_mode": "SOFTWARE",
             "left_frequency_hz": 1000,
             "left_duty_percent": 40,
             "right_frequency_hz": 1200,
@@ -22,11 +23,28 @@ def test_parse_motor_test_request_accepts_valid_payload() -> None:
         }
     )
 
+    assert request.pwm_mode == "SOFTWARE"
     assert request.left_frequency_hz == 1000
     assert request.left_duty_percent == 40
     assert request.right_frequency_hz == 1200
     assert request.right_duty_percent == 55
     assert request.duration_ms == 2000
+
+
+def test_parse_motor_test_request_defaults_pwm_mode_to_software() -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    request = motor_test_api.parse_motor_test_request(
+        {
+            "left_frequency_hz": 1000,
+            "left_duty_percent": 40,
+            "right_frequency_hz": 1200,
+            "right_duty_percent": 55,
+            "duration_ms": 2000,
+        }
+    )
+
+    assert request.pwm_mode == "SOFTWARE"
 
 
 def test_parse_motor_test_request_rejects_out_of_range_values() -> None:
@@ -82,6 +100,7 @@ def test_executor_calls_synth_and_always_stops() -> None:
     executor = motor_test_api.MotorTestExecutor(FakeSynth())
     request = motor_test_api.parse_motor_test_request(
         {
+            "pwm_mode": "SOFTWARE",
             "left_frequency_hz": 1000,
             "left_duty_percent": 40,
             "right_frequency_hz": 1200,
@@ -94,6 +113,80 @@ def test_executor_calls_synth_and_always_stops() -> None:
 
     assert calls == [(1000, 400_000, 1200, 550_000, 2000)]
     assert stops == ["off"]
+
+
+def test_executor_uses_requested_pwm_mode_synth_factory() -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+    default_calls: list[tuple[int, int, int, int, int]] = []
+    hardware_calls: list[tuple[int, int, int, int, int]] = []
+
+    class DefaultSynth:
+        _pwm_mode = "SOFTWARE"
+
+        def play_manual_split_pwm(
+            self,
+            left_frequency_hz: int,
+            left_duty_cycle: int,
+            right_frequency_hz: int,
+            right_duty_cycle: int,
+            duration_ms: int,
+        ) -> None:
+            default_calls.append(
+                (
+                    left_frequency_hz,
+                    left_duty_cycle,
+                    right_frequency_hz,
+                    right_duty_cycle,
+                    duration_ms,
+                )
+            )
+
+        def off(self) -> None:
+            pass
+
+    class HardwareSynth:
+        _pwm_mode = "HARDWARE"
+
+        def play_manual_split_pwm(
+            self,
+            left_frequency_hz: int,
+            left_duty_cycle: int,
+            right_frequency_hz: int,
+            right_duty_cycle: int,
+            duration_ms: int,
+        ) -> None:
+            hardware_calls.append(
+                (
+                    left_frequency_hz,
+                    left_duty_cycle,
+                    right_frequency_hz,
+                    right_duty_cycle,
+                    duration_ms,
+                )
+            )
+
+        def off(self) -> None:
+            pass
+
+    executor = motor_test_api.MotorTestExecutor(
+        DefaultSynth(),
+        synth_factory=lambda pwm_mode: HardwareSynth() if pwm_mode == "HARDWARE" else DefaultSynth(),
+    )
+    request = motor_test_api.parse_motor_test_request(
+        {
+            "pwm_mode": "HARDWARE",
+            "left_frequency_hz": 1000,
+            "left_duty_percent": 40,
+            "right_frequency_hz": 1200,
+            "right_duty_percent": 55,
+            "duration_ms": 2000,
+        }
+    )
+
+    executor.run(request)
+
+    assert default_calls == []
+    assert hardware_calls == [(1000, 400_000, 1200, 550_000, 2000)]
 
 
 def test_executor_stops_even_when_synth_raises() -> None:
@@ -231,12 +324,16 @@ def test_build_control_page_contains_expected_inputs() -> None:
     page = motor_test_api.build_control_page()
 
     assert "ALLOWED_FREQUENCIES_HZ" in page
+    assert "pwm_mode" in page
+    assert 'value="SOFTWARE"' in page
+    assert 'value="HARDWARE"' in page
     assert "[100, 160, 200, 250, 320, 400, 500, 800, 1000, 1600, 2000, 4000, 8000]" in page
     assert "left_frequency_hz" in page
     assert 'id="left_frequency_hz_input"' in page
     assert 'name="left_frequency_hz_input"' in page
     assert 'id="left_frequency_hz" name="left_frequency_hz" type="range" min="0"' in page
     assert "document.getElementById('left_frequency_hz_input').value" in page
+    assert "document.getElementById('pwm_mode').value" in page
     assert "left_duty_percent" in page
     assert "right_frequency_hz" in page
     assert 'id="right_frequency_hz_input"' in page
@@ -288,6 +385,7 @@ def test_http_server_posts_request_to_executor() -> None:
     try:
         payload = json.dumps(
             {
+                "pwm_mode": "SOFTWARE",
                 "left_frequency_hz": 1000,
                 "left_duty_percent": 40,
                 "right_frequency_hz": 1200,
@@ -330,6 +428,7 @@ def test_http_server_returns_409_when_executor_is_busy() -> None:
     try:
         payload = json.dumps(
             {
+                "pwm_mode": "SOFTWARE",
                 "left_frequency_hz": 1000,
                 "left_duty_percent": 40,
                 "right_frequency_hz": 1200,

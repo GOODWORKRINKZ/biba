@@ -19,6 +19,8 @@ _MIN_DURATION_MS = 100
 _MAX_DURATION_MS = 10_000
 _PIGPIO_DUTY_RANGE = 1_000_000
 _SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ = [100, 160, 200, 250, 320, 400, 500, 800, 1000, 1600, 2000, 4000, 8000]
+_DEFAULT_PWM_MODE = "SOFTWARE"
+_PWM_MODE_CHOICES = {"SOFTWARE", "HARDWARE"}
 
 
 LOGGER = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ class MotorTestBusyError(RuntimeError):
 
 @dataclass(frozen=True)
 class MotorTestRequest:
+    pwm_mode: str
     left_frequency_hz: int
     left_duty_percent: float
     right_frequency_hz: int
@@ -51,12 +54,23 @@ def _require_number(payload: dict[str, Any], name: str) -> float:
     return float(value)
 
 
+def _require_pwm_mode(payload: dict[str, Any]) -> str:
+    value = payload.get("pwm_mode", _DEFAULT_PWM_MODE)
+    if not isinstance(value, str):
+        raise ValueError("pwm_mode must be SOFTWARE or HARDWARE")
+    normalized = value.strip().upper()
+    if normalized not in _PWM_MODE_CHOICES:
+        raise ValueError("pwm_mode must be SOFTWARE or HARDWARE")
+    return normalized
+
+
 def _validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
     if value < minimum or value > maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
 
 
 def parse_motor_test_request(payload: dict[str, Any]) -> MotorTestRequest:
+    pwm_mode = _require_pwm_mode(payload)
     left_frequency_hz = _require_int(payload, "left_frequency_hz")
     left_duty_percent = _require_number(payload, "left_duty_percent")
     right_frequency_hz = _require_int(payload, "right_frequency_hz")
@@ -70,6 +84,7 @@ def parse_motor_test_request(payload: dict[str, Any]) -> MotorTestRequest:
     _validate_range("duration_ms", duration_ms, _MIN_DURATION_MS, _MAX_DURATION_MS)
 
     return MotorTestRequest(
+        pwm_mode=pwm_mode,
         left_frequency_hz=left_frequency_hz,
         left_duty_percent=left_duty_percent,
         right_frequency_hz=right_frequency_hz,
@@ -90,9 +105,10 @@ def _nearest_frequency_option_index(frequency_hz: int) -> int:
 
 
 class MotorTestExecutor:
-    def __init__(self, synth, before_run=None) -> None:
+    def __init__(self, synth, before_run=None, synth_factory=None) -> None:
         self._synth = synth
         self._before_run = before_run
+        self._synth_factory = synth_factory
         self._lock = Lock()
         self._active_event = Event()
 
@@ -104,19 +120,21 @@ class MotorTestExecutor:
         if not self._lock.acquire(blocking=False):
             raise MotorTestBusyError("motor test already active")
 
+        synth = self._resolve_synth(request.pwm_mode)
         try:
             self._active_event.set()
             if self._before_run is not None:
                 self._before_run()
             LOGGER.info(
-                "Manual motor test started left=%sHz/%s%% right=%sHz/%s%% duration=%sms",
+                "Manual motor test started mode=%s left=%sHz/%s%% right=%sHz/%s%% duration=%sms",
+                request.pwm_mode,
                 request.left_frequency_hz,
                 request.left_duty_percent,
                 request.right_frequency_hz,
                 request.right_duty_percent,
                 request.duration_ms,
             )
-            self._synth.play_manual_split_pwm(
+            synth.play_manual_split_pwm(
                 request.left_frequency_hz,
                 percent_to_motor_synth_duty(request.left_duty_percent),
                 request.right_frequency_hz,
@@ -124,10 +142,21 @@ class MotorTestExecutor:
                 request.duration_ms,
             )
         finally:
-            self._synth.off()
+            synth.off()
             self._active_event.clear()
             self._lock.release()
             LOGGER.info("Manual motor test finished")
+
+    def _resolve_synth(self, pwm_mode: str):
+        current_mode = str(getattr(self._synth, "_pwm_mode", _DEFAULT_PWM_MODE)).upper()
+        if pwm_mode == current_mode:
+            return self._synth
+        if self._synth_factory is None:
+            raise ValueError(f"pwm_mode {pwm_mode} is not supported")
+        synth = self._synth_factory(pwm_mode)
+        if synth is None:
+            raise ValueError(f"pwm_mode {pwm_mode} is not supported")
+        return synth
 
 
 def build_control_page() -> str:
@@ -138,31 +167,31 @@ def build_control_page() -> str:
     right_default_index = _nearest_frequency_option_index(right_default_frequency_hz)
     last_frequency_index = len(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ) - 1
 
-    return f"""<!DOCTYPE html>
+    page = """<!DOCTYPE html>
 <html lang=\"en\">
 <head>
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
   <title>BiBa Motor Test</title>
     <style>
-        body {{ font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }}
-        form {{ display: grid; gap: 1rem; }}
-        label {{ display: grid; gap: 0.35rem; }}
-        .input-row {{ display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr) 7rem; align-items: center; }}
-        .input-row input[type=number] {{ width: 100%; }}
-        output {{ font-weight: 600; }}
-        button {{ padding: 0.8rem 1rem; }}
-        #status {{ min-height: 1.5rem; }}
+        body { font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+        form { display: grid; gap: 1rem; }
+        label { display: grid; gap: 0.35rem; }
+        .input-row { display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr) 7rem; align-items: center; }
+        .input-row input[type=number] { width: 100%; }
+        output { font-weight: 600; }
+        button { padding: 0.8rem 1rem; }
+        #status { min-height: 1.5rem; }
     </style>
 </head>
 <body>
   <form id=\"motor-test-form\">
         <label for=\"left_frequency_hz\">Left frequency (Hz)
             <div class=\"input-row\">
-                <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"0\" max=\"{last_frequency_index}\" step=\"1\" value=\"{left_default_index}\">
-                <input id=\"left_frequency_hz_input\" name=\"left_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"{left_default_frequency_hz}\">
+                <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"0\" max=\"__LAST_FREQUENCY_INDEX__\" step=\"1\" value=\"__LEFT_DEFAULT_INDEX__\">
+                <input id=\"left_frequency_hz_input\" name=\"left_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"__LEFT_DEFAULT_FREQUENCY_HZ__\">
             </div>
-            <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">{left_default_frequency_hz}</output>
+            <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">__LEFT_DEFAULT_FREQUENCY_HZ__</output>
         </label>
         <label for=\"left_duty_percent\">Left duty (%)
             <input id=\"left_duty_percent\" name=\"left_duty_percent\" type=\"range\" min=\"0\" max=\"100\" value=\"40\">
@@ -170,14 +199,20 @@ def build_control_page() -> str:
         </label>
         <label for=\"right_frequency_hz\">Right frequency (Hz)
             <div class=\"input-row\">
-                <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"0\" max=\"{last_frequency_index}\" step=\"1\" value=\"{right_default_index}\">
-                <input id=\"right_frequency_hz_input\" name=\"right_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"{right_default_frequency_hz}\">
+                <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"0\" max=\"__LAST_FREQUENCY_INDEX__\" step=\"1\" value=\"__RIGHT_DEFAULT_INDEX__\">
+                <input id=\"right_frequency_hz_input\" name=\"right_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"__RIGHT_DEFAULT_FREQUENCY_HZ__\">
             </div>
-            <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">{right_default_frequency_hz}</output>
+            <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">__RIGHT_DEFAULT_FREQUENCY_HZ__</output>
         </label>
         <label for=\"right_duty_percent\">Right duty (%)
             <input id=\"right_duty_percent\" name=\"right_duty_percent\" type=\"range\" min=\"0\" max=\"100\" value=\"55\">
             <output for=\"right_duty_percent\" id=\"right_duty_percent_value\">55</output>
+        </label>
+        <label for=\"pwm_mode\">PWM mode
+            <select id=\"pwm_mode\" name=\"pwm_mode\">
+                <option value=\"SOFTWARE\" selected>SOFTWARE</option>
+                <option value=\"HARDWARE\">HARDWARE</option>
+            </select>
         </label>
         <label for=\"duration_ms\">Duration (ms)
             <input id=\"duration_ms\" name=\"duration_ms\" type=\"number\" min=\"100\" max=\"10000\" value=\"2000\">
@@ -187,101 +222,160 @@ def build_control_page() -> str:
   </form>
     <script>
         const form = document.getElementById('motor-test-form');
+        const pwmModeInput = document.getElementById('pwm_mode');
         const statusNode = document.getElementById('status');
-        const ALLOWED_FREQUENCIES_HZ = {allowed_frequencies_json};
+        const ALLOWED_FREQUENCIES_HZ = __ALLOWED_FREQUENCIES_JSON__;
+        const MODE_CONFIG = {
+            SOFTWARE: {
+                discrete: true,
+                minFrequencyHz: ALLOWED_FREQUENCIES_HZ[0],
+                maxFrequencyHz: ALLOWED_FREQUENCIES_HZ[ALLOWED_FREQUENCIES_HZ.length - 1],
+            },
+            HARDWARE: {
+                discrete: false,
+                minFrequencyHz: 100,
+                maxFrequencyHz: 8000,
+            },
+        };
 
-        function clampFrequency(value) {{
-            if (!Number.isFinite(value)) {{
-                return ALLOWED_FREQUENCIES_HZ[0];
-            }}
-            return Math.min(ALLOWED_FREQUENCIES_HZ[ALLOWED_FREQUENCIES_HZ.length - 1], Math.max(ALLOWED_FREQUENCIES_HZ[0], value));
-        }}
+        function currentMode() {
+            return MODE_CONFIG[pwmModeInput.value] ? pwmModeInput.value : 'SOFTWARE';
+        }
 
-        function nearestFrequencyIndex(value) {{
-            const clampedValue = clampFrequency(value);
+        function clampFrequency(mode, value) {
+            const config = MODE_CONFIG[mode];
+            if (!Number.isFinite(value)) {
+                return config.minFrequencyHz;
+            }
+            return Math.min(config.maxFrequencyHz, Math.max(config.minFrequencyHz, value));
+        }
+
+        function nearestFrequencyIndex(value) {
+            const clampedValue = clampFrequency('SOFTWARE', value);
             let nearestIndex = 0;
             let nearestDistance = Math.abs(ALLOWED_FREQUENCIES_HZ[0] - clampedValue);
-            for (let index = 1; index < ALLOWED_FREQUENCIES_HZ.length; index += 1) {{
+            for (let index = 1; index < ALLOWED_FREQUENCIES_HZ.length; index += 1) {
                 const distance = Math.abs(ALLOWED_FREQUENCIES_HZ[index] - clampedValue);
-                if (distance < nearestDistance) {{
+                if (distance < nearestDistance) {
                     nearestIndex = index;
                     nearestDistance = distance;
-                }}
-            }}
+                }
+            }
             return nearestIndex;
-        }}
+        }
 
-        function syncFrequencyInputs(rangeId, numberId) {{
+        function syncFrequencyInputs(rangeId, numberId) {
             const rangeInput = document.getElementById(rangeId);
             const numberInput = document.getElementById(numberId);
-            const output = document.getElementById(`${{rangeId}}_value`);
+            const output = document.getElementById(`${rangeId}_value`);
 
-            const updateFromIndex = (index) => {{
+            const updateRangeAttributes = () => {
+                const mode = currentMode();
+                if (MODE_CONFIG[mode].discrete) {
+                    rangeInput.min = '0';
+                    rangeInput.max = String(ALLOWED_FREQUENCIES_HZ.length - 1);
+                    rangeInput.step = '1';
+                    rangeInput.value = String(nearestFrequencyIndex(Number(numberInput.value)));
+                    return;
+                }
+
+                rangeInput.min = String(MODE_CONFIG[mode].minFrequencyHz);
+                rangeInput.max = String(MODE_CONFIG[mode].maxFrequencyHz);
+                rangeInput.step = '1';
+                rangeInput.value = String(clampFrequency(mode, Number(numberInput.value)));
+            };
+
+            const updateFromIndex = (index) => {
                 const frequency = ALLOWED_FREQUENCIES_HZ[Number(index)];
                 rangeInput.value = String(index);
                 numberInput.value = String(frequency);
                 output.textContent = String(frequency);
-            }};
+            };
 
-            const updateFromNumber = (value) => {{
-                const numericValue = clampFrequency(Number(value));
+            const updateFromNumber = (value) => {
+                const mode = currentMode();
+                const numericValue = clampFrequency(mode, Number(value));
                 numberInput.value = String(numericValue);
                 output.textContent = String(numericValue);
-                rangeInput.value = String(nearestFrequencyIndex(numericValue));
-            }};
+                if (MODE_CONFIG[mode].discrete) {
+                    rangeInput.value = String(nearestFrequencyIndex(numericValue));
+                    return;
+                }
+                rangeInput.value = String(numericValue);
+            };
 
-            rangeInput.addEventListener('input', () => {{
+            rangeInput.addEventListener('input', () => {
+                if (!MODE_CONFIG[currentMode()].discrete) {
+                    updateFromNumber(rangeInput.value);
+                    return;
+                }
                 updateFromIndex(rangeInput.value);
-            }});
+            });
 
-            numberInput.addEventListener('input', () => {{
+            numberInput.addEventListener('input', () => {
                 updateFromNumber(numberInput.value);
-            }});
+            });
 
+            pwmModeInput.addEventListener('change', () => {
+                updateRangeAttributes();
+                updateFromNumber(numberInput.value);
+            });
+
+            updateRangeAttributes();
             updateFromNumber(numberInput.value);
-        }}
+        }
 
         syncFrequencyInputs('left_frequency_hz', 'left_frequency_hz_input');
         syncFrequencyInputs('right_frequency_hz', 'right_frequency_hz_input');
 
-        for (const id of ['left_duty_percent', 'right_duty_percent']) {{
+        for (const id of ['left_duty_percent', 'right_duty_percent']) {
             const input = document.getElementById(id);
-            const output = document.getElementById(`${{id}}_value`);
-            input.addEventListener('input', () => {{
+            const output = document.getElementById(`${id}_value`);
+            input.addEventListener('input', () => {
                 output.textContent = input.value;
-            }});
-        }}
+            });
+        }
 
-        form.addEventListener('submit', async (event) => {{
+        form.addEventListener('submit', async (event) => {
             event.preventDefault();
             statusNode.textContent = 'Sending...';
-            const payload = {{
+            const payload = {
+                pwm_mode: document.getElementById('pwm_mode').value,
                 left_frequency_hz: Number(document.getElementById('left_frequency_hz_input').value),
                 left_duty_percent: Number(document.getElementById('left_duty_percent').value),
                 right_frequency_hz: Number(document.getElementById('right_frequency_hz_input').value),
                 right_duty_percent: Number(document.getElementById('right_duty_percent').value),
                 duration_ms: Number(document.getElementById('duration_ms').value),
-            }};
+            };
 
-            try {{
-                const response = await fetch('/api/motor-test', {{
+            try {
+                const response = await fetch('/api/motor-test', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
-                }});
+                });
                 const body = await response.json();
-                if (!response.ok) {{
-                        throw new Error(body.error || `HTTP ${{response.status}}`);
-                }}
+                if (!response.ok) {
+                    throw new Error(body.error || `HTTP ${response.status}`);
+                }
                 statusNode.textContent = 'Command sent';
-            }} catch (error) {{
-                    statusNode.textContent = `Error: ${{error.message}}`;
-            }}
-        }});
+            } catch (error) {
+                statusNode.textContent = `Error: ${error.message}`;
+            }
+        });
     </script>
 </body>
 </html>
 """
+
+    return (
+        page.replace("__ALLOWED_FREQUENCIES_JSON__", allowed_frequencies_json)
+        .replace("__LEFT_DEFAULT_INDEX__", str(left_default_index))
+        .replace("__RIGHT_DEFAULT_INDEX__", str(right_default_index))
+        .replace("__LEFT_DEFAULT_FREQUENCY_HZ__", str(left_default_frequency_hz))
+        .replace("__RIGHT_DEFAULT_FREQUENCY_HZ__", str(right_default_frequency_hz))
+        .replace("__LAST_FREQUENCY_INDEX__", str(last_frequency_index))
+    )
 
 
 def _write_json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:

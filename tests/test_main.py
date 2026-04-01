@@ -210,9 +210,10 @@ def test_create_motor_test_executor_uses_buzzer_when_enabled(monkeypatch: pytest
         def emergency_stop(self) -> None:
             pass
 
-    def fake_executor(synth, before_run=None):
+    def fake_executor(synth, before_run=None, synth_factory=None):
         captured["synth"] = synth
         captured["before_run"] = before_run
+        captured["synth_factory"] = synth_factory
         return "executor"
 
     monkeypatch.setattr(main.config, "MOTOR_TEST_API_ENABLED", True)
@@ -225,6 +226,7 @@ def test_create_motor_test_executor_uses_buzzer_when_enabled(monkeypatch: pytest
     assert executor == "executor"
     assert captured["synth"] is buzzer
     assert callable(captured["before_run"])
+    assert callable(captured["synth_factory"])
 
 
 def test_create_motor_test_executor_returns_none_for_unsupported_buzzer(monkeypatch: pytest.MonkeyPatch) -> None:
