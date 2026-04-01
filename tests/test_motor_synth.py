@@ -30,6 +30,7 @@ class TestMotorSynth:
         synth, pi = self._make_synth()
 
         assert synth._pwm_mode == "SOFTWARE"
+        assert synth.duty_cycle == 250_000
         assert synth.left_pwm_pins == [18]
         assert synth.left_comp_pins == [12]
         assert synth.right_pwm_pins == [19]
@@ -46,6 +47,11 @@ class TestMotorSynth:
         assert MotorSynth._frequency_pair_for_note(1000) == (900, 1100)
         assert MotorSynth._frequency_pair_for_note(440) == (396, 484)
         assert MotorSynth._frequency_pair_for_note(0) == (0, 0)
+
+    def test_scale_software_duty_maps_twenty_five_percent_to_quarter_range(self):
+        from buzzer.motor_synth import MotorSynth
+
+        assert MotorSynth._scale_software_duty(250_000) == 64
 
     def test_apply_motor_pwm_writes_direct_lpwm_and_rpwm_values(self):
         synth, pi = self._make_synth()

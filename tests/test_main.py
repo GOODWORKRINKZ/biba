@@ -763,7 +763,7 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
     monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
     monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
     monkeypatch.setattr(main.config, "MOTOR_TRIM_CONFIRM_HOLD_S", 5.0)
-    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.2)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.3)
     monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
     monkeypatch.setattr(main, "RUNNING", True)
 
@@ -949,7 +949,7 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
     monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
     monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
     monkeypatch.setattr(main.config, "MOTOR_TRIM_CONFIRM_HOLD_S", 5.0)
-    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.2)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.3)
     monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
     monkeypatch.setattr(main, "RUNNING", True)
 
@@ -3000,18 +3000,12 @@ def test_main_does_not_trigger_failsafe_after_blocking_arm_tone_when_frame_was_r
     assert failsafe_calls == []
 
 
-def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
+def test_main_holds_motor_control_for_250ms_after_arm_sound(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     main = importlib.import_module("main")
-    tone_calls: list[str] = []
-    playlist_calls: list[str] = []
-    frames = iter(
-        [
-            [0.0, 0.0, 0.0, 0.0, 0.98, 0.0, 0.0, 0.0, 0.98],
-            [0.0, 0.0, 0.0, 0.0, -0.98, 0.0, 0.0, 0.0, -0.98],
-        ]
-    )
+    fake_time = [0.0]
+    events: list[tuple[str, float, object]] = []
 
     class FakePi:
         connected = True
@@ -3030,14 +3024,342 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
             pass
 
         def get_channels(self):
-            try:
-                channels = next(frames)
-            except StopIteration:
+            if fake_time[0] >= 0.36:
                 main.RUNNING = False
                 return None
-            if channels[main.config.CH_ARM] < 0:
+            return [0.95, 0.0, 0.0, 0.0, 0.98, 0.0, 0.0, 0.0]
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, *args, **kwargs) -> tuple[float, float]:
+            return (0.0, 0.0)
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def sos_beacon(self) -> None:
+            pass
+
+        def low_voltage_alarm(self) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            events.append((f"sound:{name}", fake_time[0], name))
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def set_control_active(self, active: bool) -> None:
+            events.append(("control", fake_time[0], active))
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "SOUND_MODE", "synth")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 0)
+    monkeypatch.setattr(main.config, "CH_STEERING", 1)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_MUTE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 100)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+
+    arm_sound_time = next(timestamp for event, timestamp, _ in events if event == "sound:arm")
+    first_control_true_time = next(timestamp for event, timestamp, value in events if event == "control" and value is True)
+    assert first_control_true_time >= arm_sound_time + 0.25
+
+
+def test_main_waits_120ms_after_disarm_before_playing_sound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    fake_time = [0.0]
+    drive_events: list[tuple[float, float, float]] = []
+    sound_events: list[tuple[str, float]] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            if fake_time[0] >= 0.26:
                 main.RUNNING = False
-            return channels
+                return None
+            if fake_time[0] < 0.02:
+                return [0.95, 0.0, 0.0, 0.0, 0.98, 0.0, 0.0, 0.0]
+            return [0.0, 0.0, 0.0, 0.0, -0.98, 0.0, 0.0, 0.0]
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del dt
+            drive_events.append((fake_time[0], throttle, steering))
+            return (throttle, steering)
+
+        def check_failsafe(self, *args, **kwargs) -> bool:
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def sos_beacon(self) -> None:
+            pass
+
+        def low_voltage_alarm(self) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def play_named_async(self, name: str) -> None:
+            sound_events.append((name, fake_time[0]))
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", FakeDrive)
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "SOUND_MODE", "synth")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 0)
+    monkeypatch.setattr(main.config, "CH_STEERING", 1)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_MUTE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 100)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+
+    first_zero_output_time = next(timestamp for timestamp, throttle, steering in drive_events if throttle == 0.0 and steering == 0.0)
+    disarm_sound_time = next(timestamp for name, timestamp in sound_events if name == "disarm")
+    assert disarm_sound_time >= first_zero_output_time + 0.12
+
+
+def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    fake_time = [0.0]
+    tone_calls: list[str] = []
+    playlist_calls: list[str] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            if fake_time[0] >= 0.18:
+                main.RUNNING = False
+                return None
+            if fake_time[0] < 0.02:
+                return [0.0, 0.0, 0.0, 0.0, 0.98, 0.0, 0.0, 0.0, 0.98]
+            return [0.0, 0.0, 0.0, 0.0, -0.98, 0.0, 0.0, 0.0, -0.98]
 
     class FakeTelemetry:
         def __init__(self, *args, **kwargs) -> None:
@@ -3156,11 +3478,14 @@ def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(
     monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
     monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
     monkeypatch.setattr(main.config, "CH_ARM", 4)
     monkeypatch.setattr(main.config, "CH_MELODY", 8)
     monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
     monkeypatch.setattr(main.config, "DISARM_VOICES", [])
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 100)
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
@@ -3511,13 +3836,8 @@ def test_main_sets_control_priority_when_drive_input_is_active(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     main = importlib.import_module("main")
+    fake_time = [0.0]
     control_active_calls: list[bool] = []
-    frames = iter(
-        [
-            [0.0, 0.75, 0.0, 0.10, 0.98, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.00, 0.0, 0.00, 0.98, 0.0, 0.0, 0.0, 0.0],
-        ]
-    )
 
     class FakePi:
         connected = True
@@ -3536,11 +3856,12 @@ def test_main_sets_control_priority_when_drive_input_is_active(
             pass
 
         def get_channels(self):
-            try:
-                return next(frames)
-            except StopIteration:
+            if fake_time[0] >= 0.30:
                 main.RUNNING = False
                 return None
+            if fake_time[0] < 0.28:
+                return [0.0, 0.75, 0.0, 0.10, 0.98, 0.0, 0.0, 0.0, 0.0]
+            return [0.0, 0.00, 0.0, 0.00, 0.98, 0.0, 0.0, 0.0, 0.0]
 
     class FakeTelemetry:
         def __init__(self, *args, **kwargs) -> None:
@@ -3649,16 +3970,21 @@ def test_main_sets_control_priority_when_drive_input_is_active(
     monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
     monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
     monkeypatch.setattr(main.config, "CH_ARM", 4)
     monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
     monkeypatch.setattr(main.config, "CH_STEERING", 3)
     monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
     monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 100)
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert control_active_calls == [True, False]
+    assert control_active_calls[0] is False
+    assert True in control_active_calls
+    assert control_active_calls[-1] is False
 
 
 def test_main_clears_battery_telemetry_when_bms_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

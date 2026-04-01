@@ -322,7 +322,7 @@ def test_config_defaults_trim_settings(monkeypatch: pytest.MonkeyPatch, config_m
     module = importlib.reload(config_module)
 
     assert module.CH_TRIM == 8
-    assert module.MOTOR_TRIM_MAX_EFFECT == pytest.approx(0.20)
+    assert module.MOTOR_TRIM_MAX_EFFECT == pytest.approx(0.30)
     assert module.MOTOR_TRIM_CONFIRM_HOLD_S == pytest.approx(5.0)
     assert module.MOTOR_TRIM_SETTINGS_PATH == "/data/motor-trim.json"
 
@@ -354,7 +354,7 @@ def test_docker_compose_exposes_trim_environment_variables() -> None:
     assert "CH_TRIM:" in compose
     assert "CH_TRIM: ${CH_TRIM:-8}" in compose
     assert "MOTOR_TRIM_MAX_EFFECT:" in compose
-    assert "MOTOR_TRIM_MAX_EFFECT: ${MOTOR_TRIM_MAX_EFFECT:-0.20}" in compose
+    assert "MOTOR_TRIM_MAX_EFFECT: ${MOTOR_TRIM_MAX_EFFECT:-0.30}" in compose
     assert "MOTOR_TRIM_CONFIRM_HOLD_S:" in compose
     assert "MOTOR_TRIM_CONFIRM_HOLD_S: ${MOTOR_TRIM_CONFIRM_HOLD_S:-5.0}" in compose
     assert "MOTOR_TRIM_SETTINGS_PATH:" in compose

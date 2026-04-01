@@ -125,7 +125,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `CH_BEACON` | `7` | Канал тумблера для ручного включения маяка |
 | `CH_MUTE` | `6` | Канал мьюта обычных звуков; SOS не приглушается |
 | `CH_TRIM` | `8` | `CH9`; live-источник trim в режиме калибровки прямолинейности |
-| `MOTOR_TRIM_MAX_EFFECT` | `0.20` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
+| `MOTOR_TRIM_MAX_EFFECT` | `0.30` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
 | `MOTOR_TRIM_CONFIRM_HOLD_S` | `5.0` | Длительность trim-жеста для входа и подтверждения |
 | `MOTOR_TRIM_SETTINGS_PATH` | `/data/motor-trim.json` | Путь к persistent JSON-файлу сохранённого trim |
 | `ENABLE_RC_MELODIES` | `0` | Включает выбор BLHeli-мелодий с передатчика |
@@ -163,7 +163,7 @@ CH_BEACON=7
 CH_MUTE=6
 CH_TRIM=8
 SOUND_MODE=synth
-MOTOR_TRIM_MAX_EFFECT=0.20
+MOTOR_TRIM_MAX_EFFECT=0.30
 MOTOR_TRIM_CONFIRM_HOLD_S=5.0
 MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
 ```

@@ -11,7 +11,7 @@ from buzzer import melodies
 from buzzer.blheli_parser import parse_blheli
 
 _SOFTWARE_PWM_RANGE = 255
-_DEFAULT_DUTY_CYCLE = 500_000
+_DEFAULT_DUTY_CYCLE = 250_000
 _DEFAULT_DELTA_PERCENT = 20
 
 

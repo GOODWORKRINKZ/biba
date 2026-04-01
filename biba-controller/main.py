@@ -42,6 +42,8 @@ _BATTERY_STATUS_BEACON = 0b10000
 _BATTERY_STATUS_TRIM_MODE = 0b100000
 _TRIM_GESTURE_CHANNEL_COUNT = 4
 _TRIM_GESTURE_HIGH_THRESHOLD = 0.9
+_ARM_SOUND_HOLD_S = 0.250
+_DISARM_SOUND_SETTLE_S = 0.120
 _SYNTH_EVENT_NAMES = {
     "startup": "startup",
     "arm": "arm",
@@ -1058,6 +1060,8 @@ def main() -> int:
     last_telemetry_send = 0.0
     last_battery_telemetry_log = 0.0
     battery_telemetry_cleared = False
+    arm_sound_hold_until_s: float | None = None
+    disarm_sound_after_s: float | None = None
     trace_session_id = f"{int(time.time() * 1000)}-{os.getpid()}"
     trace_sample_index = 0
     trace_last_activity_at_s: float | None = None
@@ -1083,6 +1087,22 @@ def main() -> int:
     try:
         while RUNNING:
             loop_started_at = time.monotonic()
+
+            if disarm_sound_after_s is not None and loop_started_at >= disarm_sound_after_s:
+                if not _play_grouped_voice_async_if_allowed(
+                    voice_selector,
+                    "disarm",
+                    config.DISARM_VOICES,
+                    buzzer,
+                    mute_active=mute_active,
+                ):
+                    _play_buzzer_method_async_if_allowed(
+                        buzzer,
+                        "disarm_tone",
+                        mute_active=mute_active,
+                    )
+                disarm_sound_after_s = None
+
             received_frame = False
 
             try:
@@ -1121,6 +1141,8 @@ def main() -> int:
                     arm_state_changed = True
                     armed = requested_armed
                     if armed:
+                        disarm_sound_after_s = None
+                        arm_sound_hold_until_s = loop_started_at + _ARM_SOUND_HOLD_S
                         LOGGER.info("Platform armed")
                         if (config.SOUND_MODE == "synth" or config.ARM_VOICE_ENABLED) and _play_grouped_voice_async_if_allowed(
                             voice_selector,
@@ -1137,19 +1159,9 @@ def main() -> int:
                                 mute_active=mute_active,
                             )
                     else:
+                        arm_sound_hold_until_s = None
+                        disarm_sound_after_s = loop_started_at + _DISARM_SOUND_SETTLE_S
                         LOGGER.info("Platform disarmed")
-                        if not _play_grouped_voice_async_if_allowed(
-                            voice_selector,
-                            "disarm",
-                            config.DISARM_VOICES,
-                            buzzer,
-                            mute_active=mute_active,
-                        ):
-                            _play_buzzer_method_async_if_allowed(
-                                buzzer,
-                                "disarm_tone",
-                                mute_active=mute_active,
-                            )
 
                 if was_muted and not mute_active and not arm_state_changed and not connection_state_changed:
                     _replay_current_audio_state_after_unmute(
@@ -1205,6 +1217,11 @@ def main() -> int:
                 control_active = armed and (
                     abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
                 )
+                if arm_sound_hold_until_s is not None:
+                    if loop_started_at < arm_sound_hold_until_s:
+                        control_active = False
+                    else:
+                        arm_sound_hold_until_s = None
                 buzzer.set_control_active(False if manual_motor_test_active else control_active)
                 control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
                 battery_state = bms_poller.latest_state if bms_poller else None

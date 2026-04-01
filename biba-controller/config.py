@@ -129,7 +129,7 @@ BEACON_DELAY_S = _get_env_float("BEACON_DELAY_S", 300.0)
 CH_BEACON = _get_env_int("CH_BEACON", 7)
 CH_MUTE = _get_env_int("CH_MUTE", 6)
 CH_TRIM = _get_env_int("CH_TRIM", 8)
-MOTOR_TRIM_MAX_EFFECT = _get_env_float("MOTOR_TRIM_MAX_EFFECT", 0.20)
+MOTOR_TRIM_MAX_EFFECT = _get_env_float("MOTOR_TRIM_MAX_EFFECT", 0.30)
 MOTOR_TRIM_CONFIRM_HOLD_S = _get_env_float("MOTOR_TRIM_CONFIRM_HOLD_S", 5.0)
 MOTOR_TRIM_SETTINGS_PATH = os.getenv("MOTOR_TRIM_SETTINGS_PATH", "/data/motor-trim.json")
 

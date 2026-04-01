@@ -305,6 +305,7 @@ def test_main_uses_named_synth_for_startup_when_sound_mode_is_synth(monkeypatch:
 
 def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
+    fake_time = [0.0]
     played: list[str] = []
 
     class FakePi:
@@ -328,10 +329,12 @@ def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> No
             pass
 
         def get_channels(self):
-            frame = self._frames.pop(0)
-            if not self._frames:
+            if fake_time[0] >= 0.18:
                 main.RUNNING = False
-            return frame
+                return None
+            if fake_time[0] < 0.02:
+                return [0.0, 0.0, 0.0, 0.0, 0.98]
+            return [0.0, 0.0, 0.0, 0.0, -0.98]
 
     class FakeTelemetry:
         def __init__(self, *args, **kwargs) -> None:
@@ -446,6 +449,8 @@ def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
     monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
     monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: fake_time[0])
+    monkeypatch.setattr(main.time, "sleep", lambda delay: fake_time.__setitem__(0, fake_time[0] + delay))
     monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
     monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
     monkeypatch.setattr(main.config, "CH_ARM", 4)
@@ -453,6 +458,7 @@ def test_main_uses_voice_group_for_disarm(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(main.config, "ARM_VOICE_ENABLED", False)
     monkeypatch.setattr(main.config, "DISARM_VOICES", ["/app/voice/disarm_wait.wav"])
     monkeypatch.setattr(main.config, "VOICE_SELECTION_MODE", "ROUND_ROBIN")
+    monkeypatch.setattr(main.config, "MAIN_LOOP_HZ", 100)
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
