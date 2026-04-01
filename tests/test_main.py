@@ -598,7 +598,8 @@ def test_main_filters_throttle_before_passing_it_to_drive(monkeypatch: pytest.Mo
 def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     applied_outputs: list[tuple[float, float]] = []
-    sound_calls: list[str] = []
+    blocking_sound_calls: list[str] = []
+    async_sound_calls: list[str] = []
 
     def frame(ch1: float, ch2: float, ch3: float, ch4: float, arm: float, ch9: float) -> list[float]:
         return [ch1, ch2, ch3, ch4, arm, 0.0, 0.0, 0.0, ch9]
@@ -685,7 +686,7 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
             pass
 
         def play_named(self, name: str) -> None:
-            del name
+            blocking_sound_calls.append(name)
 
         def startup_tone(self) -> None:
             pass
@@ -715,7 +716,7 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
             del active
 
         def play_named_async(self, name: str) -> None:
-            sound_calls.append(name)
+            async_sound_calls.append(name)
 
         def play_spectral_async(self, path: str) -> None:
             del path
@@ -770,14 +771,16 @@ def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.M
     assert main.main() == 0
     assert applied_outputs[-1][0] == pytest.approx(1.0)
     assert applied_outputs[-1][1] == pytest.approx(0.85)
-    assert sound_calls == ["trim_enter"]
+    assert blocking_sound_calls == ["trim_enter"]
+    assert async_sound_calls == []
 
 
 def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     applied_outputs: list[tuple[float, float]] = []
     saved_trims: list[float] = []
-    sound_calls: list[str] = []
+    blocking_sound_calls: list[str] = []
+    async_sound_calls: list[str] = []
 
     def frame(ch1: float, ch2: float, ch3: float, ch4: float, arm: float, ch9: float) -> list[float]:
         return [ch1, ch2, ch3, ch4, arm, 0.0, 0.0, 0.0, ch9]
@@ -871,7 +874,7 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
             pass
 
         def play_named(self, name: str) -> None:
-            del name
+            blocking_sound_calls.append(name)
 
         def startup_tone(self) -> None:
             pass
@@ -901,7 +904,7 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
             del active
 
         def play_named_async(self, name: str) -> None:
-            sound_calls.append(name)
+            async_sound_calls.append(name)
 
         def play_spectral_async(self, path: str) -> None:
             del path
@@ -957,7 +960,8 @@ def test_main_confirmation_gesture_saves_trim_and_exits_trim_mode(monkeypatch: p
     assert saved_trims == [pytest.approx(-0.15)]
     assert applied_outputs[-1][0] == pytest.approx(0.85)
     assert applied_outputs[-1][1] == pytest.approx(1.0)
-    assert sound_calls == ["trim_enter", "trim_exit"]
+    assert blocking_sound_calls == ["trim_enter", "trim_exit"]
+    assert async_sound_calls == []
 
 
 def test_main_allows_sos_beacon_while_muted(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3168,7 +3172,8 @@ def test_main_waits_120ms_after_disarm_before_playing_sound(
     main = importlib.import_module("main")
     fake_time = [0.0]
     drive_events: list[tuple[float, float, float]] = []
-    sound_events: list[tuple[str, float]] = []
+    blocking_sound_events: list[tuple[str, float]] = []
+    async_sound_events: list[tuple[str, float]] = []
 
     class FakePi:
         connected = True
@@ -3270,10 +3275,10 @@ def test_main_waits_120ms_after_disarm_before_playing_sound(
             pass
 
         def play_named(self, name: str) -> None:
-            del name
+            blocking_sound_events.append((name, fake_time[0]))
 
         def play_named_async(self, name: str) -> None:
-            sound_events.append((name, fake_time[0]))
+            async_sound_events.append((name, fake_time[0]))
 
         def play_wav(self, path: str) -> None:
             del path
@@ -3325,8 +3330,9 @@ def test_main_waits_120ms_after_disarm_before_playing_sound(
     assert main.main() == 0
 
     first_zero_output_time = next(timestamp for timestamp, throttle, steering in drive_events if throttle == 0.0 and steering == 0.0)
-    disarm_sound_time = next(timestamp for name, timestamp in sound_events if name == "disarm")
+    disarm_sound_time = next(timestamp for name, timestamp in blocking_sound_events if name == "disarm")
     assert disarm_sound_time >= first_zero_output_time + 0.12
+    assert [name for name, _timestamp in async_sound_events if name == "disarm"] == []
 
 
 def test_main_does_not_start_playlist_melody_during_arm_or_disarm_transition(

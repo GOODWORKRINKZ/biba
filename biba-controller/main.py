@@ -283,6 +283,19 @@ def _play_named_async_if_allowed(
     return True
 
 
+def _play_named_if_allowed(
+    buzzer,
+    name: str,
+    *,
+    mute_active: bool,
+    allow_when_muted: bool = False,
+) -> bool:
+    if mute_active and not allow_when_muted:
+        return False
+    buzzer.play_named(name)
+    return True
+
+
 def _replay_current_audio_state_after_unmute(
     voice_selector: VoiceSelector,
     buzzer,
@@ -1089,7 +1102,7 @@ def main() -> int:
             loop_started_at = time.monotonic()
 
             if disarm_sound_after_s is not None and loop_started_at >= disarm_sound_after_s:
-                if not _play_grouped_voice_async_if_allowed(
+                if not _play_grouped_voice_if_allowed(
                     voice_selector,
                     "disarm",
                     config.DISARM_VOICES,
@@ -1183,7 +1196,7 @@ def main() -> int:
                             saved_motor_trim = _live_motor_trim_from_channels(channels)
                             _save_motor_trim(saved_motor_trim)
                             trim_mode_active = False
-                            _play_named_async_if_allowed(
+                            _play_named_if_allowed(
                                 buzzer,
                                 "trim_exit",
                                 mute_active=mute_active,
@@ -1192,7 +1205,7 @@ def main() -> int:
                             LOGGER.info("Motor trim saved trim=%.3f", saved_motor_trim)
                         else:
                             trim_mode_active = True
-                            _play_named_async_if_allowed(
+                            _play_named_if_allowed(
                                 buzzer,
                                 "trim_enter",
                                 mute_active=mute_active,
