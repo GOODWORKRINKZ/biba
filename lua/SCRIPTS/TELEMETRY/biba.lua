@@ -213,9 +213,9 @@ end
 
 local function read_local_status_badges()
   local badges = {}
-  if sensor("ch5", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "a" end
-  if sensor("ch7", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
-  if sensor("ch6", 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "b" end
+  if sensor(APP_ARM_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "a" end
+  if sensor(APP_MUTE_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
+  if sensor(APP_BEACON_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "b" end
   return badges
 end
 

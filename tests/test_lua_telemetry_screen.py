@@ -164,12 +164,20 @@ def test_lua_declares_local_status_badge_helper() -> None:
     assert "local function read_local_status_badges()" in source
 
 
+def test_lua_declares_local_app_channel_constants() -> None:
+    source = _lua_source()
+
+    assert 'local APP_ARM_CHANNEL = "ch5"' in source
+    assert 'local APP_BEACON_CHANNEL = "ch7"' in source
+    assert 'local APP_MUTE_CHANNEL = "ch6"' in source
+
+
 def test_read_local_status_badges_reads_app_switch_channels() -> None:
     body = _extract_function(_lua_source(), "read_local_status_badges")
 
-    assert 'sensor("ch5", 0)' in body
-    assert 'sensor("ch7", 0)' in body
-    assert 'sensor("ch6", 0)' in body
+    assert 'sensor(APP_ARM_CHANNEL, 0)' in body
+    assert 'sensor(APP_MUTE_CHANNEL, 0)' in body
+    assert 'sensor(APP_BEACON_CHANNEL, 0)' in body
     assert 'badges[#badges + 1] = "a"' in body
     assert 'badges[#badges + 1] = "m"' in body
     assert 'badges[#badges + 1] = "b"' in body
