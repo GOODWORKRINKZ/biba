@@ -123,8 +123,11 @@ def test_play_grouped_voice_async_uses_named_synth_in_synth_mode(monkeypatch: py
             return voices[0]
 
     class FakeBuzzer:
+        def play_named(self, name: str) -> None:
+            played.append(f"blocking:{name}")
+
         def play_named_async(self, name: str) -> None:
-            played.append(f"named:{name}")
+            played.append(f"async:{name}")
 
         def play_wav_async(self, path: str) -> None:
             played.append(f"wav:{path}")
@@ -142,7 +145,51 @@ def test_play_grouped_voice_async_uses_named_synth_in_synth_mode(monkeypatch: py
     )
 
     assert result is True
-    assert played == ["named:connected"]
+    assert played == ["blocking:connected"]
+
+
+def test_play_named_async_if_allowed_uses_blocking_synth_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeBuzzer:
+        def play_named(self, name: str) -> None:
+            played.append(f"blocking:{name}")
+
+        def play_named_async(self, name: str) -> None:
+            played.append(f"async:{name}")
+
+    monkeypatch.setattr(main.config, "SOUND_MODE", "synth", raising=False)
+
+    result = main._play_named_async_if_allowed(FakeBuzzer(), "melody", mute_active=False)
+
+    assert result is True
+    assert played == ["blocking:melody"]
+
+
+def test_play_buzzer_method_async_if_allowed_uses_blocking_method_in_synth_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    played: list[str] = []
+
+    class FakeBuzzer:
+        def connected_tone(self) -> None:
+            played.append("blocking")
+
+        def connected_tone_async(self) -> None:
+            played.append("async")
+
+    monkeypatch.setattr(main.config, "SOUND_MODE", "synth", raising=False)
+
+    result = main._play_buzzer_method_async_if_allowed(
+        FakeBuzzer(),
+        "connected_tone",
+        mute_active=False,
+    )
+
+    assert result is True
+    assert played == ["blocking"]
 
 
 def test_play_named_async_if_allowed_skips_when_muted() -> None:
@@ -3290,7 +3337,7 @@ def test_main_holds_motor_control_for_250ms_after_arm_sound(
             pass
 
         def play_named(self, name: str) -> None:
-            del name
+            events.append((f"sound:{name}", fake_time[0], name))
 
         def play_named_async(self, name: str) -> None:
             events.append((f"sound:{name}", fake_time[0], name))

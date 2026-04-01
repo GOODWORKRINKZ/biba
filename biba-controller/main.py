@@ -181,12 +181,7 @@ def _play_grouped_voice_async(
         if synth_name is None:
             return False
 
-        player = getattr(buzzer, "play_named_async", None)
-        if player is not None:
-            player(synth_name)
-            return True
-
-        threading.Thread(target=buzzer.play_named, args=(synth_name,), daemon=True).start()
+        buzzer.play_named(synth_name)
         return True
 
     path = selector.choose(event, voices)
@@ -248,6 +243,10 @@ def _play_grouped_voice_async_if_allowed(
 
 
 def _play_buzzer_method_async(buzzer, method_name: str) -> None:
+    if config.SOUND_MODE == "synth":
+        getattr(buzzer, method_name)()
+        return
+
     player = getattr(buzzer, f"{method_name}_async", None)
     if player is not None:
         player()
@@ -279,6 +278,9 @@ def _play_named_async_if_allowed(
 ) -> bool:
     if mute_active and not allow_when_muted:
         return False
+    if config.SOUND_MODE == "synth":
+        buzzer.play_named(name)
+        return True
     buzzer.play_named_async(name)
     return True
 
