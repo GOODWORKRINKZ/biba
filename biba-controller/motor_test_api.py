@@ -189,8 +189,9 @@ def build_control_page() -> str:
         <label for=\"left_frequency_hz\">Left frequency (Hz)
             <div class=\"input-row\">
                 <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"0\" max=\"__LAST_FREQUENCY_INDEX__\" step=\"1\" value=\"__LEFT_DEFAULT_INDEX__\">
-                <input id=\"left_frequency_hz_input\" name=\"left_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"__LEFT_DEFAULT_FREQUENCY_HZ__\">
+                <input id="left_frequency_hz_input" name="left_frequency_hz_input" type="number" min="100" max="8000" step="1" value="__LEFT_DEFAULT_FREQUENCY_HZ__">
             </div>
+            <small>Type any integer frequency; the slider stays on preset steps.</small>
             <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">__LEFT_DEFAULT_FREQUENCY_HZ__</output>
         </label>
         <label for=\"left_duty_percent\">Left duty (%)
@@ -200,8 +201,9 @@ def build_control_page() -> str:
         <label for=\"right_frequency_hz\">Right frequency (Hz)
             <div class=\"input-row\">
                 <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"0\" max=\"__LAST_FREQUENCY_INDEX__\" step=\"1\" value=\"__RIGHT_DEFAULT_INDEX__\">
-                <input id=\"right_frequency_hz_input\" name=\"right_frequency_hz_input\" type=\"number\" min=\"100\" max=\"8000\" value=\"__RIGHT_DEFAULT_FREQUENCY_HZ__\">
+                <input id="right_frequency_hz_input" name="right_frequency_hz_input" type="number" min="100" max="8000" step="1" value="__RIGHT_DEFAULT_FREQUENCY_HZ__">
             </div>
+            <small>Type any integer frequency; the slider stays on preset steps.</small>
             <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">__RIGHT_DEFAULT_FREQUENCY_HZ__</output>
         </label>
         <label for=\"right_duty_percent\">Right duty (%)

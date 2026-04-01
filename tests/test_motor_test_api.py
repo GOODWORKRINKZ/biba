@@ -331,6 +331,7 @@ def test_build_control_page_contains_expected_inputs() -> None:
     assert "left_frequency_hz" in page
     assert 'id="left_frequency_hz_input"' in page
     assert 'name="left_frequency_hz_input"' in page
+    assert 'id="left_frequency_hz_input" name="left_frequency_hz_input" type="number" min="100" max="8000" step="1"' in page
     assert 'id="left_frequency_hz" name="left_frequency_hz" type="range" min="0"' in page
     assert "document.getElementById('left_frequency_hz_input').value" in page
     assert "document.getElementById('pwm_mode').value" in page
@@ -338,12 +339,14 @@ def test_build_control_page_contains_expected_inputs() -> None:
     assert "right_frequency_hz" in page
     assert 'id="right_frequency_hz_input"' in page
     assert 'name="right_frequency_hz_input"' in page
+    assert 'id="right_frequency_hz_input" name="right_frequency_hz_input" type="number" min="100" max="8000" step="1"' in page
     assert 'id="right_frequency_hz" name="right_frequency_hz" type="range" min="0"' in page
     assert "document.getElementById('right_frequency_hz_input').value" in page
     assert "right_duty_percent" in page
     assert "duration_ms" in page
     assert "/api/motor-test" in page
     assert "fetch(" in page
+    assert "Type any integer frequency; the slider stays on preset steps." in page
 
 
 def test_http_server_serves_control_page() -> None:
