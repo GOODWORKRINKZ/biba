@@ -365,18 +365,18 @@ class MotorSynth:
         if self._control_active:
             return
         with self._lock:
-            if self._pwm_mode == "SOFTWARE":
-                pwm_group_pins = list(dict.fromkeys(self.left_pwm_pins + self.right_pwm_pins))
-                comp_group_pins = list(dict.fromkeys(self._raw_left_comp_pins + self._raw_right_comp_pins))
-                self._apply_group(pwm_group_pins, left_frequency_hz, left_duty_cycle)
-                self._apply_group(comp_group_pins, right_frequency_hz, right_duty_cycle)
-            else:
-                self._apply_manual_split(
-                    left_frequency_hz,
-                    left_duty_cycle,
-                    right_frequency_hz,
-                    right_duty_cycle,
-                )
+            self.pi.set_PWM_range(self.left_pwm_pins[0], _SOFTWARE_PWM_RANGE)
+            self.pi.set_PWM_range(self.left_comp_pins[0], _SOFTWARE_PWM_RANGE)
+            self.pi.set_PWM_range(self.right_pwm_pins[0], _SOFTWARE_PWM_RANGE)
+            self.pi.set_PWM_range(self.right_comp_pins[0], _SOFTWARE_PWM_RANGE)
+            self.pi.set_PWM_frequency(self.left_pwm_pins[0], left_frequency_hz)
+            self.pi.set_PWM_frequency(self.right_pwm_pins[0], left_frequency_hz)
+            self.pi.set_PWM_frequency(self.left_comp_pins[0], right_frequency_hz)
+            self.pi.set_PWM_frequency(self.right_comp_pins[0], right_frequency_hz)
+            self.pi.set_PWM_dutycycle(self.left_pwm_pins[0], self._scale_software_duty(left_duty_cycle))
+            self.pi.set_PWM_dutycycle(self.right_pwm_pins[0], self._scale_software_duty(left_duty_cycle))
+            self.pi.set_PWM_dutycycle(self.left_comp_pins[0], self._scale_software_duty(right_duty_cycle))
+            self.pi.set_PWM_dutycycle(self.right_comp_pins[0], self._scale_software_duty(right_duty_cycle))
             try:
                 self._wait_or_interrupted(duration_ms / 1000.0)
             finally:
