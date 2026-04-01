@@ -305,12 +305,30 @@ def test_config_falls_back_to_software_for_invalid_bts7960_pwm_mode(
     assert module.BTS7960_PWM_MODE == "SOFTWARE"
 
 
-def test_config_defaults_mute_channel_to_ch6(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+def test_config_defaults_mute_channel_to_ch7(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.delenv("CH_MUTE", raising=False)
 
     module = importlib.reload(config_module)
 
     assert module.CH_MUTE == 6
+
+
+def test_config_defaults_speed_mode_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.delenv("CH_SPEED_MODE", raising=False)
+    monkeypatch.delenv("SPEED_MODE_LOW_THRESHOLD", raising=False)
+    monkeypatch.delenv("SPEED_MODE_HIGH_THRESHOLD", raising=False)
+    monkeypatch.delenv("SPEED_MODE_SLOW_SCALE", raising=False)
+    monkeypatch.delenv("SPEED_MODE_MEDIUM_SCALE", raising=False)
+    monkeypatch.delenv("SPEED_MODE_FAST_SCALE", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.CH_SPEED_MODE == 5
+    assert module.SPEED_MODE_LOW_THRESHOLD == pytest.approx(-0.3)
+    assert module.SPEED_MODE_HIGH_THRESHOLD == pytest.approx(0.3)
+    assert module.SPEED_MODE_SLOW_SCALE == pytest.approx(1.0 / 3.0)
+    assert module.SPEED_MODE_MEDIUM_SCALE == pytest.approx(2.0 / 3.0)
+    assert module.SPEED_MODE_FAST_SCALE == pytest.approx(1.0)
 
 
 def test_config_defaults_trim_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -347,6 +365,18 @@ def test_env_example_exposes_trim_environment_variables() -> None:
     assert "MOTOR_TRIM_SETTINGS_PATH=" in env_example
 
 
+def test_env_example_exposes_speed_mode_environment_variables() -> None:
+    with open(".env.example", encoding="utf-8") as env_file:
+        env_example = env_file.read()
+
+    assert "CH_SPEED_MODE=" in env_example
+    assert "SPEED_MODE_LOW_THRESHOLD=" in env_example
+    assert "SPEED_MODE_HIGH_THRESHOLD=" in env_example
+    assert "SPEED_MODE_SLOW_SCALE=" in env_example
+    assert "SPEED_MODE_MEDIUM_SCALE=" in env_example
+    assert "SPEED_MODE_FAST_SCALE=" in env_example
+
+
 def test_docker_compose_exposes_trim_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
@@ -359,6 +389,24 @@ def test_docker_compose_exposes_trim_environment_variables() -> None:
     assert "MOTOR_TRIM_CONFIRM_HOLD_S: ${MOTOR_TRIM_CONFIRM_HOLD_S:-5.0}" in compose
     assert "MOTOR_TRIM_SETTINGS_PATH:" in compose
     assert "MOTOR_TRIM_SETTINGS_PATH: ${MOTOR_TRIM_SETTINGS_PATH:-/data/motor-trim.json}" in compose
+
+
+def test_docker_compose_exposes_speed_mode_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "CH_SPEED_MODE:" in compose
+    assert "CH_SPEED_MODE: ${CH_SPEED_MODE:-5}" in compose
+    assert "SPEED_MODE_LOW_THRESHOLD:" in compose
+    assert "SPEED_MODE_LOW_THRESHOLD: ${SPEED_MODE_LOW_THRESHOLD:--0.3}" in compose
+    assert "SPEED_MODE_HIGH_THRESHOLD:" in compose
+    assert "SPEED_MODE_HIGH_THRESHOLD: ${SPEED_MODE_HIGH_THRESHOLD:-0.3}" in compose
+    assert "SPEED_MODE_SLOW_SCALE:" in compose
+    assert "SPEED_MODE_SLOW_SCALE: ${SPEED_MODE_SLOW_SCALE:-0.3333333333333333}" in compose
+    assert "SPEED_MODE_MEDIUM_SCALE:" in compose
+    assert "SPEED_MODE_MEDIUM_SCALE: ${SPEED_MODE_MEDIUM_SCALE:-0.6666666666666666}" in compose
+    assert "SPEED_MODE_FAST_SCALE:" in compose
+    assert "SPEED_MODE_FAST_SCALE: ${SPEED_MODE_FAST_SCALE:-1.0}" in compose
 
 
 def test_docker_compose_exposes_bts7960_environment_variables() -> None:

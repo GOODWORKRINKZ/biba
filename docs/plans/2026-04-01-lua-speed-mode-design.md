@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a three-speed operator mode to the EdgeTX telemetry Lua script so `ch6` selects one of three drive range limits:
+Add a three-speed operator mode to the controller runtime, with `ch6` as the transmitter-side selector and the Lua telemetry script showing the active mode badge:
 
 - speed `1`: `1/3` stick range
 - speed `2`: `2/3` stick range
@@ -12,11 +12,11 @@ The active speed number must also be shown in the existing status badge row next
 
 ## Current Problem
 
-The Lua script currently renders wheel activity from raw `ch2` and `ch4` values with a fixed full-range mapping in `read_drive()`. That means the operator has no transmitter-side low-speed mode for precise indoor driving or safe testing. The status row also has no indication of which operator speed profile is currently active.
+The controller currently drives from raw CRSF throttle and steering channel values with a fixed full-range mapping. That means the operator has no robot-side low-speed mode for precise indoor driving or safe testing. The status row also has no indication of which operator speed profile is currently active.
 
 ## Decision
 
-Use `ch6` as a three-position speed selector inside `lua/SCRIPTS/TELEMETRY/biba.lua`.
+Use `ch6` as a three-position speed selector in the controller runtime, and show the selected mode in `lua/SCRIPTS/TELEMETRY/biba.lua`.
 
 The selected mode will map to configurable scale constants:
 
@@ -28,13 +28,13 @@ The mode number `1`, `2`, or `3` will be appended to the local status badge list
 
 ## Input Scaling Rule
 
-Only the operator stick inputs are scaled.
+Only the operator stick inputs are scaled in the controller runtime.
 
 Specifically:
 
 1. Read raw throttle from `ch2`
 2. Read raw steering from `ch4`
-3. Read speed mode from `ch6`
+3. Read speed mode from `ch6` in the controller
 4. Multiply only `thr` and `str` by the mode scale
 5. Convert the scaled values to normalized `-1..1`
 6. Apply the existing wheel mix
@@ -61,22 +61,22 @@ $$
 
 Trim must not be scaled down by the selected speed mode.
 
-That rule is important because the robot-side motor trim is an alignment correction, not an operator speed preference. Scaling only the stick travel preserves precise low-speed control while keeping trim authority stable across all three speed modes.
+That rule is important because the robot-side motor trim is an alignment correction, not an operator speed preference. Scaling only the commanded throttle and steering preserves precise low-speed control while keeping trim authority stable across all three speed modes.
 
-In practice, the Lua screen should only scale the operator input that it visualizes. It should not try to re-implement or attenuate the controller-side trim behavior.
+In practice, the Lua screen should not re-implement controller-side drive limiting. It only needs to show the selected mode badge.
 
 ## Mode Detection
 
-Introduce explicit constants for the selector channel, mode scales, and position thresholds.
+Introduce explicit controller config values for the selector channel, mode scales, and position thresholds.
 
 Recommended constants:
 
-- `APP_SPEED_MODE_CHANNEL = "ch6"`
-- `APP_SPEED_MODE_SLOW_SCALE = 1 / 3`
-- `APP_SPEED_MODE_MEDIUM_SCALE = 2 / 3`
-- `APP_SPEED_MODE_FAST_SCALE = 1.0`
-- `APP_SPEED_MODE_LOW_THRESHOLD`
-- `APP_SPEED_MODE_HIGH_THRESHOLD`
+- `CH_SPEED_MODE = 5`
+- `SPEED_MODE_SLOW_SCALE = 1 / 3`
+- `SPEED_MODE_MEDIUM_SCALE = 2 / 3`
+- `SPEED_MODE_FAST_SCALE = 1.0`
+- `SPEED_MODE_LOW_THRESHOLD`
+- `SPEED_MODE_HIGH_THRESHOLD`
 
 The thresholds should divide the three-position switch into:
 
@@ -99,27 +99,27 @@ The speed indicator should be implemented as a normal badge label, not as a sepa
 
 ## Runtime Shape
 
-Add two small helpers:
+Add two small helpers on different sides:
 
-1. one helper that reads `ch6` and returns the active speed number and its scale
-2. one helper that returns the speed badge label for the local status row
+1. one controller helper that reads `ch6` and returns the active speed scale
+2. one Lua helper that returns the speed badge label for the local status row
 
 Then update:
 
-- `read_drive()` to use the selected scale
+- controller main loop to use the selected scale before wheel mixing
 - `read_local_status_badges()` to append the speed number badge
 
-No other drawing code should need structural changes because both compact and wide headers already render an arbitrary status badge list.
+No other drawing code should need structural changes because both compact and wide headers already render an arbitrary status badge list, and `read_drive()` can remain a raw operator-input indicator.
 
 ## Testing Strategy
 
 Add focused tests in `tests/test_lua_telemetry_screen.py` that verify:
 
-1. the Lua file declares the new speed-mode constants
-2. a speed-mode helper exists and reads `ch6`
-3. the helper returns all three scales `1/3`, `2/3`, and `1.0`
-4. `read_drive()` uses the helper and scales `thr` and `str`
-5. `read_local_status_badges()` adds the speed number badge
+1. controller config declares the new speed-mode channel, thresholds, and scales
+2. a controller helper exists and maps `ch6` to `1/3`, `2/3`, and `1.0`
+3. the controller main loop scales throttle and steering before drive mixing
+4. the Lua status badge row shows the speed number
+5. the Lua wheel indicator keeps raw stick normalization instead of duplicating controller-side scaling
 
 These tests should stay at the current string-structure level used by the existing Lua telemetry tests.
 

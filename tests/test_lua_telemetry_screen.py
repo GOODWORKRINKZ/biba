@@ -213,14 +213,14 @@ def test_read_local_status_badges_reads_app_switch_channels() -> None:
     assert 'badges[#badges + 1] = speed_mode' in body
 
 
-def test_read_drive_scales_sticks_via_speed_mode_helper() -> None:
+def test_read_drive_keeps_raw_stick_normalization_for_indicator() -> None:
     body = _extract_function(_lua_source(), "read_drive")
 
-    assert 'local _, speed_scale = read_speed_mode()' in body
-    assert 'local thr_scaled = thr * speed_scale' in body
-    assert 'local str_scaled = str * speed_scale' in body
-    assert 'local thr_n = thr_scaled / 1024' in body
-    assert 'local str_n = str_scaled / 1024' in body
+    assert 'local _, speed_scale = read_speed_mode()' not in body
+    assert 'local thr_scaled = thr * speed_scale' not in body
+    assert 'local str_scaled = str * speed_scale' not in body
+    assert 'local thr_n = thr / 1024' in body
+    assert 'local str_n = str / 1024' in body
     assert 'local left  = clamp(thr_n + str_n, -1, 1)' in body
     assert 'local right = clamp(thr_n - str_n, -1, 1)' in body
 

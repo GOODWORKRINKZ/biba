@@ -110,6 +110,12 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `THROTTLE_FILTER_MODE=NONE|KALMAN` — фильтрация газа до wheel-mix; `NONE` по умолчанию, `KALMAN` сглаживает выбросы канала
 - `THROTTLE_KALMAN_PROCESS_NOISE=0.02` — насколько быстро фильтр принимает изменения реального setpoint
 - `THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5` — насколько сильно фильтр подавляет шум и ложные выбросы канала
+- `CH_SPEED_MODE=5` — `CH6` на передатчике; трёхпозиционный селектор скоростного режима для controller-side scaling газа и руля
+- `SPEED_MODE_LOW_THRESHOLD=-0.3` — нижний порог селектора в нормализованном диапазоне `-1..1`; ниже этого значения включается режим `1`
+- `SPEED_MODE_HIGH_THRESHOLD=0.3` — верхний порог селектора в нормализованном диапазоне `-1..1`; выше этого значения включается режим `3`
+- `SPEED_MODE_SLOW_SCALE=0.3333333333333333` — коэффициент для режима `1`
+- `SPEED_MODE_MEDIUM_SCALE=0.6666666666666666` — коэффициент для режима `2`
+- `SPEED_MODE_FAST_SCALE=1.0` — коэффициент для режима `3`
 - `BMS_TELEMETRY_TRACE_ENABLED=0|1` — включает точные controller-side trace-логи на этапах consume/send для battery telemetry
 - `BEACON_ENABLED=0|1`
 - `BEACON_DELAY_S=300`

@@ -2,42 +2,44 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add a three-position `ch6` speed selector to the Lua telemetry script, scale only the displayed operator stick input by `1/3`, `2/3`, or `1.0`, and show the active speed number in the status badge row.
+**Goal:** Add a three-position `ch6` speed selector to the controller runtime, scale only the robot-side throttle and steering command by `1/3`, `2/3`, or `1.0`, and show the active speed number in the Lua status badge row.
 
-**Architecture:** Keep the change local to `lua/SCRIPTS/TELEMETRY/biba.lua` by introducing small helpers for speed-mode decoding and badge generation. Drive scaling happens in `read_drive()` before wheel mixing, while the active mode number is appended to the existing local status badge list so both compact and wide headers inherit the new indicator without layout rewrites.
+**Architecture:** Add small controller-side config and helper logic so the main loop reads `ch6`, derives a scale, and applies it to throttle and steering before `drive.mix_and_ramp(...)`. Keep the Lua script responsible only for mode display by appending the active speed number to the existing local status badge list.
 
-**Tech Stack:** Lua for the EdgeTX telemetry script, pytest string-structure tests in Python.
+**Tech Stack:** Python controller runtime, Lua telemetry script, pytest string-structure and controller behavior tests.
 
 ---
 
-### Task 1: Add failing Lua telemetry tests for speed mode constants
+### Task 1: Add failing controller and config tests for speed mode settings
 
 **Files:**
-- Modify: `tests/test_lua_telemetry_screen.py`
-- Test: `lua/SCRIPTS/TELEMETRY/biba.lua`
+- Modify: `tests/test_config.py`
+- Modify: `tests/test_main.py`
+- Test: `biba-controller/config.py`
+- Test: `biba-controller/main.py`
 
 **Step 1: Write the failing test**
 
-Add tests that assert the Lua source declares:
+Add tests that assert controller config declares:
 
-- `APP_SPEED_MODE_CHANNEL = "ch6"`
-- `APP_SPEED_MODE_SLOW_SCALE`
-- `APP_SPEED_MODE_MEDIUM_SCALE`
-- `APP_SPEED_MODE_FAST_SCALE`
-- `APP_SPEED_MODE_LOW_THRESHOLD`
-- `APP_SPEED_MODE_HIGH_THRESHOLD`
+- `CH_SPEED_MODE = 5`
+- `SPEED_MODE_SLOW_SCALE`
+- `SPEED_MODE_MEDIUM_SCALE`
+- `SPEED_MODE_FAST_SCALE`
+- `SPEED_MODE_LOW_THRESHOLD`
+- `SPEED_MODE_HIGH_THRESHOLD`
 
 **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_lua_telemetry_screen.py -q`
+Run: `pytest tests/test_config.py tests/test_main.py -q`
 
-Expected: FAIL because the speed-mode constants are not declared yet.
+Expected: FAIL because the speed-mode config and controller helper do not exist yet.
 
 **Step 3: Commit**
 
 Do not commit yet.
 
-### Task 2: Add failing tests for speed helper and badge behavior
+### Task 2: Add failing Lua badge tests without Lua-side scaling
 
 **Files:**
 - Modify: `tests/test_lua_telemetry_screen.py`
@@ -50,8 +52,8 @@ Add tests asserting that:
 - a helper such as `read_speed_mode()` exists
 - it reads `sensor(APP_SPEED_MODE_CHANNEL, 0)`
 - it returns speed labels or values covering `1`, `2`, and `3`
-- it uses all three scales `1 / 3`, `2 / 3`, and `1.0`
 - `read_local_status_badges()` appends the speed badge
+- `read_drive()` keeps raw stick normalization instead of duplicating controller-side scaling
 
 **Step 2: Run test to verify it fails**
 
@@ -59,71 +61,41 @@ Run: `pytest tests/test_lua_telemetry_screen.py -q`
 
 Expected: FAIL because the helper and speed badge behavior do not exist yet.
 
-### Task 3: Add failing tests for drive scaling shape
+### Task 3: Implement speed-mode config and helper in controller
 
 **Files:**
-- Modify: `tests/test_lua_telemetry_screen.py`
-- Test: `lua/SCRIPTS/TELEMETRY/biba.lua`
+- Modify: `biba-controller/config.py`
+- Modify: `biba-controller/main.py`
+- Test: `tests/test_config.py`
+- Test: `tests/test_main.py`
 
 **Step 1: Write the failing test**
 
-Add tests asserting that `read_drive()`:
-
-- calls the new speed-mode helper
-- scales `thr` before normalization
-- scales `str` before normalization
-- still performs the same left/right clamp-based wheel mix
+Add the new controller config values and a small helper that maps the selector channel to the requested scale.
 
 **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_lua_telemetry_screen.py -q`
+Run: `pytest tests/test_config.py tests/test_main.py -q`
 
-Expected: FAIL because `read_drive()` still uses the raw full-range channels.
+Expected: some tests should still fail because the main loop is not using the scale yet.
 
-### Task 4: Implement speed-mode constants and helper in Lua
+### Task 4: Apply controller-side scaling in the main loop
 
 **Files:**
-- Modify: `lua/SCRIPTS/TELEMETRY/biba.lua`
-- Test: `tests/test_lua_telemetry_screen.py`
+- Modify: `biba-controller/main.py`
+- Test: `tests/test_main.py`
 
 **Step 1: Write minimal implementation**
 
-In `lua/SCRIPTS/TELEMETRY/biba.lua`, add:
-
-- the new `APP_SPEED_MODE_*` constants near the other app-channel constants
-- a helper that reads `ch6`, resolves speed `1`, `2`, or `3`, and returns both the speed number and the scale
-
-Keep the implementation small and threshold-driven.
+Update the controller main loop so the selected scale is applied to filtered throttle and steering before the drive mix.
 
 **Step 2: Run focused test**
 
-Run: `pytest tests/test_lua_telemetry_screen.py -q`
+Run: `pytest tests/test_main.py -q`
 
-Expected: some tests should still fail because `read_drive()` and the badge list are not updated yet.
+Expected: controller speed-mode tests should pass.
 
-### Task 5: Implement drive scaling in Lua
-
-**Files:**
-- Modify: `lua/SCRIPTS/TELEMETRY/biba.lua`
-- Test: `tests/test_lua_telemetry_screen.py`
-
-**Step 1: Write minimal implementation**
-
-Update `read_drive()` to:
-
-- fetch the active scale from the speed-mode helper
-- multiply only `thr` and `str` by that scale
-- preserve the existing normalization and clamp logic
-
-Do not change unrelated wheel rendering code.
-
-**Step 2: Run focused test**
-
-Run: `pytest tests/test_lua_telemetry_screen.py -q`
-
-Expected: the drive-scaling tests should now pass, while badge tests may still fail if the status row is not updated yet.
-
-### Task 6: Add speed badge to the status row
+### Task 5: Keep Lua responsible only for badge display
 
 **Files:**
 - Modify: `lua/SCRIPTS/TELEMETRY/biba.lua`
@@ -131,15 +103,31 @@ Expected: the drive-scaling tests should now pass, while badge tests may still f
 
 **Step 1: Write minimal implementation**
 
-Update `read_local_status_badges()` so it appends the active speed number badge after the existing local state badges.
-
-The badge text should be `"1"`, `"2"`, or `"3"`.
+Keep `read_speed_mode()` and the speed badge, but revert `read_drive()` to raw operator-input normalization so Lua does not duplicate controller-side limiting.
 
 **Step 2: Run focused test**
 
 Run: `pytest tests/test_lua_telemetry_screen.py -q`
 
 Expected: PASS for the focused Lua telemetry test file.
+
+### Task 6: Expose speed-mode env defaults in deployment config
+
+**Files:**
+- Modify: `docker-compose.yml`
+- Modify: `.env.example`
+- Modify: `README.md`
+- Test: `tests/test_config.py`
+
+**Step 1: Write minimal implementation**
+
+Add `CH_SPEED_MODE`, thresholds, and scale variables to compose, `.env.example`, and the README environment list.
+
+**Step 2: Run focused test**
+
+Run: `pytest tests/test_config.py -q`
+
+Expected: PASS.
 
 ### Task 7: Run regression coverage for Lua-related behavior
 
@@ -171,7 +159,7 @@ Expected: PASS.
 Summarize that:
 
 - `ch6` selects speeds `1`, `2`, and `3`
-- only stick input is scaled
+- only controller-side stick command is scaled
 - trim behavior remains untouched
 - the active speed appears in the status badge row
 

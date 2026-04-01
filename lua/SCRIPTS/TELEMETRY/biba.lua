@@ -186,12 +186,9 @@ end
 local function read_drive()
   local thr = sensor("ch2", 0)
   local str = sensor("ch4", 0)
-  local _, speed_scale = read_speed_mode()
-  local thr_scaled = thr * speed_scale
-  local str_scaled = str * speed_scale
   -- ch values are -1024..1024 in EdgeTX
-  local thr_n = thr_scaled / 1024
-  local str_n = str_scaled / 1024
+  local thr_n = thr / 1024
+  local str_n = str / 1024
   local left  = clamp(thr_n + str_n, -1, 1)
   local right = clamp(thr_n - str_n, -1, 1)
   return left, right

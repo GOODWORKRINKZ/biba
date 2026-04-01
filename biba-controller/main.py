@@ -535,6 +535,15 @@ def _live_motor_trim_from_channels(channels: list[float]) -> float:
     return _clamp_motor_trim(_get_channel(channels, config.CH_TRIM) * config.MOTOR_TRIM_MAX_EFFECT)
 
 
+def _get_speed_mode_scale(channels: list[float]) -> float:
+    selector = _get_channel(channels, config.CH_SPEED_MODE)
+    if selector < config.SPEED_MODE_LOW_THRESHOLD:
+        return config.SPEED_MODE_SLOW_SCALE
+    if selector > config.SPEED_MODE_HIGH_THRESHOLD:
+        return config.SPEED_MODE_FAST_SCALE
+    return config.SPEED_MODE_MEDIUM_SCALE
+
+
 def _battery_is_low(state: BatteryState) -> bool:
     if state.cells and state.min_cell > 0:
         return state.min_cell <= config.LOW_CELL_VOLTAGE
@@ -1226,9 +1235,12 @@ def main() -> int:
                 if throttle_filter is not None:
                     throttle = throttle_filter.update(raw_throttle)
                 steering = _get_channel(channels, config.CH_STEERING)
+                speed_mode_scale = _get_speed_mode_scale(channels)
+                throttle *= speed_mode_scale
+                steering *= speed_mode_scale
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
-                    abs(raw_throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
+                    abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
                 )
                 if arm_sound_hold_until_s is not None:
                     if loop_started_at < arm_sound_hold_until_s:
