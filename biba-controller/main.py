@@ -332,11 +332,19 @@ def _create_synth_motor_groups() -> tuple[list[int], list[int], list[int], list[
     right_pwm_pins: list[int] = []
     right_comp_pins: list[int] = []
     if config.LEFT_MOTOR_ENABLED:
-        left_pwm_pins.append(config.LEFT_MOTOR_RPWM)
-        left_comp_pins.append(config.LEFT_MOTOR_LPWM)
+        if bool(config.MOTOR1_INVERTED):
+            left_pwm_pins.append(config.LEFT_MOTOR_LPWM)
+            left_comp_pins.append(config.LEFT_MOTOR_RPWM)
+        else:
+            left_pwm_pins.append(config.LEFT_MOTOR_RPWM)
+            left_comp_pins.append(config.LEFT_MOTOR_LPWM)
     if config.RIGHT_MOTOR_ENABLED:
-        right_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
-        right_comp_pins.append(config.RIGHT_MOTOR_LPWM)
+        if bool(config.MOTOR2_INVERTED):
+            right_pwm_pins.append(config.RIGHT_MOTOR_LPWM)
+            right_comp_pins.append(config.RIGHT_MOTOR_RPWM)
+        else:
+            right_pwm_pins.append(config.RIGHT_MOTOR_RPWM)
+            right_comp_pins.append(config.RIGHT_MOTOR_LPWM)
     return left_pwm_pins, left_comp_pins, right_pwm_pins, right_comp_pins
 
 

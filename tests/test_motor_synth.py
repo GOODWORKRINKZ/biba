@@ -327,10 +327,10 @@ class TestMotorSynth:
 
         synth = MotorSynth(
             pi,
-            [12, 19],
-            comp_pins=[18, 13],
-            left_pwm_pins=[12],
-            left_comp_pins=[18],
+            [18, 19],
+            comp_pins=[12, 13],
+            left_pwm_pins=[18],
+            left_comp_pins=[12],
             right_pwm_pins=[19],
             right_comp_pins=[13],
             pwm_mode="SOFTWARE",
@@ -341,15 +341,13 @@ class TestMotorSynth:
 
         synth.play_manual_split_pwm(1000, 400_000, 1200, 550_000, 250)
 
-        pi.set_PWM_frequency.assert_any_call(12, 1000)
         pi.set_PWM_frequency.assert_any_call(18, 1000)
         pi.set_PWM_frequency.assert_any_call(19, 1200)
-        pi.set_PWM_frequency.assert_any_call(13, 1200)
         non_zero_calls = [entry.args for entry in pi.set_PWM_dutycycle.call_args_list if entry.args[1] > 0]
-        assert any(args[0] == 12 for args in non_zero_calls)
         assert any(args[0] == 18 for args in non_zero_calls)
         assert any(args[0] == 19 for args in non_zero_calls)
-        assert any(args[0] == 13 for args in non_zero_calls)
+        assert all(args[0] != 12 for args in non_zero_calls)
+        assert all(args[0] != 13 for args in non_zero_calls)
 
     def test_play_manual_split_pwm_hardware_drives_both_driver_inputs_per_motor(self):
         pi = MagicMock()
@@ -357,10 +355,10 @@ class TestMotorSynth:
 
         synth = MotorSynth(
             pi,
-            [12, 19],
-            comp_pins=[18, 13],
-            left_pwm_pins=[12],
-            left_comp_pins=[18],
+            [18, 19],
+            comp_pins=[12, 13],
+            left_pwm_pins=[18],
+            left_comp_pins=[12],
             right_pwm_pins=[19],
             right_comp_pins=[13],
             pwm_mode="HARDWARE",
@@ -371,10 +369,10 @@ class TestMotorSynth:
         synth.play_manual_split_pwm(1000, 400_000, 1200, 550_000, 250)
 
         non_zero_calls = [call.args for call in pi.hardware_PWM.call_args_list if call.args[1] > 0]
-        assert (12, 1000, 400_000) in non_zero_calls
         assert (18, 1000, 400_000) in non_zero_calls
         assert (19, 1200, 550_000) in non_zero_calls
-        assert (13, 1200, 550_000) in non_zero_calls
+        assert all(args[0] != 12 for args in non_zero_calls)
+        assert all(args[0] != 13 for args in non_zero_calls)
 
     def test_system_polyphonic_melodies_exist(self):
         from buzzer import melodies
