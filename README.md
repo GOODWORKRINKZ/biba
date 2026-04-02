@@ -1,5 +1,8 @@
 # BiBa
 
+[![Build All](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-All.yml/badge.svg?branch=main)](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-All.yml)
+[![Build Controller Image](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-Controller-Image.yml/badge.svg?branch=main)](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-Controller-Image.yml)
+
 BiBa — это колесная робот-платформа на базе Raspberry Pi Zero 2W с управлением по ExpressLRS/CRSF, телеметрией от Daly 6S BMS по BLE или USB-UART, двухканальными драйверами BTS7960 и звуковой индикацией через моторы.
 
 ## Состав железа
@@ -19,19 +22,19 @@ BiBa — это колесная робот-платформа на базе Ras
 | ELRS RX | 15 | 10 |
 | I2C SDA (ADS1115, опционально) | 2 | 3 |
 | I2C SCL (ADS1115, опционально) | 3 | 5 |
-| Left BTS7960 RPWM | 18 | 12 |
-| Left BTS7960 LPWM | 13 | 33 |
+| Left BTS7960 RPWM | 12 | 32 |
+| Left BTS7960 LPWM | 18 | 12 |
 | Left BTS7960 REN | 23 | 16 |
 | Left BTS7960 LEN | 24 | 18 |
-| Right BTS7960 RPWM | 12 | 32 |
-| Right BTS7960 LPWM | 19 | 35 |
+| Right BTS7960 RPWM | 19 | 35 |
+| Right BTS7960 LPWM | 13 | 33 |
 | Right BTS7960 REN | 20 | 38 |
 | Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
 
 Подробное описание подключения находится в [docs/wiring.md](docs/wiring.md).
 
-Текущий двухмоторный runtime на Pi Zero 2W должен быть запущен с `BTS7960_PWM_MODE=SOFTWARE`, потому что распиновка `18/13` и `12/19` делит общие hardware-PWM каналы. Кодовый дефолт остаётся `HARDWARE`, но для этой конкретной проводки compose уже принудительно переводит BTS7960 в software PWM.
+Текущий двухмоторный runtime на Pi Zero 2W должен быть запущен с `BTS7960_PWM_MODE=SOFTWARE`, потому что распиновка `12/18` и `19/13` делит общие hardware-PWM каналы. Это уже совпадает и с кодовым default в `config.py`, и с compose-default для развёрнутого робота.
 
 ## Структура репозитория
 
@@ -39,7 +42,7 @@ BiBa — это колесная робот-платформа на базе Ras
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
 - `.github/workflows/` — global builder workflows для Ruff, pytest, shellcheck и сборки arm64 Docker-образа в GHCR
 - `scripts/setup/` — bringup-скрипты для Raspberry Pi (Docker, Compose, systemd-автозапуск)
-- `scripts/update.sh` — быстрое обновление (git pull + image pull + restart)
+- `scripts/biba_aliases.sh` — robot-side operational aliases, включая `bbupdate` для штатного обновления
 - `scripts/diagnostics.sh` — диагностика хоста и контейнера
 - `scripts/voice_prep.py` — офлайн-подготовка русскоязычных voice assets и явный promote в production voice каталог
 - `voice-src/phrases.yml` — канонический набор русских фраз по событиям
@@ -97,12 +100,12 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 - `MOTOR_DRIVER_TYPE=BTS7960|PWM_DIR`
 - `BTS7960_PWM_MODE=HARDWARE|SOFTWARE` — для Pi Zero 2W с текущей двухмоторной проводкой нужен `SOFTWARE`
-- `LEFT_MOTOR_RPWM=18`
-- `LEFT_MOTOR_LPWM=13`
+- `LEFT_MOTOR_RPWM=12`
+- `LEFT_MOTOR_LPWM=18`
 - `LEFT_MOTOR_REN=23`
 - `LEFT_MOTOR_LEN=24`
-- `RIGHT_MOTOR_RPWM=12`
-- `RIGHT_MOTOR_LPWM=19`
+- `RIGHT_MOTOR_RPWM=19`
+- `RIGHT_MOTOR_LPWM=13`
 - `RIGHT_MOTOR_REN=20`
 - `RIGHT_MOTOR_LEN=21`
 - `MOTOR1_INVERTED=0|1`
@@ -164,7 +167,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 Это диагностический путь для коротких ручных тестов драйверов и моторных каналов. Он не заменяет обычное CRSF-управление.
 
-`HARDWARE` остаётся дефолтом в коде для совместимых конфигураций, где PWM-линии не конфликтуют между собой. Для текущего робота override на `SOFTWARE` считается временной эксплуатационной конфигурацией.
+Для текущего кода и текущего робота default уже `SOFTWARE`. Режим `HARDWARE` оставлен только для совместимых конфигураций, где PWM-линии не конфликтуют между собой.
 
 Если после сборки одно из колёс едет в обратную сторону, достаточно выставить для него значение `1`.
 
@@ -206,7 +209,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 1. Обновить русские фразы в `voice-src/phrases.yml`.
 2. Сгенерировать approved WAV-кандидаты в `voice-work/`.
 3. Явно продвинуть их в production каталог командой `scripts/voice_prep.py promote-approved --manifest voice-src/phrases.yml --base-dir voice-work --repo-root .`.
-4. Закоммитить обновлённые WAV в ветку и доставить их на робота через обычный workflow обновления.
+4. Закоммитить обновлённые WAV в ветку и доставить их на робота через штатный robot-side update workflow `bbupdate`.
 
 Так production voice assets обновляются предсказуемо и без отдельного audition runtime path.
 

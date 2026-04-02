@@ -76,16 +76,17 @@ Pull новых образов остается в ручном обновлен
 
 ## Обновление
 
-Быстрое обновление одной командой:
+Поддерживаемый robot-side путь обновления:
 
 ```bash
 bbupdate
 ```
 
-Или через скрипт:
+Если текущая shell-сессия была открыта до установки алиасов, сначала загрузите их:
 
 ```bash
-bash ~/biba/scripts/update.sh
+source ~/biba/scripts/biba_aliases.sh
+bbupdate
 ```
 
 ## Диагностика
@@ -113,7 +114,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `BMS_TELEMETRY_TRACE_ENABLED` | `0` | Включает точные monotonic trace-логи на этапах consume/send для battery telemetry |
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
 | `MOTOR_DRIVER_TYPE` | `BTS7960` | Тип драйвера моторов: штатный `BTS7960` или старый `PWM_DIR` |
-| `BTS7960_PWM_MODE` | `HARDWARE` | Режим PWM для `BTS7960`: `HARDWARE` по умолчанию в коде, `SOFTWARE` для текущей двухмоторной проводки на Pi Zero 2W |
+| `BTS7960_PWM_MODE` | `SOFTWARE` | Режим PWM для `BTS7960`: текущий рабочий и кодовый default для двухмоторной проводки на Pi Zero 2W; `HARDWARE` используйте только для совместимой раскладки без конфликта PWM-каналов |
 | `CH_STEERING` | `3` | Номер канала руления |
 | `CH_THROTTLE` | `1` | Номер канала газа |
 | `CH_ARM` | `4` | Номер канала арма |
@@ -138,12 +139,12 @@ bash ~/biba/scripts/diagnostics.sh
 | `RAMP_REVERSE_DECEL_RATE` | `0.5` | Скорость подхода к нулю перед сменой направления; меньше значение делает реверс мягче |
 | `RAMP_ZERO_HOLD_S` | `0.15` | Пауза на нуле (сек) после торможения перед реверсом; даёт мотору физически остановиться |
 | `MOTOR_DEADBAND` | `0.05` | Мёртвая зона: значения ниже порога → мотор стоит |
-| `LEFT_MOTOR_RPWM` | `18` | Левый BTS7960 `RPWM` |
-| `LEFT_MOTOR_LPWM` | `13` | Левый BTS7960 `LPWM` |
+| `LEFT_MOTOR_RPWM` | `12` | Левый BTS7960 `RPWM` |
+| `LEFT_MOTOR_LPWM` | `18` | Левый BTS7960 `LPWM` |
 | `LEFT_MOTOR_REN` | `23` | Левый BTS7960 `REN` |
 | `LEFT_MOTOR_LEN` | `24` | Левый BTS7960 `LEN` |
-| `RIGHT_MOTOR_RPWM` | `12` | Правый BTS7960 `RPWM` |
-| `RIGHT_MOTOR_LPWM` | `19` | Правый BTS7960 `LPWM` |
+| `RIGHT_MOTOR_RPWM` | `19` | Правый BTS7960 `RPWM` |
+| `RIGHT_MOTOR_LPWM` | `13` | Правый BTS7960 `LPWM` |
 | `RIGHT_MOTOR_REN` | `20` | Правый BTS7960 `REN` |
 | `RIGHT_MOTOR_LEN` | `21` | Правый BTS7960 `LEN` |
 | `MOTOR1_INVERTED` | `1` | Инверсия мотора 1 |
@@ -204,6 +205,8 @@ BiBa использует моторный synth/audio runtime для:
 - `synth` - только синтовые мелодии и сигналы
 
 Текущий production compose по умолчанию запускается с `SOUND_MODE=synth`, чтобы системные события не использовали voice WAV.
+
+Если запускать controller вне compose и без env override, raw fallback в `config.py` остаётся `spectral_voice`; для робота актуальным default считайте именно compose-настройку `synth`.
 
 На передатчике EdgeTX Lua-скрипт дополнительно проигрывает `playTone` события при старте, восстановлении/потере связи и low battery.
 

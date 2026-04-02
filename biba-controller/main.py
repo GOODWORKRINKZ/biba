@@ -410,19 +410,6 @@ def _create_test_motor_synth(buzzer, pwm_mode: str):
     )
 
 
-def _create_motor_test_server(buzzer):
-    if not config.MOTOR_TEST_API_ENABLED:
-        return None
-    if not hasattr(buzzer, "play_manual_split_pwm"):
-        return None
-    executor = MotorTestExecutor(buzzer)
-    return create_motor_test_server(
-        executor,
-        host=config.MOTOR_TEST_API_HOST,
-        port=config.MOTOR_TEST_API_PORT,
-    )
-
-
 def _create_motor_test_executor(buzzer, drive):
     if not config.MOTOR_TEST_API_ENABLED:
         return None

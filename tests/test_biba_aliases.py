@@ -16,3 +16,21 @@ def test_bbupdate_force_recreates_container() -> None:
 
     assert "alias bbupdate=" in aliases
     assert "_biba_compose up -d --force-recreate" in aliases
+
+
+def test_update_script_loads_robot_env_file_when_present() -> None:
+    script = Path("scripts/update.sh").read_text(encoding="utf-8")
+
+    assert 'BIBA_ENV_FILE="${BIBA_ENV_FILE:-/etc/default/biba-controller}"' in script
+    assert '--env-file "$BIBA_ENV_FILE"' in script
+    assert "_biba_compose pull" in script
+    assert "_biba_compose up -d" in script
+
+
+def test_diagnostics_script_loads_robot_env_file_when_present() -> None:
+    script = Path("scripts/diagnostics.sh").read_text(encoding="utf-8")
+
+    assert 'BIBA_ENV_FILE="${BIBA_ENV_FILE:-/etc/default/biba-controller}"' in script
+    assert '--env-file "$BIBA_ENV_FILE"' in script
+    assert "_biba_compose ps" in script
+    assert "_biba_compose logs --tail 30" in script

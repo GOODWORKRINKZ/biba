@@ -3,10 +3,23 @@
 set -euo pipefail
 
 BIBA_DIR="${BIBA_DIR:-$HOME/biba}"
+BIBA_ENV_FILE="${BIBA_ENV_FILE:-/etc/default/biba-controller}"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 NC='\033[0m'
+
+_biba_compose() {
+    local env_args=()
+
+    if [ -f "$BIBA_ENV_FILE" ]; then
+        env_args+=(--env-file "$BIBA_ENV_FILE")
+    elif [ -f "$BIBA_DIR/.env" ]; then
+        env_args+=(--env-file "$BIBA_DIR/.env")
+    fi
+
+    docker compose "${env_args[@]}" -f "$BIBA_DIR/docker-compose.yml" "$@"
+}
 
 section() {
     echo
@@ -18,13 +31,13 @@ docker --version 2>/dev/null || echo "Docker not installed"
 docker compose version 2>/dev/null || echo "Compose not available"
 
 section "Container Status"
-docker compose -f "$BIBA_DIR/docker-compose.yml" ps 2>/dev/null || echo "Compose stack not running"
+_biba_compose ps 2>/dev/null || echo "Compose stack not running"
 
 section "Container Images"
-docker compose -f "$BIBA_DIR/docker-compose.yml" images 2>/dev/null || true
+_biba_compose images 2>/dev/null || true
 
 section "Recent Logs (last 30 lines)"
-docker compose -f "$BIBA_DIR/docker-compose.yml" logs --tail 30 2>/dev/null || echo "No logs available"
+_biba_compose logs --tail 30 2>/dev/null || echo "No logs available"
 
 section "Host Info"
 echo -e "${GREEN}Hostname:${NC} $(hostname)"

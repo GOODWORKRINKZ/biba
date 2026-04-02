@@ -8,12 +8,12 @@
 | ELRS RX (Pi <- TX приемника) | 15 | 10 |
 | I2C SDA (ADS1115, опционально) | 2 | 3 |
 | I2C SCL (ADS1115, опционально) | 3 | 5 |
-| Left BTS7960 RPWM | 18 | 12 |
-| Left BTS7960 LPWM | 13 | 33 |
+| Left BTS7960 RPWM | 12 | 32 |
+| Left BTS7960 LPWM | 18 | 12 |
 | Left BTS7960 REN | 23 | 16 |
 | Left BTS7960 LEN | 24 | 18 |
-| Right BTS7960 RPWM | 12 | 32 |
-| Right BTS7960 LPWM | 19 | 35 |
+| Right BTS7960 RPWM | 19 | 35 |
+| Right BTS7960 LPWM | 13 | 33 |
 | Right BTS7960 REN | 20 | 38 |
 | Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
