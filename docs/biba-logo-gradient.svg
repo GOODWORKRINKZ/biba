@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
-  <title id="title">BiBa gradient ASCII logo</title>
-  <desc id="desc">Terminal-style BiBa ASCII logo with a neon cyan, magenta, and violet gradient on a transparent background.</desc>
+  <title id="title">БиБа gradient ASCII logo</title>
+  <desc id="desc">Terminal-style framed БиБа logo with centered spacing, a neon cyan, magenta, and violet gradient, and the name drawn in Cyrillic ASCII-style block lettering on a transparent background.</desc>
   <defs>
     <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#48e7ff"/>
@@ -17,9 +17,10 @@
   </defs>
 
   <text
-    x="54"
+    x="600"
     y="68"
     xml:space="preserve"
+    text-anchor="middle"
     fill="url(#textGradient)"
     stroke="#16091f"
     stroke-opacity="0.36"
@@ -30,15 +31,13 @@
     font-size="28"
     font-weight="700"
   >
-    <tspan x="54" dy="0">╔═══════════════════════════════════════════════════════╗</tspan>
-    <tspan x="54" dy="30">║                                                       ║</tspan>
-    <tspan x="54" dy="30">║  ██████╗  ██╗ ██████╗   █████╗                        ║</tspan>
-    <tspan x="54" dy="30">║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██╗                       ║</tspan>
-    <tspan x="54" dy="30">║  ██████╔╝ ██║ ██████╔╝ ███████║                       ║</tspan>
-    <tspan x="54" dy="30">║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██║                       ║</tspan>
-    <tspan x="54" dy="30">║  ██████╔╝ ██║ ██████╔╝ ██║  ██║                       ║</tspan>
-    <tspan x="54" dy="30">║  ╚═════╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝                       ║</tspan>
-    <tspan x="54" dy="30">║                                                       ║</tspan>
-    <tspan x="54" dy="30">╚═══════════════════════════════════════════════════════╝</tspan>
+    <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+    <tspan x="600" dy="30">║  ███████╗  ██╗   ███╗  ███████╗  █████╗     ║</tspan>
+    <tspan x="600" dy="30">║  ██╔════╝  ██║  ████║  ██╔════╝ ██╔══██╗    ║</tspan>
+    <tspan x="600" dy="30">║  ██████╗   ██║ ██╔██║  ██████╗  ███████║    ║</tspan>
+    <tspan x="600" dy="30">║  ██╔══██╗  ██║██╔╝██║  ██╔══██╗ ██╔══██║    ║</tspan>
+    <tspan x="600" dy="30">║  ██████╔╝  ████╔╝ ██║  ██████╔╝ ██║  ██║    ║</tspan>
+    <tspan x="600" dy="30">║  ╚═════╝   ╚═══╝  ╚═╝  ╚═════╝  ╚═╝  ╚═╝    ║</tspan>
+    <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
   </text>
 </svg>
