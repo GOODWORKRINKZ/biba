@@ -3,6 +3,19 @@
 [![Build All](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-All.yml/badge.svg?branch=main)](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-All.yml)
 [![Build Controller Image](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-Controller-Image.yml/badge.svg?branch=main)](https://github.com/GOODWORKRINKZ/biba/actions/workflows/G-Build-Controller-Image.yml)
 
+```text
+╔═══════════════════════════════════════════════════════╗
+║                                                       ║
+║  ██████╗  ██╗ ██████╗   █████╗                        ║
+║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██╗                       ║
+║  ██████╔╝ ██║ ██████╔╝ ███████║                       ║
+║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██║                       ║
+║  ██████╔╝ ██║ ██████╔╝ ██║  ██║                       ║
+║  ╚═════╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝                       ║
+║                                                       ║
+╚═══════════════════════════════════════════════════════╝
+```
+
 BiBa — это колесная робот-платформа на базе Raspberry Pi Zero 2W с управлением по ExpressLRS/CRSF, телеметрией от Daly 6S BMS по BLE или USB-UART, двухканальными драйверами BTS7960 и звуковой индикацией через моторы.
 
 ## Состав железа
