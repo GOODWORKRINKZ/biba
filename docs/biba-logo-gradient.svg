@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">BiBa gradient ASCII logo</title>
+  <desc id="desc">Terminal-style BiBa ASCII logo with a neon cyan, magenta, and violet gradient on a dark background.</desc>
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07111f"/>
+      <stop offset="55%" stop-color="#130a24"/>
+      <stop offset="100%" stop-color="#170814"/>
+    </linearGradient>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#48e7ff"/>
+      <stop offset="52%" stop-color="#ff5fd2"/>
+      <stop offset="100%" stop-color="#8f6bff"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-25%" width="140%" height="150%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="ambientBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="40"/>
+    </filter>
+  </defs>
+
+  <rect x="12" y="12" width="1176" height="336" rx="26" fill="url(#bgGradient)" stroke="#314161" stroke-opacity="0.7"/>
+  <ellipse cx="230" cy="118" rx="170" ry="88" fill="#2ce9ff" fill-opacity="0.18" filter="url(#ambientBlur)"/>
+  <ellipse cx="962" cy="252" rx="220" ry="108" fill="#b55dff" fill-opacity="0.15" filter="url(#ambientBlur)"/>
+  <ellipse cx="662" cy="186" rx="210" ry="90" fill="#ff4eb8" fill-opacity="0.10" filter="url(#ambientBlur)"/>
+
+  <text
+    x="54"
+    y="68"
+    xml:space="preserve"
+    fill="url(#textGradient)"
+    filter="url(#glow)"
+    font-family="DejaVu Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    font-size="28"
+    font-weight="700"
+  >
+    <tspan x="54" dy="0">╔═══════════════════════════════════════════════════════╗</tspan>
+    <tspan x="54" dy="30">║                                                       ║</tspan>
+    <tspan x="54" dy="30">║  ██████╗  ██╗ ██████╗   █████╗                        ║</tspan>
+    <tspan x="54" dy="30">║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██╗                       ║</tspan>
+    <tspan x="54" dy="30">║  ██████╔╝ ██║ ██████╔╝ ███████║                       ║</tspan>
+    <tspan x="54" dy="30">║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██║                       ║</tspan>
+    <tspan x="54" dy="30">║  ██████╔╝ ██║ ██████╔╝ ██║  ██║                       ║</tspan>
+    <tspan x="54" dy="30">║  ╚═════╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝                       ║</tspan>
+    <tspan x="54" dy="30">║                                                       ║</tspan>
+    <tspan x="54" dy="30">╚═══════════════════════════════════════════════════════╝</tspan>
+  </text>
+</svg>
