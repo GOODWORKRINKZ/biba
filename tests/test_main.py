@@ -7,6 +7,7 @@ import logging
 import pytest
 
 from bms.daly import BatteryState
+from motors.assisted_drive import AssistedDriveResult, DriveMode
 from motors.current_control import MotorCurrentSample
 from motors.current_sense import NullMotorCurrentReader
 
@@ -210,6 +211,96 @@ def test_get_channel_returns_zero_when_index_is_missing() -> None:
 
     assert main._get_channel([0.4, -0.2], 1) == -0.2
     assert main._get_channel([0.4, -0.2], 3) == 0.0
+
+
+def test_format_assisted_drive_log_suffix_includes_assist_metrics() -> None:
+    main = importlib.import_module("main")
+
+    suffix = main._format_assisted_drive_log_suffix(
+        drive_mode=DriveMode.STABILIZED,
+        assist_input=0.15,
+        assist_output=0.22,
+        left_duty=-0.011,
+        right_duty=0.012,
+        assisted_result=AssistedDriveResult(
+            throttle=0.0,
+            steering=0.22,
+            mode=DriveMode.STABILIZED,
+            imu_healthy=True,
+            desired_yaw_rate_dps=0.0,
+            measured_yaw_rate_dps=-6.5,
+            heading_error_deg=0.0,
+            heading_reference_deg=None,
+            steering_correction=0.22,
+            gyro_bias_dps=-0.42,
+        ),
+    )
+
+    assert "mode=stabilized" in suffix
+    assert "assist_in=0.15" in suffix
+    assert "assist_out=0.22" in suffix
+    assert "lm=-0.011" in suffix
+    assert "rm=0.012" in suffix
+    assert "imu_ok=True" in suffix
+    assert "yaw_des=0.0" in suffix
+    assert "yaw_meas=-6.5" in suffix
+    assert "heading_err=0.0" in suffix
+    assert "heading_ref=na" in suffix
+    assert "bias=-0.42" in suffix
+
+
+def test_should_log_neutral_assist_activity_requires_nonmanual_neutral_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_STEERING_DEADBAND", 0.05)
+
+    assert main._should_log_neutral_assist_activity(
+        armed=True,
+        drive_mode=DriveMode.STABILIZED,
+        raw_throttle=0.0,
+        raw_steering=0.0,
+        steering_output=0.08,
+        left_duty=0.0,
+        right_duty=0.0,
+    ) is True
+    assert main._should_log_neutral_assist_activity(
+        armed=True,
+        drive_mode=DriveMode.STABILIZED,
+        raw_throttle=0.0,
+        raw_steering=0.0,
+        steering_output=0.0,
+        left_duty=-0.08,
+        right_duty=0.08,
+    ) is True
+    assert main._should_log_neutral_assist_activity(
+        armed=True,
+        drive_mode=DriveMode.MANUAL,
+        raw_throttle=0.0,
+        raw_steering=0.0,
+        steering_output=0.08,
+        left_duty=0.0,
+        right_duty=0.0,
+    ) is False
+    assert main._should_log_neutral_assist_activity(
+        armed=True,
+        drive_mode=DriveMode.STABILIZED,
+        raw_throttle=0.06,
+        raw_steering=0.0,
+        steering_output=0.08,
+        left_duty=0.0,
+        right_duty=0.0,
+    ) is False
+    assert main._should_log_neutral_assist_activity(
+        armed=True,
+        drive_mode=DriveMode.STABILIZED,
+        raw_throttle=0.0,
+        raw_steering=0.06,
+        steering_output=0.08,
+        left_duty=0.0,
+        right_duty=0.0,
+    ) is False
 
 
 def test_create_buzzer_preserves_left_and_right_motor_groups(monkeypatch: pytest.MonkeyPatch) -> None:

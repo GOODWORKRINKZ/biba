@@ -27,7 +27,7 @@ from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry, build_biba_system_metrics
 from imu import IMUSample, NullIMUReader
 from imu.factory import open_imu_reader
-from motors.assisted_drive import AssistedDriveConfig, AssistedDriveController, DriveMode
+from motors.assisted_drive import AssistedDriveConfig, AssistedDriveController, AssistedDriveResult, DriveMode
 from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLimitResult, apply_motor_limits
 from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -39,6 +39,7 @@ LOGGER = logging.getLogger("biba-controller")
 RUNNING = True
 _BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
 _IMU_ASSIST_ERROR_LOG_INTERVAL_S = 5.0
+_NEUTRAL_ASSIST_ACTIVITY_LOG_INTERVAL_S = 0.5
 _BATTERY_DIRECTION_MASK = 0b00011
 _BATTERY_STATUS_ARMED = 0b00100
 _BATTERY_STATUS_MUTED = 0b01000
@@ -1090,6 +1091,91 @@ def _invalid_imu_sample(timestamp_monotonic_s: float) -> IMUSample:
     )
 
 
+def _format_assisted_drive_metric(value: float | None, *, digits: int) -> str:
+    if value is None:
+        return "na"
+    return f"{value:.{digits}f}"
+
+
+def _format_assisted_drive_log_suffix(
+    *,
+    drive_mode: DriveMode | str,
+    assist_input: float,
+    assisted_result: AssistedDriveResult | None,
+    assist_output: float | None = None,
+    left_duty: float | None = None,
+    right_duty: float | None = None,
+) -> str:
+    if not isinstance(drive_mode, DriveMode):
+        drive_mode = DriveMode(drive_mode)
+
+    parts = [
+        f"mode={drive_mode.value}",
+        f"assist_in={assist_input:.2f}",
+    ]
+    if assist_output is not None:
+        parts.append(f"assist_out={assist_output:.2f}")
+    if left_duty is not None and right_duty is not None:
+        parts.append(f"lm={left_duty:.3f}")
+        parts.append(f"rm={right_duty:.3f}")
+
+    if assisted_result is None:
+        parts.extend(
+            [
+                "imu_ok=False",
+                "yaw_des=na",
+                "yaw_meas=na",
+                "heading_err=na",
+                "heading_ref=na",
+                "bias=na",
+            ]
+        )
+    else:
+        desired_yaw_rate_dps = getattr(assisted_result, "desired_yaw_rate_dps", None)
+        measured_yaw_rate_dps = getattr(assisted_result, "measured_yaw_rate_dps", None)
+        heading_error_deg = getattr(assisted_result, "heading_error_deg", None)
+        heading_reference_deg = getattr(assisted_result, "heading_reference_deg", None)
+        gyro_bias_dps = getattr(assisted_result, "gyro_bias_dps", None)
+        parts.extend(
+            [
+                f"imu_ok={getattr(assisted_result, 'imu_healthy', False)}",
+                f"yaw_des={_format_assisted_drive_metric(desired_yaw_rate_dps, digits=1)}",
+                f"yaw_meas={_format_assisted_drive_metric(measured_yaw_rate_dps, digits=1)}",
+                f"heading_err={_format_assisted_drive_metric(heading_error_deg, digits=1)}",
+                f"heading_ref={_format_assisted_drive_metric(heading_reference_deg, digits=1)}",
+                f"bias={_format_assisted_drive_metric(gyro_bias_dps, digits=2)}",
+            ]
+        )
+
+    return " " + " ".join(parts)
+
+
+def _should_log_neutral_assist_activity(
+    *,
+    armed: bool,
+    drive_mode: DriveMode | str,
+    raw_throttle: float,
+    raw_steering: float,
+    steering_output: float,
+    left_duty: float,
+    right_duty: float,
+) -> bool:
+    if not isinstance(drive_mode, DriveMode):
+        drive_mode = DriveMode(drive_mode)
+
+    if not armed or drive_mode == DriveMode.MANUAL:
+        return False
+    if abs(raw_throttle) > config.MOTOR_DEADBAND:
+        return False
+    if abs(raw_steering) > config.DRIVE_MODE_STEERING_DEADBAND:
+        return False
+
+    return any(
+        abs(value) > config.MOTOR_DEADBAND
+        for value in (steering_output, left_duty, right_duty)
+    )
+
+
 def main() -> int:
     """Run the BiBa control loop until a shutdown signal is received."""
     _setup_logging()
@@ -1172,6 +1258,7 @@ def main() -> int:
     trace_last_log_at_s: float | None = None
     _last_debug_log = 0.0
     last_imu_assist_error_at: float | None = None
+    last_neutral_assist_log_at: float | None = None
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
     throttle_filter = _create_throttle_filter()
     voice_selector = VoiceSelector(config.VOICE_SELECTION_MODE)
@@ -1324,6 +1411,7 @@ def main() -> int:
                 drive_mode = _get_drive_mode(channels)
                 assist_steering = steering if drive_mode == DriveMode.MANUAL.value else raw_steering
                 imu_sample = _invalid_imu_sample(loop_started_at)
+                assisted_result: AssistedDriveResult | None = None
                 try:
                     imu_sample = imu_reader.read(timestamp_monotonic_s=loop_started_at)
                     assisted_result = assisted_drive.update(
@@ -1440,6 +1528,31 @@ def main() -> int:
                         trimmed_right = right_duty
                 last_drive_update_at = loop_started_at
 
+                if _should_log_neutral_assist_activity(
+                    armed=armed,
+                    drive_mode=drive_mode,
+                    raw_throttle=raw_throttle,
+                    raw_steering=raw_steering,
+                    steering_output=steering,
+                    left_duty=left_duty,
+                    right_duty=right_duty,
+                ) and (
+                    last_neutral_assist_log_at is None
+                    or loop_started_at - last_neutral_assist_log_at >= _NEUTRAL_ASSIST_ACTIVITY_LOG_INTERVAL_S
+                ):
+                    LOGGER.warning(
+                        "Neutral assist activity%s",
+                        _format_assisted_drive_log_suffix(
+                            drive_mode=drive_mode,
+                            assist_input=assist_steering,
+                            assisted_result=assisted_result,
+                            assist_output=steering,
+                            left_duty=left_duty,
+                            right_duty=right_duty,
+                        ),
+                    )
+                    last_neutral_assist_log_at = loop_started_at
+
                 if config.MOTOR_CURRENT_TRACE_ENABLED:
                     trace_should_log, trace_last_activity_at_s = _update_motor_current_trace_window(
                         armed=armed,
@@ -1500,10 +1613,17 @@ def main() -> int:
                 if loop_started_at - _last_debug_log >= 1.0:
                     _last_debug_log = loop_started_at
                     ch_vals = [f"{v:+.2f}" for v in channels[:6]]
+                    assist_debug_suffix = ""
+                    if drive_mode != DriveMode.MANUAL:
+                        assist_debug_suffix = _format_assisted_drive_log_suffix(
+                            drive_mode=drive_mode,
+                            assist_input=assist_steering,
+                            assisted_result=assisted_result,
+                        )
                     LOGGER.info(
-                        "CH[%s] raw_thr=%.2f thr=%.2f str=%.2f lm=%.3f rm=%.3f arm_ch=%.2f armed=%s",
+                        "CH[%s] raw_thr=%.2f thr=%.2f str=%.2f lm=%.3f rm=%.3f arm_ch=%.2f armed=%s%s",
                         ",".join(ch_vals), raw_throttle, throttle, steering,
-                        left_duty, right_duty, arm_ch, armed,
+                        left_duty, right_duty, arm_ch, armed, assist_debug_suffix,
                     )
 
                 # Manual beacon toggle via RC channel
