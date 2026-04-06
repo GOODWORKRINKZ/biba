@@ -1311,7 +1311,6 @@ def main() -> int:
                     throttle = throttle_filter.update(raw_throttle)
                 steering = _get_channel(channels, config.CH_STEERING)
                 speed_mode_scale = _get_speed_mode_scale(channels)
-                throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, steering, speed_mode_scale)
                 drive_mode = _get_drive_mode(channels)
                 imu_sample = _invalid_imu_sample(loop_started_at)
                 try:
@@ -1338,6 +1337,7 @@ def main() -> int:
                     last_imu_assist_error_at = None
                     throttle = assisted_result.throttle
                     steering = assisted_result.steering
+                throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, steering, speed_mode_scale)
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
                     abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
