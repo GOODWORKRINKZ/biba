@@ -556,6 +556,13 @@ def _scale_drive_inputs_for_speed_mode(throttle: float, steering: float, speed_m
     return (scaled_left + scaled_right) / 2.0, (scaled_left - scaled_right) / 2.0
 
 
+def _limit_drive_output_for_speed_mode(throttle: float, steering: float, speed_mode_scale: float) -> tuple[float, float]:
+    limited_throttle = max(-speed_mode_scale, min(speed_mode_scale, throttle))
+    steering_limit = max(0.0, speed_mode_scale - abs(limited_throttle))
+    limited_steering = max(-steering_limit, min(steering_limit, steering))
+    return limited_throttle, limited_steering
+
+
 def _battery_is_low(state: BatteryState) -> bool:
     if state.cells and state.min_cell > 0:
         return state.min_cell <= config.LOW_CELL_VOLTAGE
@@ -1311,6 +1318,7 @@ def main() -> int:
                     throttle = throttle_filter.update(raw_throttle)
                 steering = _get_channel(channels, config.CH_STEERING)
                 speed_mode_scale = _get_speed_mode_scale(channels)
+                throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, steering, speed_mode_scale)
                 drive_mode = _get_drive_mode(channels)
                 imu_sample = _invalid_imu_sample(loop_started_at)
                 try:
@@ -1337,7 +1345,7 @@ def main() -> int:
                     last_imu_assist_error_at = None
                     throttle = assisted_result.throttle
                     steering = assisted_result.steering
-                throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, steering, speed_mode_scale)
+                throttle, steering = _limit_drive_output_for_speed_mode(throttle, steering, speed_mode_scale)
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
                     abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND

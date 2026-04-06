@@ -688,6 +688,16 @@ def test_scale_drive_inputs_applies_speed_limit_after_arcade_mix() -> None:
     assert throttle - steering == pytest.approx(0.1)
 
 
+def test_limit_drive_output_caps_assisted_steering_within_speed_mode_headroom() -> None:
+    main = importlib.import_module("main")
+
+    throttle, steering = main._limit_drive_output_for_speed_mode(0.2, 0.9, 1.0 / 3.0)
+
+    assert throttle == pytest.approx(0.2)
+    assert throttle + steering == pytest.approx(1.0 / 3.0)
+    assert throttle - steering == pytest.approx(0.06666666666666668)
+
+
 def test_main_scales_drive_input_from_speed_mode_channel(monkeypatch: pytest.MonkeyPatch) -> None:
     main = importlib.import_module("main")
     mix_calls: list[tuple[float, float, float]] = []
@@ -1047,10 +1057,10 @@ def test_main_routes_drive_through_assisted_controller(monkeypatch: pytest.Monke
     assert assist_calls[0]["mode"] == "heading_hold"
     assert assist_calls[0]["armed"] is True
     assert imu_read_calls[0] is not None
-    assert assist_calls[0]["throttle"] == pytest.approx(0.6)
-    assert assist_calls[0]["steering"] == pytest.approx(0.2)
+    assert assist_calls[0]["throttle"] == pytest.approx(0.4)
+    assert assist_calls[0]["steering"] == pytest.approx(0.13333333333333333)
     assert mix_calls[0][0] == pytest.approx(0.4)
-    assert mix_calls[0][1] == pytest.approx(0.16666666666666666)
+    assert mix_calls[0][1] == pytest.approx(0.25)
 
 
 def test_main_scales_assisted_steering_output_from_speed_mode_channel(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1241,7 +1251,7 @@ def test_main_scales_assisted_steering_output_from_speed_mode_channel(monkeypatc
 
     assert main.main() == 0
     assert mix_calls[0][0] == pytest.approx(0.0)
-    assert mix_calls[0][1] == pytest.approx(0.3)
+    assert mix_calls[0][1] == pytest.approx(1.0 / 3.0)
 
 
 def test_main_falls_back_to_pass_through_when_imu_read_raises(monkeypatch: pytest.MonkeyPatch) -> None:
