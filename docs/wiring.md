@@ -69,19 +69,19 @@ RIGHT_MOTOR_LPWM=13
 
 Текущая реализация использует по два ADS1115-канала на мотор: отдельный sense-вход для прямого и обратного направления. Активный канал выбирается по знаку duty в рантайме.
 
-## Подключение BMI160/BMI166-compatible IMU
+## Подключение IMU для stabilized / heading-hold
 
-Новый stabilized / heading-hold режим использует IMU на том же `I2C-1`, что и ADS1115. Датчик можно вешать на общие `SDA/SCL`, если его адрес не конфликтует с `0x48` ADS1115.
+Новый stabilized / heading-hold режим использует IMU на том же `I2C-1`, что и ADS1115. Контроллер умеет autodetect для двух семейств датчиков: BMI160/BMI166 и ST LSM6DS3-class. Датчик можно вешать на общие `SDA/SCL`, если его адрес не конфликтует с `0x48` ADS1115.
 
 Рекомендуемая схема подключения:
 
 | Сигнал | Куда подключать |
 | --- | --- |
-| BMI160/BMI166 VDD | 3.3V Raspberry Pi |
-| BMI160/BMI166 GND | GND Raspberry Pi |
-| BMI160/BMI166 SDA | GPIO 2 / pin 3 |
-| BMI160/BMI166 SCL | GPIO 3 / pin 5 |
-| BMI160/BMI166 SDO/ADDR | По схеме модуля; обычно `0x68` или `0x69` |
+| IMU VDD | 3.3V Raspberry Pi |
+| IMU GND | GND Raspberry Pi |
+| IMU SDA | GPIO 2 / pin 3 |
+| IMU SCL | GPIO 3 / pin 5 |
+| IMU ADDR/SDO/SA0 | По схеме модуля; BMI обычно `0x68/0x69`, ST LSM6DS3-class обычно `0x6A/0x6B` |
 
 Минимальный env-набор для включения IMU:
 
@@ -95,6 +95,8 @@ IMU_STALE_TIMEOUT_S=0.2
 IMU_GYRO_BIAS_CALIBRATION_S=1.0
 IMU_GYRO_Z_SIGN=1.0
 ```
+
+На текущем роботе probing показал ST LSM6DS3-class модуль на `0x6A`, так что для него нужно переопределить `IMU_I2C_ADDRESS=106`.
 
 Если IMU установлена развернутой по yaw-оси, поменяйте `IMU_GYRO_Z_SIGN` на `-1.0` вместо перепайки.
 
@@ -222,4 +224,4 @@ sudo i2cdetect -y 1
 ```
 
 Для ADS1115 по умолчанию ожидается адрес `0x48`, поэтому в выводе `i2cdetect` обычно должен появиться `48`.
-Для BMI160/BMI166-compatible IMU обычно ожидается `0x68` или `0x69`, так что в таблице `i2cdetect` должен появиться ещё один адрес рядом с ADS1115.
+Для BMI160/BMI166-compatible IMU обычно ожидается `0x68` или `0x69`, для ST LSM6DS3-class чаще `0x6A` или `0x6B`, так что в таблице `i2cdetect` должен появиться ещё один адрес рядом с ADS1115.

@@ -127,10 +127,10 @@ bash ~/biba/scripts/diagnostics.sh
 | `CH_BEACON` | `7` | `CH8`; канал тумблера для ручного включения маяка |
 | `CH_MUTE` | `9` | `CH10`; канал мьюта обычных звуков; SOS не приглушается |
 | `CH_TRIM` | `8` | `CH9`; live-источник trim в режиме калибровки прямолинейности |
-| `IMU_ENABLED` | `0` | Включить BMI160/BMI166-compatible IMU backend на I2C |
+| `IMU_ENABLED` | `0` | Включить autodetect IMU backend на I2C: BMI160/BMI166 или ST LSM6DS3-class |
 | `IMU_I2C_BUS` | `1` | Номер Linux I2C bus для IMU |
-| `IMU_I2C_ADDRESS` | `104` | Адрес IMU на I2C (`0x68`) |
-| `IMU_EXPECTED_CHIP_ID` | `209` | Ожидаемый chip-id BMI (`0xD1`) |
+| `IMU_I2C_ADDRESS` | `104` | Адрес IMU на I2C; для BMI обычно `0x68/0x69`, для ST LSM6DS3-class часто `0x6A/0x6B` |
+| `IMU_EXPECTED_CHIP_ID` | `209` | Ожидаемый chip-id BMI (`0xD1`); используется только на BMI-пути autodetect |
 | `IMU_SAMPLE_RATE_HZ` | `100.0` | Частота чтения IMU |
 | `IMU_STALE_TIMEOUT_S` | `0.2` | После какого возраста sample assist отключается в fallback |
 | `IMU_GYRO_BIAS_CALIBRATION_S` | `1.0` | Длительность bias-калибровки гиры в разоружённом состоянии |
@@ -202,6 +202,8 @@ MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
 ```
 
 Если робот уже запускался со старым `.env`, обновите каналы вручную перед первым стартом новой прошивки: `CH_DRIVE_MODE=6` это передаточный `CH7`, `CH_BEACON=7` это `CH8`, а `CH_MUTE=9` перенесен на `CH10`. Старое значение `CH_MUTE=6` конфликтует с новым селектором drive mode.
+
+Для текущего робота с единственным IMU на шине `i2c-1` обнаружен ST LSM6DS3-class модуль на адресе `0x6A`, поэтому в robot-side override нужно выставить `IMU_ENABLED=1` и `IMU_I2C_ADDRESS=106`. Значение `IMU_EXPECTED_CHIP_ID=209` при этом можно не трогать: оно используется только если autodetect находит BMI160/BMI166.
 
 Для текущего робота c проводкой `LEFT 12/18` и `RIGHT 19/13` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. В этой раскладке у левого мотора обе PWM-линии сидят на hardware PWM channel 0, а у правого мотора обе PWM-линии сидят на hardware PWM channel 1, поэтому для движения нужен software PWM.
 

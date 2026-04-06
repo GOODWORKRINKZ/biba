@@ -26,7 +26,7 @@ from buzzer.voice_selector import VoiceSelector
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry, build_biba_system_metrics
 from imu import IMUSample, NullIMUReader
-from imu.bmi160 import open_bmi160_reader
+from imu.factory import open_imu_reader
 from motors.assisted_drive import AssistedDriveConfig, AssistedDriveController, DriveMode
 from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLimitResult, apply_motor_limits
 from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
@@ -1027,15 +1027,16 @@ def _create_imu_reader():
         return NullIMUReader()
 
     try:
-        reader = open_bmi160_reader(
+        reader = open_imu_reader(
             bus_index=config.IMU_I2C_BUS,
             address=config.IMU_I2C_ADDRESS,
-            expected_chip_id=config.IMU_EXPECTED_CHIP_ID,
+            expected_bmi_chip_id=config.IMU_EXPECTED_CHIP_ID,
             sample_rate_hz=config.IMU_SAMPLE_RATE_HZ,
             gyro_z_sign=config.IMU_GYRO_Z_SIGN,
         )
         LOGGER.info(
-            "IMU initialized: bus=%s address=0x%02X sample_rate_hz=%.1f gyro_z_sign=%.2f",
+            "IMU initialized: backend=%s bus=%s address=0x%02X sample_rate_hz=%.1f gyro_z_sign=%.2f",
+            type(reader).__name__,
             config.IMU_I2C_BUS,
             config.IMU_I2C_ADDRESS,
             config.IMU_SAMPLE_RATE_HZ,
@@ -1043,7 +1044,7 @@ def _create_imu_reader():
         )
         return reader
     except Exception as exc:
-        LOGGER.warning("IMU disabled: failed to initialize BMI160 reader: %s", exc)
+        LOGGER.warning("IMU disabled: failed to initialize IMU reader: %s", exc)
         return NullIMUReader()
 
 

@@ -124,8 +124,8 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `SPEED_MODE_SLOW_SCALE=0.3333333333333333` — коэффициент для режима `1`
 - `SPEED_MODE_MEDIUM_SCALE=0.6666666666666666` — коэффициент для режима `2`
 - `SPEED_MODE_FAST_SCALE=1.0` — коэффициент для режима `3`
-- `IMU_ENABLED=0|1` — включает BMI160/BMI166-compatible IMU backend на I2C
-- `IMU_I2C_BUS=1`, `IMU_I2C_ADDRESS=104`, `IMU_EXPECTED_CHIP_ID=209` — параметры подключения IMU
+- `IMU_ENABLED=0|1` — включает autodetect IMU backend на I2C: BMI160/BMI166 или ST LSM6DS3-class
+- `IMU_I2C_BUS=1`, `IMU_I2C_ADDRESS=104`, `IMU_EXPECTED_CHIP_ID=209` — параметры подключения IMU; на текущем роботе ST-модуль отвечает по `0x6A`, так что для него нужен `IMU_I2C_ADDRESS=106`
 - `IMU_SAMPLE_RATE_HZ=100.0`, `IMU_STALE_TIMEOUT_S=0.2`, `IMU_GYRO_BIAS_CALIBRATION_S=1.0`, `IMU_GYRO_Z_SIGN=1.0` — частота чтения, timeout свежести, длительность bias-калибровки и знак yaw-оси
 - `DRIVE_MODE_STEERING_DEADBAND=0.05`, `DRIVE_MODE_STEERING_LIMIT=1.0`, `DRIVE_MODE_YAW_RATE_MAX_DPS=90.0` — базовые ограничения assist-контура
 - `DRIVE_MODE_YAW_RATE_KP/KI/KD`, `HEADING_HOLD_KP/KI/KD`, `HEADING_HOLD_MAX_RATE_DPS` — tuning-параметры stabilized/heading-hold режима
