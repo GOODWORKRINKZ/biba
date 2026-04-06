@@ -17,6 +17,7 @@ class DriveMode(str, Enum):
 
 @dataclass(frozen=True)
 class AssistedDriveConfig:
+    throttle_deadband: float = 0.05
     steering_deadband: float = 0.05
     steering_limit: float = 1.0
     yaw_rate_max_dps: float = 90.0
@@ -93,6 +94,20 @@ class AssistedDriveController:
         if not imu_sample.valid or imu_sample.gyro_z_dps is None or imu_sample.timestamp_monotonic_s is None:
             return False
         return now_monotonic_s - imu_sample.timestamp_monotonic_s <= self._config.stale_timeout_s
+
+    def _reset_yaw_rate_controller(self) -> None:
+        self._yaw_rate_integral = 0.0
+        self._last_yaw_rate_error = None
+
+    def _reset_heading_controller(self) -> None:
+        self._heading_integral = 0.0
+        self._last_heading_error = None
+
+    def _inputs_are_idle_neutral(self, throttle: float, steering: float) -> bool:
+        return (
+            abs(throttle) < self._config.throttle_deadband
+            and abs(steering) < self._config.steering_deadband
+        )
 
     def _prepare_bias_window(self, now_monotonic_s: float, *, settle_s: float) -> None:
         self._bias_ready_at = now_monotonic_s + max(settle_s, 0.0)
@@ -244,18 +259,36 @@ class AssistedDriveController:
         self._heading_deg = _normalize_angle_deg(self._heading_deg + measured_yaw_rate_dps * max(dt, 0.0))
         heading_error_deg = 0.0
 
+        if self._inputs_are_idle_neutral(throttle, steering):
+            self._reset_yaw_rate_controller()
+            self._reset_heading_controller()
+            if mode == DriveMode.STABILIZED:
+                self._heading_reference_deg = None
+            else:
+                self._heading_reference_deg = self._heading_deg
+            return AssistedDriveResult(
+                throttle=throttle,
+                steering=0.0,
+                mode=mode,
+                imu_healthy=True,
+                desired_yaw_rate_dps=0.0,
+                measured_yaw_rate_dps=measured_yaw_rate_dps,
+                heading_error_deg=0.0,
+                heading_reference_deg=self._heading_reference_deg,
+                steering_correction=0.0,
+                gyro_bias_dps=self._gyro_bias_dps,
+            )
+
         if mode == DriveMode.STABILIZED:
             desired_yaw_rate_dps = 0.0 if abs(steering) < self._config.steering_deadband else steering * self._config.yaw_rate_max_dps
             steering_output = self._yaw_rate_to_steering(desired_yaw_rate_dps, measured_yaw_rate_dps, dt)
             self._heading_reference_deg = None
-            self._heading_integral = 0.0
-            self._last_heading_error = None
+            self._reset_heading_controller()
         else:
             if abs(steering) >= self._config.steering_deadband:
                 desired_yaw_rate_dps = steering * self._config.yaw_rate_max_dps
                 self._heading_reference_deg = self._heading_deg
-                self._heading_integral = 0.0
-                self._last_heading_error = None
+                self._reset_heading_controller()
             else:
                 desired_yaw_rate_dps, heading_error_deg = self._heading_hold_rate(dt)
             steering_output = self._yaw_rate_to_steering(desired_yaw_rate_dps, measured_yaw_rate_dps, dt)

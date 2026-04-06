@@ -1059,6 +1059,7 @@ def _create_imu_reader():
 def _create_assisted_drive_controller() -> AssistedDriveController:
     return AssistedDriveController(
         AssistedDriveConfig(
+            throttle_deadband=config.MOTOR_DEADBAND,
             steering_deadband=config.DRIVE_MODE_STEERING_DEADBAND,
             steering_limit=config.DRIVE_MODE_STEERING_LIMIT,
             yaw_rate_max_dps=config.DRIVE_MODE_YAW_RATE_MAX_DPS,
