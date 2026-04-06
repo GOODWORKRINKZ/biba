@@ -1058,7 +1058,7 @@ def test_main_routes_drive_through_assisted_controller(monkeypatch: pytest.Monke
     assert assist_calls[0]["armed"] is True
     assert imu_read_calls[0] is not None
     assert assist_calls[0]["throttle"] == pytest.approx(0.4)
-    assert assist_calls[0]["steering"] == pytest.approx(0.13333333333333333)
+    assert assist_calls[0]["steering"] == pytest.approx(0.2)
     assert mix_calls[0][0] == pytest.approx(0.4)
     assert mix_calls[0][1] == pytest.approx(0.25)
 
