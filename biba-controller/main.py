@@ -544,8 +544,6 @@ def _get_drive_mode(channels: list[float]) -> str:
     selector = _get_channel(channels, config.CH_DRIVE_MODE)
     if selector < config.DRIVE_MODE_LOW_THRESHOLD:
         return DriveMode.MANUAL.value
-    if selector > config.DRIVE_MODE_HIGH_THRESHOLD:
-        return DriveMode.HEADING_HOLD.value
     return DriveMode.STABILIZED.value
 
 
@@ -1068,10 +1066,6 @@ def _create_assisted_drive_controller() -> AssistedDriveController:
             yaw_rate_kd=config.DRIVE_MODE_YAW_RATE_KD,
             yaw_rate_deadband_dps=config.DRIVE_MODE_YAW_RATE_DEADBAND_DPS,
             yaw_rate_filter_hz=config.DRIVE_MODE_YAW_RATE_FILTER_HZ,
-            heading_hold_kp=config.HEADING_HOLD_KP,
-            heading_hold_ki=config.HEADING_HOLD_KI,
-            heading_hold_kd=config.HEADING_HOLD_KD,
-            heading_hold_max_rate_dps=config.HEADING_HOLD_MAX_RATE_DPS,
             stale_timeout_s=config.IMU_STALE_TIMEOUT_S,
             gyro_bias_calibration_s=config.IMU_GYRO_BIAS_CALIBRATION_S,
         )
@@ -1126,24 +1120,18 @@ def _format_assisted_drive_log_suffix(
                 "imu_ok=False",
                 "yaw_des=na",
                 "yaw_meas=na",
-                "heading_err=na",
-                "heading_ref=na",
                 "bias=na",
             ]
         )
     else:
         desired_yaw_rate_dps = getattr(assisted_result, "desired_yaw_rate_dps", None)
         measured_yaw_rate_dps = getattr(assisted_result, "measured_yaw_rate_dps", None)
-        heading_error_deg = getattr(assisted_result, "heading_error_deg", None)
-        heading_reference_deg = getattr(assisted_result, "heading_reference_deg", None)
         gyro_bias_dps = getattr(assisted_result, "gyro_bias_dps", None)
         parts.extend(
             [
                 f"imu_ok={getattr(assisted_result, 'imu_healthy', False)}",
                 f"yaw_des={_format_assisted_drive_metric(desired_yaw_rate_dps, digits=1)}",
                 f"yaw_meas={_format_assisted_drive_metric(measured_yaw_rate_dps, digits=1)}",
-                f"heading_err={_format_assisted_drive_metric(heading_error_deg, digits=1)}",
-                f"heading_ref={_format_assisted_drive_metric(heading_reference_deg, digits=1)}",
                 f"bias={_format_assisted_drive_metric(gyro_bias_dps, digits=2)}",
             ]
         )
@@ -1410,7 +1398,7 @@ def main() -> int:
                 speed_mode_scale = _get_speed_mode_scale(channels)
                 throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, raw_steering, speed_mode_scale)
                 drive_mode = _get_drive_mode(channels)
-                assist_steering = steering if drive_mode == DriveMode.MANUAL.value else raw_steering
+                assist_steering = steering
                 imu_sample = _invalid_imu_sample(loop_started_at)
                 assisted_result: AssistedDriveResult | None = None
                 try:
@@ -1418,6 +1406,7 @@ def main() -> int:
                     assisted_result = assisted_drive.update(
                         throttle=throttle,
                         steering=assist_steering,
+                        steering_intent=raw_steering,
                         mode=drive_mode,
                         imu_sample=imu_sample,
                         dt=control_dt,

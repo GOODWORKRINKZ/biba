@@ -244,8 +244,6 @@ def test_format_assisted_drive_log_suffix_includes_assist_metrics() -> None:
     assert "imu_ok=True" in suffix
     assert "yaw_des=0.0" in suffix
     assert "yaw_meas=-6.5" in suffix
-    assert "heading_err=0.0" in suffix
-    assert "heading_ref=na" in suffix
     assert "bias=-0.42" in suffix
 
 
@@ -757,7 +755,7 @@ def test_get_drive_mode_uses_configured_thresholds(monkeypatch: pytest.MonkeyPat
 
     assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.9]) == "manual"
     assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) == "stabilized"
-    assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9]) == "heading_hold"
+    assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9]) == "stabilized"
 
 
 def test_get_drive_mode_defaults_to_manual_when_channel_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1145,11 +1143,12 @@ def test_main_routes_drive_through_assisted_controller(monkeypatch: pytest.Monke
     monkeypatch.setattr(main, "RUNNING", True)
 
     assert main.main() == 0
-    assert assist_calls[0]["mode"] == "heading_hold"
+    assert assist_calls[0]["mode"] == "stabilized"
     assert assist_calls[0]["armed"] is True
     assert imu_read_calls[0] is not None
     assert assist_calls[0]["throttle"] == pytest.approx(0.4)
-    assert assist_calls[0]["steering"] == pytest.approx(0.2)
+    assert assist_calls[0]["steering"] == pytest.approx(0.13333333333333333)
+    assert assist_calls[0]["steering_intent"] == pytest.approx(0.2)
     assert mix_calls[0][0] == pytest.approx(0.4)
     assert mix_calls[0][1] == pytest.approx(0.25)
 

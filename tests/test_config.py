@@ -357,10 +357,6 @@ def test_config_defaults_drive_mode_and_imu_settings(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KP", raising=False)
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KI", raising=False)
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KD", raising=False)
-    monkeypatch.delenv("HEADING_HOLD_KP", raising=False)
-    monkeypatch.delenv("HEADING_HOLD_KI", raising=False)
-    monkeypatch.delenv("HEADING_HOLD_KD", raising=False)
-    monkeypatch.delenv("HEADING_HOLD_MAX_RATE_DPS", raising=False)
     monkeypatch.delenv("IMU_ENABLED", raising=False)
     monkeypatch.delenv("IMU_I2C_BUS", raising=False)
     monkeypatch.delenv("IMU_I2C_ADDRESS", raising=False)
@@ -381,10 +377,6 @@ def test_config_defaults_drive_mode_and_imu_settings(monkeypatch: pytest.MonkeyP
     assert module.DRIVE_MODE_YAW_RATE_KP == pytest.approx(0.02)
     assert module.DRIVE_MODE_YAW_RATE_KI == pytest.approx(0.0)
     assert module.DRIVE_MODE_YAW_RATE_KD == pytest.approx(0.0)
-    assert module.HEADING_HOLD_KP == pytest.approx(2.0)
-    assert module.HEADING_HOLD_KI == pytest.approx(0.0)
-    assert module.HEADING_HOLD_KD == pytest.approx(0.0)
-    assert module.HEADING_HOLD_MAX_RATE_DPS == pytest.approx(45.0)
     assert module.IMU_ENABLED is False
     assert module.IMU_I2C_BUS == 1
     assert module.IMU_I2C_ADDRESS == 0x68
@@ -452,8 +444,8 @@ def test_env_example_exposes_drive_mode_and_imu_environment_variables() -> None:
     assert "DRIVE_MODE_STEERING_LIMIT=" in env_example
     assert "DRIVE_MODE_YAW_RATE_MAX_DPS=" in env_example
     assert "DRIVE_MODE_YAW_RATE_KP=" in env_example
-    assert "HEADING_HOLD_KP=" in env_example
-    assert "HEADING_HOLD_MAX_RATE_DPS=" in env_example
+    assert "HEADING_HOLD_KP=" not in env_example
+    assert "HEADING_HOLD_MAX_RATE_DPS=" not in env_example
     assert "IMU_ENABLED=" in env_example
     assert "IMU_I2C_BUS=" in env_example
     assert "IMU_I2C_ADDRESS=" in env_example
@@ -510,8 +502,8 @@ def test_docker_compose_exposes_drive_mode_and_imu_environment_variables() -> No
     assert "DRIVE_MODE_STEERING_LIMIT:" in compose
     assert "DRIVE_MODE_YAW_RATE_MAX_DPS:" in compose
     assert "DRIVE_MODE_YAW_RATE_KP:" in compose
-    assert "HEADING_HOLD_KP:" in compose
-    assert "HEADING_HOLD_MAX_RATE_DPS:" in compose
+    assert "HEADING_HOLD_KP:" not in compose
+    assert "HEADING_HOLD_MAX_RATE_DPS:" not in compose
     assert "IMU_ENABLED:" in compose
     assert "IMU_I2C_BUS:" in compose
     assert "IMU_I2C_ADDRESS:" in compose
