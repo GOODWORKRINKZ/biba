@@ -177,6 +177,55 @@ def test_stabilized_mode_keeps_explicit_turn_in_place_command_at_zero_throttle()
     assert result.steering > 0.5
 
 
+def test_stabilized_mode_does_not_reverse_full_turn_command_when_yaw_overshoots() -> None:
+    controller = AssistedDriveController(
+        AssistedDriveConfig(
+            yaw_rate_kp=0.02,
+            yaw_rate_deadband_dps=0.0,
+            yaw_rate_filter_hz=0.0,
+        )
+    )
+
+    result = controller.update(
+        throttle=0.0,
+        steering=0.98,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=170.0, timestamp_monotonic_s=0.1),
+        dt=0.1,
+        armed=True,
+        now_monotonic_s=0.1,
+    )
+
+    assert result.desired_yaw_rate_dps == pytest.approx(88.2)
+    assert result.steering > 0.0
+
+
+def test_stabilized_mode_skips_neutral_correction_below_minimum_drive_throttle() -> None:
+    controller = AssistedDriveController(
+        AssistedDriveConfig(
+            throttle_deadband=0.05,
+            steering_deadband=0.05,
+            yaw_rate_kp=0.02,
+            yaw_rate_deadband_dps=0.0,
+            yaw_rate_filter_hz=0.0,
+            stabilization_min_throttle=0.1,
+        )
+    )
+
+    result = controller.update(
+        throttle=0.08,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=20.0, timestamp_monotonic_s=0.1),
+        dt=0.1,
+        armed=True,
+        now_monotonic_s=0.1,
+    )
+
+    assert result.measured_yaw_rate_dps == pytest.approx(20.0)
+    assert result.steering == pytest.approx(0.0)
+
+
 def test_heading_hold_latches_reference_and_pushes_back_against_drift() -> None:
     controller = AssistedDriveController(
         AssistedDriveConfig(
