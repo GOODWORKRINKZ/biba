@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | ELRS TX (Pi -> RX приемника) | 14 | 8 |
 | ELRS RX (Pi <- TX приемника) | 15 | 10 |
-| I2C SDA (ADS1115, опционально) | 2 | 3 |
-| I2C SCL (ADS1115, опционально) | 3 | 5 |
+| I2C SDA (ADS1115 / BMI160, опционально) | 2 | 3 |
+| I2C SCL (ADS1115 / BMI160, опционально) | 3 | 5 |
 | Left BTS7960 RPWM | 12 | 32 |
 | Left BTS7960 LPWM | 18 | 12 |
 | Left BTS7960 REN | 23 | 16 |
@@ -68,6 +68,35 @@ RIGHT_MOTOR_LPWM=13
 | Общая земля силовой части | Общая с GND Raspberry Pi и ADS1115 |
 
 Текущая реализация использует по два ADS1115-канала на мотор: отдельный sense-вход для прямого и обратного направления. Активный канал выбирается по знаку duty в рантайме.
+
+## Подключение BMI160/BMI166-compatible IMU
+
+Новый stabilized / heading-hold режим использует IMU на том же `I2C-1`, что и ADS1115. Датчик можно вешать на общие `SDA/SCL`, если его адрес не конфликтует с `0x48` ADS1115.
+
+Рекомендуемая схема подключения:
+
+| Сигнал | Куда подключать |
+| --- | --- |
+| BMI160/BMI166 VDD | 3.3V Raspberry Pi |
+| BMI160/BMI166 GND | GND Raspberry Pi |
+| BMI160/BMI166 SDA | GPIO 2 / pin 3 |
+| BMI160/BMI166 SCL | GPIO 3 / pin 5 |
+| BMI160/BMI166 SDO/ADDR | По схеме модуля; обычно `0x68` или `0x69` |
+
+Минимальный env-набор для включения IMU:
+
+```ini
+IMU_ENABLED=1
+IMU_I2C_BUS=1
+IMU_I2C_ADDRESS=104
+IMU_EXPECTED_CHIP_ID=209
+IMU_SAMPLE_RATE_HZ=100.0
+IMU_STALE_TIMEOUT_S=0.2
+IMU_GYRO_BIAS_CALIBRATION_S=1.0
+IMU_GYRO_Z_SIGN=1.0
+```
+
+Если IMU установлена развернутой по yaw-оси, поменяйте `IMU_GYRO_Z_SIGN` на `-1.0` вместо перепайки.
 
 ## Env-переменные current sense и limiter
 
@@ -193,3 +222,4 @@ sudo i2cdetect -y 1
 ```
 
 Для ADS1115 по умолчанию ожидается адрес `0x48`, поэтому в выводе `i2cdetect` обычно должен появиться `48`.
+Для BMI160/BMI166-compatible IMU обычно ожидается `0x68` или `0x69`, так что в таблице `i2cdetect` должен появиться ещё один адрес рядом с ADS1115.

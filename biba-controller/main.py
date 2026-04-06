@@ -25,6 +25,9 @@ from buzzer.motor_synth import MotorSynth
 from buzzer.voice_selector import VoiceSelector
 from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry, build_biba_system_metrics
+from imu import IMUSample, NullIMUReader
+from imu.bmi160 import open_bmi160_reader
+from motors.assisted_drive import AssistedDriveConfig, AssistedDriveController, DriveMode
 from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLimitResult, apply_motor_limits
 from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
@@ -35,6 +38,7 @@ from system_stats import SystemStats
 LOGGER = logging.getLogger("biba-controller")
 RUNNING = True
 _BATTERY_TELEMETRY_LOG_INTERVAL_S = 5.0
+_IMU_ASSIST_ERROR_LOG_INTERVAL_S = 5.0
 _BATTERY_DIRECTION_MASK = 0b00011
 _BATTERY_STATUS_ARMED = 0b00100
 _BATTERY_STATUS_MUTED = 0b01000
@@ -533,6 +537,17 @@ def _get_speed_mode_scale(channels: list[float]) -> float:
     return config.SPEED_MODE_MEDIUM_SCALE
 
 
+def _get_drive_mode(channels: list[float]) -> str:
+    if len(channels) <= config.CH_DRIVE_MODE:
+        return DriveMode.MANUAL.value
+    selector = _get_channel(channels, config.CH_DRIVE_MODE)
+    if selector < config.DRIVE_MODE_LOW_THRESHOLD:
+        return DriveMode.MANUAL.value
+    if selector > config.DRIVE_MODE_HIGH_THRESHOLD:
+        return DriveMode.HEADING_HOLD.value
+    return DriveMode.STABILIZED.value
+
+
 def _scale_drive_inputs_for_speed_mode(throttle: float, steering: float, speed_mode_scale: float) -> tuple[float, float]:
     mixed_left = max(-1.0, min(1.0, throttle + steering))
     mixed_right = max(-1.0, min(1.0, throttle - steering))
@@ -1007,6 +1022,64 @@ def _create_motor_current_reader():
         return NullMotorCurrentReader()
 
 
+def _create_imu_reader():
+    if not config.IMU_ENABLED:
+        return NullIMUReader()
+
+    try:
+        reader = open_bmi160_reader(
+            bus_index=config.IMU_I2C_BUS,
+            address=config.IMU_I2C_ADDRESS,
+            expected_chip_id=config.IMU_EXPECTED_CHIP_ID,
+            sample_rate_hz=config.IMU_SAMPLE_RATE_HZ,
+            gyro_z_sign=config.IMU_GYRO_Z_SIGN,
+        )
+        LOGGER.info(
+            "IMU initialized: bus=%s address=0x%02X sample_rate_hz=%.1f gyro_z_sign=%.2f",
+            config.IMU_I2C_BUS,
+            config.IMU_I2C_ADDRESS,
+            config.IMU_SAMPLE_RATE_HZ,
+            config.IMU_GYRO_Z_SIGN,
+        )
+        return reader
+    except Exception as exc:
+        LOGGER.warning("IMU disabled: failed to initialize BMI160 reader: %s", exc)
+        return NullIMUReader()
+
+
+def _create_assisted_drive_controller() -> AssistedDriveController:
+    return AssistedDriveController(
+        AssistedDriveConfig(
+            steering_deadband=config.DRIVE_MODE_STEERING_DEADBAND,
+            steering_limit=config.DRIVE_MODE_STEERING_LIMIT,
+            yaw_rate_max_dps=config.DRIVE_MODE_YAW_RATE_MAX_DPS,
+            yaw_rate_kp=config.DRIVE_MODE_YAW_RATE_KP,
+            yaw_rate_ki=config.DRIVE_MODE_YAW_RATE_KI,
+            yaw_rate_kd=config.DRIVE_MODE_YAW_RATE_KD,
+            heading_hold_kp=config.HEADING_HOLD_KP,
+            heading_hold_ki=config.HEADING_HOLD_KI,
+            heading_hold_kd=config.HEADING_HOLD_KD,
+            heading_hold_max_rate_dps=config.HEADING_HOLD_MAX_RATE_DPS,
+            stale_timeout_s=config.IMU_STALE_TIMEOUT_S,
+            gyro_bias_calibration_s=config.IMU_GYRO_BIAS_CALIBRATION_S,
+        )
+    )
+
+
+def _invalid_imu_sample(timestamp_monotonic_s: float) -> IMUSample:
+    return IMUSample(
+        accel_x_g=None,
+        accel_y_g=None,
+        accel_z_g=None,
+        gyro_x_dps=None,
+        gyro_y_dps=None,
+        gyro_z_dps=None,
+        temperature_c=None,
+        timestamp_monotonic_s=timestamp_monotonic_s,
+        valid=False,
+    )
+
+
 def main() -> int:
     """Run the BiBa control loop until a shutdown signal is received."""
     _setup_logging()
@@ -1020,6 +1093,8 @@ def main() -> int:
     bms = _create_bms()
     bms_poller: Optional[BMSPoller] = None
     current_reader = _create_motor_current_reader()
+    imu_reader = _create_imu_reader()
+    assisted_drive = _create_assisted_drive_controller()
     stats = SystemStats()
     pi = _connect_pigpio()
     if pi.connected:
@@ -1086,6 +1161,7 @@ def main() -> int:
     trace_last_activity_at_s: float | None = None
     trace_last_log_at_s: float | None = None
     _last_debug_log = 0.0
+    last_imu_assist_error_at: float | None = None
     loop_period = 1.0 / max(config.MAIN_LOOP_HZ, 1)
     throttle_filter = _create_throttle_filter()
     voice_selector = VoiceSelector(config.VOICE_SELECTION_MODE)
@@ -1227,6 +1303,7 @@ def main() -> int:
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
                 manual_motor_test_active = _motor_test_active(motor_test_executor)
+                control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
 
                 throttle = raw_throttle
                 if throttle_filter is not None:
@@ -1234,6 +1311,32 @@ def main() -> int:
                 steering = _get_channel(channels, config.CH_STEERING)
                 speed_mode_scale = _get_speed_mode_scale(channels)
                 throttle, steering = _scale_drive_inputs_for_speed_mode(throttle, steering, speed_mode_scale)
+                drive_mode = _get_drive_mode(channels)
+                imu_sample = _invalid_imu_sample(loop_started_at)
+                try:
+                    imu_sample = imu_reader.read(timestamp_monotonic_s=loop_started_at)
+                    assisted_result = assisted_drive.update(
+                        throttle=throttle,
+                        steering=steering,
+                        mode=drive_mode,
+                        imu_sample=imu_sample,
+                        dt=control_dt,
+                        armed=armed,
+                        now_monotonic_s=loop_started_at,
+                    )
+                except Exception as exc:
+                    if (
+                        last_imu_assist_error_at is None
+                        or loop_started_at - last_imu_assist_error_at >= _IMU_ASSIST_ERROR_LOG_INTERVAL_S
+                    ):
+                        LOGGER.warning("IMU-assisted drive unavailable, falling back to pass-through steering: %s", exc)
+                        last_imu_assist_error_at = loop_started_at
+                    if hasattr(assisted_drive, "reset"):
+                        assisted_drive.reset()
+                else:
+                    last_imu_assist_error_at = None
+                    throttle = assisted_result.throttle
+                    steering = assisted_result.steering
                 arm_ch = _get_channel(channels, config.CH_ARM)
                 control_active = armed and (
                     abs(throttle) > config.MOTOR_DEADBAND or abs(steering) > config.MOTOR_DEADBAND
@@ -1244,7 +1347,6 @@ def main() -> int:
                     else:
                         arm_sound_hold_until_s = None
                 buzzer.set_control_active(False if manual_motor_test_active else control_active)
-                control_dt = loop_period if last_drive_update_at is None else max(0.0, loop_started_at - last_drive_update_at)
                 battery_state = bms_poller.latest_state if bms_poller else None
                 bms_sample_monotonic_s = getattr(bms_poller, "latest_state_timestamp_s", None) if bms_poller else None
                 requested_left = 0.0
@@ -1530,6 +1632,7 @@ def main() -> int:
         if bms_poller:
             bms_poller.stop()
         current_reader.close()
+        imu_reader.close()
         drive.emergency_stop()
         _shutdown_motor_test_server(motor_test_server)
         if motor_test_server_thread is not None:

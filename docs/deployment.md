@@ -121,11 +121,24 @@ bash ~/biba/scripts/diagnostics.sh
 | `THROTTLE_FILTER_MODE` | `NONE` | Фильтрация газа до wheel-mix; `NONE` отключает, `KALMAN` сглаживает выбросы канала |
 | `THROTTLE_KALMAN_PROCESS_NOISE` | `0.02` | Насколько быстро фильтр принимает изменение реального газа |
 | `THROTTLE_KALMAN_MEASUREMENT_NOISE` | `0.5` | Насколько сильно фильтр подавляет шум и ложные выбросы канала |
+| `CH_DRIVE_MODE` | `6` | `CH7`; трёхпозиционный селектор `manual` / `stabilized` / `heading_hold` |
 | `BEACON_ENABLED` | `1` | Включить звуковой маяк/SOS на роботе |
 | `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
-| `CH_BEACON` | `7` | Канал тумблера для ручного включения маяка |
-| `CH_MUTE` | `6` | Канал мьюта обычных звуков; SOS не приглушается |
+| `CH_BEACON` | `7` | `CH8`; канал тумблера для ручного включения маяка |
+| `CH_MUTE` | `9` | `CH10`; канал мьюта обычных звуков; SOS не приглушается |
 | `CH_TRIM` | `8` | `CH9`; live-источник trim в режиме калибровки прямолинейности |
+| `IMU_ENABLED` | `0` | Включить BMI160/BMI166-compatible IMU backend на I2C |
+| `IMU_I2C_BUS` | `1` | Номер Linux I2C bus для IMU |
+| `IMU_I2C_ADDRESS` | `104` | Адрес IMU на I2C (`0x68`) |
+| `IMU_EXPECTED_CHIP_ID` | `209` | Ожидаемый chip-id BMI (`0xD1`) |
+| `IMU_SAMPLE_RATE_HZ` | `100.0` | Частота чтения IMU |
+| `IMU_STALE_TIMEOUT_S` | `0.2` | После какого возраста sample assist отключается в fallback |
+| `IMU_GYRO_BIAS_CALIBRATION_S` | `1.0` | Длительность bias-калибровки гиры в разоружённом состоянии |
+| `IMU_GYRO_Z_SIGN` | `1.0` | Знак yaw-оси, если IMU установлена зеркально |
+| `DRIVE_MODE_STEERING_DEADBAND` | `0.05` | Deadband steering stick для heading latch |
+| `DRIVE_MODE_STEERING_LIMIT` | `1.0` | Верхний предел steering output assist-контура |
+| `DRIVE_MODE_YAW_RATE_MAX_DPS` | `90.0` | Максимальный целевой yaw-rate для stabilized/heading-hold |
+| `HEADING_HOLD_MAX_RATE_DPS` | `45.0` | Ограничение outer-loop yaw-rate для heading-hold |
 | `MOTOR_TRIM_MAX_EFFECT` | `0.30` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
 | `MOTOR_TRIM_CONFIRM_HOLD_S` | `5.0` | Длительность trim-жеста для входа и подтверждения |
 | `MOTOR_TRIM_SETTINGS_PATH` | `/data/motor-trim.json` | Путь к persistent JSON-файлу сохранённого trim |
@@ -160,14 +173,35 @@ MOTOR_DRIVER_TYPE=BTS7960
 BTS7960_PWM_MODE=SOFTWARE
 BEACON_ENABLED=1
 BEACON_DELAY_S=300
+CH_DRIVE_MODE=6
 CH_BEACON=7
-CH_MUTE=6
+CH_MUTE=9
 CH_TRIM=8
 SOUND_MODE=synth
+IMU_ENABLED=1
+IMU_I2C_BUS=1
+IMU_I2C_ADDRESS=104
+IMU_EXPECTED_CHIP_ID=209
+IMU_SAMPLE_RATE_HZ=100.0
+IMU_STALE_TIMEOUT_S=0.2
+IMU_GYRO_BIAS_CALIBRATION_S=1.0
+IMU_GYRO_Z_SIGN=1.0
+DRIVE_MODE_STEERING_DEADBAND=0.05
+DRIVE_MODE_STEERING_LIMIT=1.0
+DRIVE_MODE_YAW_RATE_MAX_DPS=90.0
+DRIVE_MODE_YAW_RATE_KP=0.02
+DRIVE_MODE_YAW_RATE_KI=0.0
+DRIVE_MODE_YAW_RATE_KD=0.0
+HEADING_HOLD_KP=2.0
+HEADING_HOLD_KI=0.0
+HEADING_HOLD_KD=0.0
+HEADING_HOLD_MAX_RATE_DPS=45.0
 MOTOR_TRIM_MAX_EFFECT=0.30
 MOTOR_TRIM_CONFIRM_HOLD_S=5.0
 MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
 ```
+
+Если робот уже запускался со старым `.env`, обновите каналы вручную перед первым стартом новой прошивки: `CH_DRIVE_MODE=6` это передаточный `CH7`, `CH_BEACON=7` это `CH8`, а `CH_MUTE=9` перенесен на `CH10`. Старое значение `CH_MUTE=6` конфликтует с новым селектором drive mode.
 
 Для текущего робота c проводкой `LEFT 12/18` и `RIGHT 19/13` оставляйте `BTS7960_PWM_MODE=SOFTWARE`. В этой раскладке у левого мотора обе PWM-линии сидят на hardware PWM channel 0, а у правого мотора обе PWM-линии сидят на hardware PWM channel 1, поэтому для движения нужен software PWM.
 

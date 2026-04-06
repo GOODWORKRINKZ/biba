@@ -305,12 +305,20 @@ def test_config_falls_back_to_software_for_invalid_bts7960_pwm_mode(
     assert module.BTS7960_PWM_MODE == "SOFTWARE"
 
 
-def test_config_defaults_mute_channel_to_ch7(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+def test_config_defaults_mute_channel_to_transmitter_ch10(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
     monkeypatch.delenv("CH_MUTE", raising=False)
 
     module = importlib.reload(config_module)
 
-    assert module.CH_MUTE == 6
+    assert module.CH_MUTE == 9
+
+
+def test_config_defaults_beacon_channel_index_for_transmitter_ch8(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.delenv("CH_BEACON", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.CH_BEACON == 7
 
 
 def test_config_defaults_speed_mode_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -329,6 +337,54 @@ def test_config_defaults_speed_mode_settings(monkeypatch: pytest.MonkeyPatch, co
     assert module.SPEED_MODE_SLOW_SCALE == pytest.approx(1.0 / 3.0)
     assert module.SPEED_MODE_MEDIUM_SCALE == pytest.approx(2.0 / 3.0)
     assert module.SPEED_MODE_FAST_SCALE == pytest.approx(1.0)
+
+
+def test_config_defaults_drive_mode_and_imu_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.delenv("CH_DRIVE_MODE", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_LOW_THRESHOLD", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_HIGH_THRESHOLD", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_STEERING_DEADBAND", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_STEERING_LIMIT", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_MAX_DPS", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KP", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KI", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KD", raising=False)
+    monkeypatch.delenv("HEADING_HOLD_KP", raising=False)
+    monkeypatch.delenv("HEADING_HOLD_KI", raising=False)
+    monkeypatch.delenv("HEADING_HOLD_KD", raising=False)
+    monkeypatch.delenv("HEADING_HOLD_MAX_RATE_DPS", raising=False)
+    monkeypatch.delenv("IMU_ENABLED", raising=False)
+    monkeypatch.delenv("IMU_I2C_BUS", raising=False)
+    monkeypatch.delenv("IMU_I2C_ADDRESS", raising=False)
+    monkeypatch.delenv("IMU_EXPECTED_CHIP_ID", raising=False)
+    monkeypatch.delenv("IMU_SAMPLE_RATE_HZ", raising=False)
+    monkeypatch.delenv("IMU_STALE_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("IMU_GYRO_BIAS_CALIBRATION_S", raising=False)
+    monkeypatch.delenv("IMU_GYRO_Z_SIGN", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.CH_DRIVE_MODE == 6
+    assert module.DRIVE_MODE_LOW_THRESHOLD == pytest.approx(-0.3)
+    assert module.DRIVE_MODE_HIGH_THRESHOLD == pytest.approx(0.3)
+    assert module.DRIVE_MODE_STEERING_DEADBAND == pytest.approx(0.05)
+    assert module.DRIVE_MODE_STEERING_LIMIT == pytest.approx(1.0)
+    assert module.DRIVE_MODE_YAW_RATE_MAX_DPS == pytest.approx(90.0)
+    assert module.DRIVE_MODE_YAW_RATE_KP == pytest.approx(0.02)
+    assert module.DRIVE_MODE_YAW_RATE_KI == pytest.approx(0.0)
+    assert module.DRIVE_MODE_YAW_RATE_KD == pytest.approx(0.0)
+    assert module.HEADING_HOLD_KP == pytest.approx(2.0)
+    assert module.HEADING_HOLD_KI == pytest.approx(0.0)
+    assert module.HEADING_HOLD_KD == pytest.approx(0.0)
+    assert module.HEADING_HOLD_MAX_RATE_DPS == pytest.approx(45.0)
+    assert module.IMU_ENABLED is False
+    assert module.IMU_I2C_BUS == 1
+    assert module.IMU_I2C_ADDRESS == 0x68
+    assert module.IMU_EXPECTED_CHIP_ID == 0xD1
+    assert module.IMU_SAMPLE_RATE_HZ == pytest.approx(100.0)
+    assert module.IMU_STALE_TIMEOUT_S == pytest.approx(0.2)
+    assert module.IMU_GYRO_BIAS_CALIBRATION_S == pytest.approx(1.0)
+    assert module.IMU_GYRO_Z_SIGN == pytest.approx(1.0)
 
 
 def test_config_defaults_trim_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -377,6 +433,29 @@ def test_env_example_exposes_speed_mode_environment_variables() -> None:
     assert "SPEED_MODE_FAST_SCALE=" in env_example
 
 
+def test_env_example_exposes_drive_mode_and_imu_environment_variables() -> None:
+    with open(".env.example", encoding="utf-8") as env_file:
+        env_example = env_file.read()
+
+    assert "CH_DRIVE_MODE=" in env_example
+    assert "DRIVE_MODE_LOW_THRESHOLD=" in env_example
+    assert "DRIVE_MODE_HIGH_THRESHOLD=" in env_example
+    assert "DRIVE_MODE_STEERING_DEADBAND=" in env_example
+    assert "DRIVE_MODE_STEERING_LIMIT=" in env_example
+    assert "DRIVE_MODE_YAW_RATE_MAX_DPS=" in env_example
+    assert "DRIVE_MODE_YAW_RATE_KP=" in env_example
+    assert "HEADING_HOLD_KP=" in env_example
+    assert "HEADING_HOLD_MAX_RATE_DPS=" in env_example
+    assert "IMU_ENABLED=" in env_example
+    assert "IMU_I2C_BUS=" in env_example
+    assert "IMU_I2C_ADDRESS=" in env_example
+    assert "IMU_EXPECTED_CHIP_ID=" in env_example
+    assert "IMU_SAMPLE_RATE_HZ=" in env_example
+    assert "IMU_STALE_TIMEOUT_S=" in env_example
+    assert "IMU_GYRO_BIAS_CALIBRATION_S=" in env_example
+    assert "IMU_GYRO_Z_SIGN=" in env_example
+
+
 def test_docker_compose_exposes_trim_environment_variables() -> None:
     with open("docker-compose.yml", encoding="utf-8") as compose_file:
         compose = compose_file.read()
@@ -407,6 +486,32 @@ def test_docker_compose_exposes_speed_mode_environment_variables() -> None:
     assert "SPEED_MODE_MEDIUM_SCALE: ${SPEED_MODE_MEDIUM_SCALE:-0.6666666666666666}" in compose
     assert "SPEED_MODE_FAST_SCALE:" in compose
     assert "SPEED_MODE_FAST_SCALE: ${SPEED_MODE_FAST_SCALE:-1.0}" in compose
+
+
+def test_docker_compose_exposes_drive_mode_and_imu_environment_variables() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "CH_DRIVE_MODE:" in compose
+    assert "CH_DRIVE_MODE: ${CH_DRIVE_MODE:-6}" in compose
+    assert "DRIVE_MODE_LOW_THRESHOLD:" in compose
+    assert "DRIVE_MODE_LOW_THRESHOLD: ${DRIVE_MODE_LOW_THRESHOLD:--0.3}" in compose
+    assert "DRIVE_MODE_HIGH_THRESHOLD:" in compose
+    assert "DRIVE_MODE_HIGH_THRESHOLD: ${DRIVE_MODE_HIGH_THRESHOLD:-0.3}" in compose
+    assert "DRIVE_MODE_STEERING_DEADBAND:" in compose
+    assert "DRIVE_MODE_STEERING_LIMIT:" in compose
+    assert "DRIVE_MODE_YAW_RATE_MAX_DPS:" in compose
+    assert "DRIVE_MODE_YAW_RATE_KP:" in compose
+    assert "HEADING_HOLD_KP:" in compose
+    assert "HEADING_HOLD_MAX_RATE_DPS:" in compose
+    assert "IMU_ENABLED:" in compose
+    assert "IMU_I2C_BUS:" in compose
+    assert "IMU_I2C_ADDRESS:" in compose
+    assert "IMU_EXPECTED_CHIP_ID:" in compose
+    assert "IMU_SAMPLE_RATE_HZ:" in compose
+    assert "IMU_STALE_TIMEOUT_S:" in compose
+    assert "IMU_GYRO_BIAS_CALIBRATION_S:" in compose
+    assert "IMU_GYRO_Z_SIGN:" in compose
 
 
 def test_docker_compose_exposes_bts7960_environment_variables() -> None:

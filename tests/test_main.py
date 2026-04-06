@@ -657,6 +657,28 @@ def test_get_speed_mode_scale_uses_configured_thresholds_and_scales(monkeypatch:
     assert main._get_speed_mode_scale([0.0, 0.0, 0.0, 0.0, 0.0, 0.9]) == pytest.approx(1.0)
 
 
+def test_get_drive_mode_uses_configured_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    monkeypatch.setattr(main.config, "CH_DRIVE_MODE", 6)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_LOW_THRESHOLD", -0.3)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_HIGH_THRESHOLD", 0.3)
+
+    assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.9]) == "manual"
+    assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) == "stabilized"
+    assert main._get_drive_mode([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9]) == "heading_hold"
+
+
+def test_get_drive_mode_defaults_to_manual_when_channel_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+
+    monkeypatch.setattr(main.config, "CH_DRIVE_MODE", 6)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_LOW_THRESHOLD", -0.3)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_HIGH_THRESHOLD", 0.3)
+
+    assert main._get_drive_mode([0.0, 0.0, 0.0]) == "manual"
+
+
 def test_scale_drive_inputs_applies_speed_limit_after_arcade_mix() -> None:
     main = importlib.import_module("main")
 
@@ -830,6 +852,391 @@ def test_main_scales_drive_input_from_speed_mode_channel(monkeypatch: pytest.Mon
 
     assert main.main() == 0
     assert mix_calls == [(pytest.approx(0.21666666666666667), pytest.approx(0.11666666666666665), pytest.approx(mix_calls[0][2]))]
+
+
+def test_main_routes_drive_through_assisted_controller(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    mix_calls: list[tuple[float, float, float]] = []
+    assist_calls: list[dict[str, object]] = []
+    imu_read_calls: list[float | None] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                [0.0, 0.6, 0.0, 0.2, 0.98, 0.0, 0.98, 0.0],
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame = self._frames.pop(0)
+            main.RUNNING = False
+            return frame
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            mix_calls.append((throttle, steering, dt))
+            return (throttle, steering)
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            return (left_duty, right_duty)
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            return (throttle, steering)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeIMUReader:
+        def read(self, timestamp_monotonic_s: float | None = None):
+            imu_read_calls.append(timestamp_monotonic_s)
+            return object()
+
+        def close(self) -> None:
+            pass
+
+    class FakeAssistedController:
+        def update(self, **kwargs):
+            assist_calls.append(kwargs)
+            return type(
+                "FakeAssistedResult",
+                (),
+                {
+                    "throttle": kwargs["throttle"],
+                    "steering": 0.25,
+                },
+            )()
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "_create_imu_reader", lambda: FakeIMUReader())
+    monkeypatch.setattr(main, "_create_assisted_drive_controller", lambda: FakeAssistedController())
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "CH_SPEED_MODE", 5)
+    monkeypatch.setattr(main.config, "CH_DRIVE_MODE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "THROTTLE_FILTER_MODE", "NONE")
+    monkeypatch.setattr(main.config, "SPEED_MODE_LOW_THRESHOLD", -0.3)
+    monkeypatch.setattr(main.config, "SPEED_MODE_HIGH_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "SPEED_MODE_SLOW_SCALE", 1.0 / 3.0)
+    monkeypatch.setattr(main.config, "SPEED_MODE_MEDIUM_SCALE", 2.0 / 3.0)
+    monkeypatch.setattr(main.config, "SPEED_MODE_FAST_SCALE", 1.0)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_LOW_THRESHOLD", -0.3)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_HIGH_THRESHOLD", 0.3)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert assist_calls[0]["mode"] == "heading_hold"
+    assert assist_calls[0]["armed"] is True
+    assert imu_read_calls[0] is not None
+    assert mix_calls[0][1] == pytest.approx(0.25)
+
+
+def test_main_falls_back_to_pass_through_when_imu_read_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    mix_calls: list[tuple[float, float, float]] = []
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                [0.0, 0.6, 0.0, 0.2, 0.98, 0.0, 0.98, 0.0],
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame = self._frames.pop(0)
+            main.RUNNING = False
+            return frame
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            mix_calls.append((throttle, steering, dt))
+            return (throttle, steering)
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            return (left_duty, right_duty)
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            return (throttle, steering)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_wav(self, path: str) -> None:
+            del path
+
+        def play_spectral(self, path: str) -> None:
+            del path
+
+        def play_wav_async(self, path: str) -> None:
+            del path
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeIMUReader:
+        def read(self, timestamp_monotonic_s: float | None = None):
+            del timestamp_monotonic_s
+            raise OSError("i2c read failed")
+
+        def close(self) -> None:
+            pass
+
+    class FakeAssistedController:
+        def update(self, **kwargs):
+            raise AssertionError("assisted controller should not be called when IMU read fails")
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "DalyBMS", FakeBMS)
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "_create_imu_reader", lambda: FakeIMUReader())
+    monkeypatch.setattr(main, "_create_assisted_drive_controller", lambda: FakeAssistedController())
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "CH_SPEED_MODE", 5)
+    monkeypatch.setattr(main.config, "CH_DRIVE_MODE", 6)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "THROTTLE_FILTER_MODE", "NONE")
+    monkeypatch.setattr(main.config, "SPEED_MODE_LOW_THRESHOLD", -0.3)
+    monkeypatch.setattr(main.config, "SPEED_MODE_HIGH_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "SPEED_MODE_SLOW_SCALE", 1.0 / 3.0)
+    monkeypatch.setattr(main.config, "SPEED_MODE_MEDIUM_SCALE", 2.0 / 3.0)
+    monkeypatch.setattr(main.config, "SPEED_MODE_FAST_SCALE", 1.0)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_LOW_THRESHOLD", -0.3)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_HIGH_THRESHOLD", 0.3)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert mix_calls == [
+        (
+            pytest.approx(0.4),
+            pytest.approx(0.13333333333333333),
+            pytest.approx(mix_calls[0][2]),
+        )
+    ]
 
 
 def test_main_enters_trim_mode_and_uses_live_ch9_for_drive(monkeypatch: pytest.MonkeyPatch) -> None:

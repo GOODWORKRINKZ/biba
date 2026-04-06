@@ -169,7 +169,8 @@ def test_lua_declares_local_app_channel_constants() -> None:
 
     assert 'local APP_ARM_CHANNEL = "ch5"' in source
     assert 'local APP_BEACON_CHANNEL = "ch8"' in source
-    assert 'local APP_MUTE_CHANNEL = "ch7"' in source
+    assert 'local APP_DRIVE_MODE_CHANNEL = "ch7"' in source
+    assert 'local APP_MUTE_CHANNEL = "ch10"' in source
 
 
 def test_lua_declares_speed_mode_constants() -> None:
@@ -181,6 +182,22 @@ def test_lua_declares_speed_mode_constants() -> None:
     assert "local APP_SPEED_MODE_FAST_SCALE" in source
     assert "local APP_SPEED_MODE_LOW_THRESHOLD" in source
     assert "local APP_SPEED_MODE_HIGH_THRESHOLD" in source
+
+
+def test_lua_declares_drive_mode_helper() -> None:
+    source = _lua_source()
+
+    assert "local function read_drive_mode()" in source
+
+
+def test_read_drive_mode_reads_selector_channel_and_returns_all_modes() -> None:
+    body = _extract_function(_lua_source(), "read_drive_mode")
+
+    assert 'sensor(APP_DRIVE_MODE_CHANNEL, 0)' in body
+    assert "APP_SWITCH_THRESHOLD" in body
+    assert 'return "m"' in body
+    assert 'return "s"' in body
+    assert 'return "h"' in body
 
 
 def test_lua_declares_speed_mode_helper() -> None:
@@ -204,13 +221,21 @@ def test_read_local_status_badges_reads_app_switch_channels() -> None:
     body = _extract_function(_lua_source(), "read_local_status_badges")
 
     assert 'sensor(APP_ARM_CHANNEL, 0)' in body
-    assert 'sensor(APP_MUTE_CHANNEL, 0)' in body
     assert 'sensor(APP_BEACON_CHANNEL, 0)' in body
+    assert 'sensor(APP_MUTE_CHANNEL, 0)' in body
+    assert 'read_drive_mode()' in body
     assert 'read_speed_mode()' in body
     assert 'badges[#badges + 1] = "a"' in body
-    assert 'badges[#badges + 1] = "m"' in body
     assert 'badges[#badges + 1] = "b"' in body
+    assert 'badges[#badges + 1] = "m"' in body
+    assert 'badges[#badges + 1] = drive_mode' in body
     assert 'badges[#badges + 1] = speed_mode' in body
+
+
+def test_read_local_status_badges_restores_local_mute_switch_badge() -> None:
+    body = _extract_function(_lua_source(), "read_local_status_badges")
+
+    assert 'APP_MUTE_CHANNEL' in body
 
 
 def test_read_drive_keeps_raw_stick_normalization_for_indicator() -> None:

@@ -10,7 +10,8 @@ local LOG_SERIAL_BAUD = 115200
 local LOG_INTERVAL_CS = 20
 local APP_ARM_CHANNEL = "ch5"
 local APP_BEACON_CHANNEL = "ch8"
-local APP_MUTE_CHANNEL = "ch7"
+local APP_DRIVE_MODE_CHANNEL = "ch7"
+local APP_MUTE_CHANNEL = "ch10"
 local APP_SPEED_MODE_CHANNEL = "ch6"
 local APP_SWITCH_THRESHOLD = 300
 local APP_SPEED_MODE_SLOW_SCALE = 1 / 3
@@ -183,6 +184,17 @@ local function read_speed_mode()
   return "2", APP_SPEED_MODE_MEDIUM_SCALE
 end
 
+local function read_drive_mode()
+  local selector = sensor(APP_DRIVE_MODE_CHANNEL, 0)
+  if selector < -APP_SWITCH_THRESHOLD then
+    return "m"
+  end
+  if selector > APP_SWITCH_THRESHOLD then
+    return "h"
+  end
+  return "s"
+end
+
 local function read_drive()
   local thr = sensor("ch2", 0)
   local str = sensor("ch4", 0)
@@ -230,10 +242,12 @@ end
 
 local function read_local_status_badges()
   local badges = {}
+  local drive_mode = read_drive_mode()
   local speed_mode = read_speed_mode()
   if sensor(APP_ARM_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "a" end
-  if sensor(APP_MUTE_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
   if sensor(APP_BEACON_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "b" end
+  if sensor(APP_MUTE_CHANNEL, 0) > APP_SWITCH_THRESHOLD then badges[#badges + 1] = "m" end
+  badges[#badges + 1] = drive_mode
   badges[#badges + 1] = speed_mode
   return badges
 end
