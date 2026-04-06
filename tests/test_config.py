@@ -36,6 +36,8 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     monkeypatch.delenv("MOTOR_CURRENT_TRACE_PATH", raising=False)
     monkeypatch.delenv("MOTOR_CURRENT_TRACE_POST_ROLL_S", raising=False)
     monkeypatch.delenv("MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_DEADBAND_DPS", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_FILTER_HZ", raising=False)
 
     module = importlib.reload(config_module)
 
@@ -90,6 +92,8 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR_CURRENT_TRACE_PATH == "/data/current-trace.jsonl"
     assert module.MOTOR_CURRENT_TRACE_POST_ROLL_S == pytest.approx(2.0)
     assert module.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S == pytest.approx(0.0)
+    assert module.DRIVE_MODE_YAW_RATE_DEADBAND_DPS == pytest.approx(4.0)
+    assert module.DRIVE_MODE_YAW_RATE_FILTER_HZ == pytest.approx(5.0)
     assert module.LOG_LEVEL == "INFO"
 
 
@@ -228,6 +232,8 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("MOTOR_CURRENT_TRACE_PATH", "/tmp/calibration.jsonl")
     monkeypatch.setenv("MOTOR_CURRENT_TRACE_POST_ROLL_S", "3.5")
     monkeypatch.setenv("MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", "0.04")
+    monkeypatch.setenv("DRIVE_MODE_YAW_RATE_DEADBAND_DPS", "2.5")
+    monkeypatch.setenv("DRIVE_MODE_YAW_RATE_FILTER_HZ", "7.5")
 
     module = importlib.reload(config_module)
 
@@ -272,6 +278,8 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.MOTOR_CURRENT_TRACE_PATH == "/tmp/calibration.jsonl"
     assert module.MOTOR_CURRENT_TRACE_POST_ROLL_S == pytest.approx(3.5)
     assert module.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S == pytest.approx(0.04)
+    assert module.DRIVE_MODE_YAW_RATE_DEADBAND_DPS == pytest.approx(2.5)
+    assert module.DRIVE_MODE_YAW_RATE_FILTER_HZ == pytest.approx(7.5)
 
 
 def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.MonkeyPatch, config_module) -> None:

@@ -1064,6 +1064,8 @@ def _create_assisted_drive_controller() -> AssistedDriveController:
             yaw_rate_kp=config.DRIVE_MODE_YAW_RATE_KP,
             yaw_rate_ki=config.DRIVE_MODE_YAW_RATE_KI,
             yaw_rate_kd=config.DRIVE_MODE_YAW_RATE_KD,
+            yaw_rate_deadband_dps=config.DRIVE_MODE_YAW_RATE_DEADBAND_DPS,
+            yaw_rate_filter_hz=config.DRIVE_MODE_YAW_RATE_FILTER_HZ,
             heading_hold_kp=config.HEADING_HOLD_KP,
             heading_hold_ki=config.HEADING_HOLD_KI,
             heading_hold_kd=config.HEADING_HOLD_KD,

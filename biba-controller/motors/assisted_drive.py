@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 
@@ -22,6 +23,8 @@ class AssistedDriveConfig:
     yaw_rate_kp: float = 0.02
     yaw_rate_ki: float = 0.0
     yaw_rate_kd: float = 0.0
+    yaw_rate_deadband_dps: float = 4.0
+    yaw_rate_filter_hz: float = 5.0
     heading_hold_kp: float = 2.0
     heading_hold_ki: float = 0.0
     heading_hold_kd: float = 0.0
@@ -72,6 +75,7 @@ class AssistedDriveController:
         self._bias_sum = 0.0
         self._bias_count = 0
         self._bias_window_complete = False
+        self._filtered_yaw_rate_dps = 0.0
 
     def reset(self) -> None:
         self._yaw_rate_integral = 0.0
@@ -80,6 +84,7 @@ class AssistedDriveController:
         self._last_heading_error = None
         self._heading_deg = 0.0
         self._heading_reference_deg = None
+        self._filtered_yaw_rate_dps = 0.0
 
     def _sample_is_healthy(self, imu_sample: IMUSample, now_monotonic_s: float) -> bool:
         if not imu_sample.valid or imu_sample.gyro_z_dps is None or imu_sample.timestamp_monotonic_s is None:
@@ -102,6 +107,21 @@ class AssistedDriveController:
         if now_monotonic_s - self._bias_started_at >= self._config.gyro_bias_calibration_s and self._bias_count > 0:
             self._gyro_bias_dps = self._bias_sum / self._bias_count
             self._bias_window_complete = True
+
+    def _filter_yaw_rate(self, measured_yaw_rate_dps: float, dt: float) -> float:
+        if self._config.yaw_rate_filter_hz <= 0.0 or dt <= 0.0:
+            self._filtered_yaw_rate_dps = measured_yaw_rate_dps
+            return measured_yaw_rate_dps
+
+        tau_s = 1.0 / (2.0 * math.pi * self._config.yaw_rate_filter_hz)
+        alpha = dt / (tau_s + dt)
+        self._filtered_yaw_rate_dps += alpha * (measured_yaw_rate_dps - self._filtered_yaw_rate_dps)
+        return self._filtered_yaw_rate_dps
+
+    def _apply_yaw_rate_deadband(self, measured_yaw_rate_dps: float) -> float:
+        if abs(measured_yaw_rate_dps) < self._config.yaw_rate_deadband_dps:
+            return 0.0
+        return measured_yaw_rate_dps
 
     def _yaw_rate_to_steering(self, desired_yaw_rate_dps: float, measured_yaw_rate_dps: float, dt: float) -> float:
         error = desired_yaw_rate_dps - measured_yaw_rate_dps
@@ -158,6 +178,7 @@ class AssistedDriveController:
             self._last_mode = mode
 
         if armed != self._last_armed:
+            self.reset()
             if not armed:
                 self._begin_bias_window(now_monotonic_s)
             self._last_armed = armed
@@ -195,6 +216,8 @@ class AssistedDriveController:
             )
 
         measured_yaw_rate_dps = (imu_sample.gyro_z_dps or 0.0) - self._gyro_bias_dps
+        measured_yaw_rate_dps = self._filter_yaw_rate(measured_yaw_rate_dps, dt)
+        measured_yaw_rate_dps = self._apply_yaw_rate_deadband(measured_yaw_rate_dps)
         self._heading_deg = _normalize_angle_deg(self._heading_deg + measured_yaw_rate_dps * max(dt, 0.0))
         heading_error_deg = 0.0
 
