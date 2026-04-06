@@ -31,6 +31,8 @@ class AssistedDriveConfig:
     heading_hold_max_rate_dps: float = 45.0
     stale_timeout_s: float = 0.2
     gyro_bias_calibration_s: float = 1.0
+    gyro_bias_settle_s: float = 0.5
+    gyro_bias_stability_band_dps: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ class AssistedDriveController:
         self._heading_deg = 0.0
         self._heading_reference_deg: float | None = None
         self._gyro_bias_dps = 0.0
+        self._bias_ready_at: float | None = None
         self._bias_started_at: float | None = None
         self._bias_sum = 0.0
         self._bias_count = 0
@@ -91,17 +94,34 @@ class AssistedDriveController:
             return False
         return now_monotonic_s - imu_sample.timestamp_monotonic_s <= self._config.stale_timeout_s
 
-    def _begin_bias_window(self, now_monotonic_s: float) -> None:
-        self._bias_started_at = now_monotonic_s
+    def _prepare_bias_window(self, now_monotonic_s: float, *, settle_s: float) -> None:
+        self._bias_ready_at = now_monotonic_s + max(settle_s, 0.0)
+        self._bias_started_at = None
         self._bias_sum = 0.0
         self._bias_count = 0
+        self._bias_window_complete = False
+
+    def _restart_bias_window(self, now_monotonic_s: float, gyro_z_dps: float) -> None:
+        self._bias_started_at = now_monotonic_s
+        self._bias_sum = gyro_z_dps
+        self._bias_count = 1
         self._bias_window_complete = False
 
     def _calibrate_bias(self, imu_sample: IMUSample, now_monotonic_s: float) -> None:
         if self._bias_window_complete or not imu_sample.valid or imu_sample.gyro_z_dps is None:
             return
-        if self._bias_started_at is None:
-            self._begin_bias_window(now_monotonic_s)
+        if self._bias_ready_at is not None and now_monotonic_s < self._bias_ready_at:
+            return
+
+        if self._bias_started_at is None or self._bias_count <= 0:
+            self._restart_bias_window(now_monotonic_s, imu_sample.gyro_z_dps)
+            return
+
+        current_mean = self._bias_sum / self._bias_count
+        if abs(imu_sample.gyro_z_dps - current_mean) > self._config.gyro_bias_stability_band_dps:
+            self._restart_bias_window(now_monotonic_s, imu_sample.gyro_z_dps)
+            return
+
         self._bias_sum += imu_sample.gyro_z_dps
         self._bias_count += 1
         if now_monotonic_s - self._bias_started_at >= self._config.gyro_bias_calibration_s and self._bias_count > 0:
@@ -180,7 +200,10 @@ class AssistedDriveController:
         if armed != self._last_armed:
             self.reset()
             if not armed:
-                self._begin_bias_window(now_monotonic_s)
+                settle_s = 0.0 if self._last_armed is None else self._config.gyro_bias_settle_s
+                self._prepare_bias_window(now_monotonic_s, settle_s=settle_s)
+            else:
+                self._bias_ready_at = None
             self._last_armed = armed
 
         if not armed:

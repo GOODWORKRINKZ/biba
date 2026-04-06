@@ -303,5 +303,114 @@ def test_bias_calibration_restarts_on_new_disarm_window() -> None:
         armed=False,
         now_monotonic_s=3.0,
     )
+    second_window = controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.MANUAL,
+        imu_sample=_sample(gyro_z_dps=20.0, timestamp_monotonic_s=4.0),
+        dt=1.0,
+        armed=False,
+        now_monotonic_s=4.0,
+    )
 
     assert second_window.gyro_bias_dps == pytest.approx(20.0)
+
+
+def test_rearm_after_disarm_motion_recalibrates_from_settled_idle() -> None:
+    controller = AssistedDriveController(
+        AssistedDriveConfig(
+            gyro_bias_calibration_s=1.0,
+            yaw_rate_kp=0.02,
+            yaw_rate_ki=0.0,
+            yaw_rate_kd=0.0,
+            yaw_rate_deadband_dps=0.0,
+            yaw_rate_filter_hz=0.0,
+        )
+    )
+
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=2.0, timestamp_monotonic_s=0.0),
+        dt=0.1,
+        armed=False,
+        now_monotonic_s=0.0,
+    )
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=2.0, timestamp_monotonic_s=1.0),
+        dt=1.0,
+        armed=False,
+        now_monotonic_s=1.0,
+    )
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=2.0, timestamp_monotonic_s=1.1),
+        dt=0.1,
+        armed=True,
+        now_monotonic_s=1.1,
+    )
+
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=20.0, timestamp_monotonic_s=2.0),
+        dt=0.1,
+        armed=False,
+        now_monotonic_s=2.0,
+    )
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=18.0, timestamp_monotonic_s=2.2),
+        dt=0.2,
+        armed=False,
+        now_monotonic_s=2.2,
+    )
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=2.0, timestamp_monotonic_s=2.6),
+        dt=0.4,
+        armed=False,
+        now_monotonic_s=2.6,
+    )
+    controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=2.1, timestamp_monotonic_s=3.1),
+        dt=0.5,
+        armed=False,
+        now_monotonic_s=3.1,
+    )
+    settled = controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=1.9, timestamp_monotonic_s=3.6),
+        dt=0.5,
+        armed=False,
+        now_monotonic_s=3.6,
+    )
+    rearmed = controller.update(
+        throttle=0.0,
+        steering=0.0,
+        mode=DriveMode.STABILIZED,
+        imu_sample=_sample(gyro_z_dps=2.0, timestamp_monotonic_s=3.7),
+        dt=0.1,
+        armed=True,
+        now_monotonic_s=3.7,
+    )
+
+    assert settled.gyro_bias_dps == pytest.approx(2.0, abs=0.1)
+    assert rearmed.measured_yaw_rate_dps == pytest.approx(0.0, abs=0.1)
+    assert rearmed.steering == pytest.approx(0.0, abs=0.01)
