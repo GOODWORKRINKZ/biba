@@ -128,7 +128,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `IMU_I2C_BUS=1`, `IMU_I2C_ADDRESS=104`, `IMU_EXPECTED_CHIP_ID=209` — параметры подключения IMU; на текущем роботе ST-модуль отвечает по `0x6A`, так что для него нужен `IMU_I2C_ADDRESS=106`
 - `IMU_SAMPLE_RATE_HZ=100.0`, `IMU_STALE_TIMEOUT_S=0.2`, `IMU_GYRO_BIAS_CALIBRATION_S=1.0`, `IMU_GYRO_Z_SIGN=1.0` — частота чтения, timeout свежести, длительность bias-калибровки и знак yaw-оси
 - `DRIVE_MODE_STEERING_DEADBAND=0.05`, `DRIVE_MODE_STEERING_LIMIT=1.0`, `DRIVE_MODE_YAW_RATE_MAX_DPS=90.0` — базовые ограничения assist-контура
-- `DRIVE_MODE_YAW_RATE_KP/KI/KD`, `HEADING_HOLD_KP/KI/KD`, `HEADING_HOLD_MAX_RATE_DPS` — tuning-параметры stabilized/heading-hold режима
+- `DRIVE_MODE_YAW_RATE_KP/KI/KD` — tuning-параметры yaw-rate контура stabilized режима
 - `BMS_TELEMETRY_TRACE_ENABLED=0|1` — включает точные controller-side trace-логи на этапах consume/send для battery telemetry
 - `BEACON_ENABLED=0|1`
 - `BEACON_DELAY_S=300`

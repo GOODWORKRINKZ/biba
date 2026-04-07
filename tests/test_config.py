@@ -374,9 +374,9 @@ def test_config_defaults_drive_mode_and_imu_settings(monkeypatch: pytest.MonkeyP
     assert module.DRIVE_MODE_STEERING_DEADBAND == pytest.approx(0.05)
     assert module.DRIVE_MODE_STEERING_LIMIT == pytest.approx(1.0)
     assert module.DRIVE_MODE_YAW_RATE_MAX_DPS == pytest.approx(90.0)
-    assert module.DRIVE_MODE_YAW_RATE_KP == pytest.approx(0.02)
+    assert module.DRIVE_MODE_YAW_RATE_KP == pytest.approx(0.01)
     assert module.DRIVE_MODE_YAW_RATE_KI == pytest.approx(0.0)
-    assert module.DRIVE_MODE_YAW_RATE_KD == pytest.approx(0.0)
+    assert module.DRIVE_MODE_YAW_RATE_KD == pytest.approx(0.001)
     assert module.IMU_ENABLED is False
     assert module.IMU_I2C_BUS == 1
     assert module.IMU_I2C_ADDRESS == 0x68
