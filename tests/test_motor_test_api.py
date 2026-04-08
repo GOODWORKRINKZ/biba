@@ -54,7 +54,7 @@ def test_parse_motor_test_request_defaults_pwm_mode_to_software() -> None:
 def test_parse_motor_test_request_rejects_out_of_range_values() -> None:
     motor_test_api = importlib.import_module("motor_test_api")
 
-    with pytest.raises(ValueError, match="left_frequency_hz"):
+    with pytest.raises(ValueError, match="Частота слева"):
         motor_test_api.parse_motor_test_request(
             {
                 "left_frequency_hz": 99,
@@ -350,7 +350,8 @@ def test_build_control_page_contains_expected_inputs() -> None:
     assert "duration_ms" in page
     assert "/api/motor-test" in page
     assert "fetch(" in page
-    assert "Type any integer frequency; the slider stays on preset steps." in page
+    assert "Можно ввести любую целую частоту; ползунок остаётся на предустановленных шагах." in page
+    assert "Отправить команду" in page
     assert "numberInput.addEventListener('input', () => {" in page
     assert "output.textContent = numberInput.value;" in page
     assert "numberInput.addEventListener('change', () => {" in page
@@ -383,7 +384,8 @@ def test_build_pid_tuning_page_contains_expected_inputs() -> None:
 
     page = motor_test_api.build_pid_tuning_page(_pid_defaults())
 
-    assert "BiBa PID Tuning" in page
+    assert "Настройка PID BiBa" in page
+    assert "Звуковой тест моторов" in page
     assert "yaw_rate_kp" in page
     assert "yaw_rate_ki" in page
     assert "yaw_rate_kd" in page
@@ -423,7 +425,8 @@ def test_http_server_serves_pid_tuning_page(tmp_path) -> None:
 
         assert response.status == 200
         assert "yaw_rate_kp" in body
-        assert "Apply tuning" in body
+        assert "Применить настройки" in body
+        assert "Состояние: неизвестно" in body
     finally:
         server.shutdown()
         server.server_close()
@@ -494,7 +497,7 @@ def test_http_server_rejects_pid_tuning_update_while_armed(tmp_path) -> None:
 
         body = json.loads(exc_info.value.read().decode("utf-8"))
         assert exc_info.value.code == 409
-        assert "disarmed" in body["error"]
+        assert "разоруж" in body["error"]
     finally:
         server.shutdown()
         server.server_close()
@@ -568,6 +571,10 @@ def test_http_server_serves_settings_page_and_assets(tmp_path) -> None:
             body = response.read().decode("utf-8")
 
         assert response.status == 200
+        assert '<html lang="ru">' in body
+        assert "Настройки робота" in body
+        assert "Консоль робота BiBa" in body
+        assert "Проверка звучания моторов" in body
         assert "/settings/assets/settings.css" in body
         assert "/settings/assets/settings.js" in body
         assert "/settings/assets/biba-neon-sign.svg" in body
@@ -581,6 +588,16 @@ def test_http_server_serves_settings_page_and_assets(tmp_path) -> None:
 
         assert css_response.status == 200
         assert ".settings-shell" in css_body
+
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{server.server_port}/settings/assets/settings.js",
+            timeout=2.0,
+        ) as js_response:
+            js_body = js_response.read().decode("utf-8")
+
+        assert js_response.status == 200
+        assert "Платформа должна быть разоружена" in js_body
+        assert "Проверка звучания моторов уже идёт" in js_body or "Проверка звучания моторов запущена" in js_body
 
         with urllib.request.urlopen(
             f"http://127.0.0.1:{server.server_port}/settings/assets/biba-neon-sign.svg",
@@ -715,7 +732,7 @@ def test_http_server_rejects_motor_trim_update_while_armed(tmp_path) -> None:
 
         body = json.loads(exc_info.value.read().decode("utf-8"))
         assert exc_info.value.code == 409
-        assert "disarmed" in body["error"]
+        assert "разоруж" in body["error"]
     finally:
         server.shutdown()
         server.server_close()
@@ -738,6 +755,8 @@ def test_http_server_serves_control_page() -> None:
             body = response.read().decode("utf-8")
 
         assert response.status == 200
+        assert "Звуковой тест моторов BiBa" in body
+        assert "Отправить команду" in body
         assert "left_frequency_hz" in body
         assert "right_duty_percent" in body
     finally:

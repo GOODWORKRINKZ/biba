@@ -20,6 +20,23 @@ const api = window.BIBA_SETTINGS_API || {
   motorTest: '/api/settings/motor-test',
 };
 
+const TEXT = {
+  unknown: 'неизвестно',
+  notAvailable: 'н/д',
+  armed: 'взведена',
+  disarmed: 'разоружена',
+  active: 'активен',
+  inactive: 'не активен',
+};
+
+function formatError(message) {
+  return `Ошибка: ${message}`;
+}
+
+function formatHttpStatus(status) {
+  return `Код HTTP ${status}`;
+}
+
 function setValueIfIdle(id, value) {
   const node = document.getElementById(id);
   if (!node) {
@@ -35,11 +52,11 @@ function numberPayload(fieldIds) {
 }
 
 function renderPlatform(payload) {
-  const armed = payload.platform?.armed ? 'armed' : 'disarmed';
+  const armed = payload.platform?.armed ? TEXT.armed : TEXT.disarmed;
   document.getElementById('platform-armed').textContent = armed;
-  document.getElementById('platform-trim-mode').textContent = payload.platform?.trim_mode_active ? 'active' : 'idle';
-  document.getElementById('platform-pid-revision').textContent = payload.pid_tuning?.pending_revision ?? payload.pid_tuning?.applied_revision ?? 'n/a';
-  document.getElementById('platform-trim-revision').textContent = payload.motor_trim?.pending_revision ?? payload.motor_trim?.applied_revision ?? 'n/a';
+  document.getElementById('platform-trim-mode').textContent = payload.platform?.trim_mode_active ? TEXT.active : TEXT.inactive;
+  document.getElementById('platform-pid-revision').textContent = payload.pid_tuning?.pending_revision ?? payload.pid_tuning?.applied_revision ?? TEXT.notAvailable;
+  document.getElementById('platform-trim-revision').textContent = payload.motor_trim?.pending_revision ?? payload.motor_trim?.applied_revision ?? TEXT.notAvailable;
 }
 
 function renderPid(payload) {
@@ -52,13 +69,13 @@ function renderPid(payload) {
   document.getElementById('pid-apply').disabled = Boolean(pid.armed);
   const status = document.getElementById('pid-status');
   if (pid.armed) {
-    status.textContent = 'Disarm the platform to apply tuning changes';
+    status.textContent = 'Платформа должна быть разоружена, чтобы применить настройки';
   } else if (pid.pending_revision !== null) {
-    status.textContent = `Pending PID revision ${pid.pending_revision}`;
+    status.textContent = `Ожидает применения версия PID ${pid.pending_revision}`;
   } else if (pid.last_error) {
-    status.textContent = `Error: ${pid.last_error}`;
+    status.textContent = formatError(pid.last_error);
   } else {
-    status.textContent = `Applied revision ${pid.applied_revision}`;
+    status.textContent = `Применена версия ${pid.applied_revision}`;
   }
 }
 
@@ -68,26 +85,26 @@ function renderTrim(payload) {
   }
   const trim = payload.motor_trim;
   setValueIfIdle('motor_trim_value', trim.pending ?? trim.current ?? 0);
-  document.getElementById('motor-trim-live-value').textContent = trim.live_value === null ? 'n/a' : trim.live_value.toFixed(2);
+  document.getElementById('motor-trim-live-value').textContent = trim.live_value === null ? TEXT.notAvailable : trim.live_value.toFixed(2);
   document.getElementById('trim-apply').disabled = Boolean(trim.armed);
   const status = document.getElementById('trim-status');
   if (trim.armed) {
-    status.textContent = 'Disarm the platform to save trim changes';
+    status.textContent = 'Платформа должна быть разоружена, чтобы сохранить трим';
   } else if (trim.trim_mode_active) {
-    status.textContent = 'RC trim mode is active';
+    status.textContent = 'На передатчике сейчас активен режим трима';
   } else if (trim.pending_revision !== null) {
-    status.textContent = `Pending trim revision ${trim.pending_revision}`;
+    status.textContent = `Ожидает применения версия трима ${trim.pending_revision}`;
   } else if (trim.last_error) {
-    status.textContent = `Error: ${trim.last_error}`;
+    status.textContent = formatError(trim.last_error);
   } else {
-    status.textContent = `Saved trim ${Number(trim.current).toFixed(2)}`;
+    status.textContent = `Сохранённый трим ${Number(trim.current).toFixed(2)}`;
   }
 }
 
 function renderMotorTest(payload) {
   const status = document.getElementById('motor-test-status');
   document.getElementById('motor-test-run').disabled = Boolean(payload.motor_test?.active);
-  status.textContent = payload.motor_test?.active ? 'Motor test is active' : 'Ready';
+  status.textContent = payload.motor_test?.active ? 'Проверка звучания моторов уже идёт' : 'Готово';
 }
 
 function render(payload) {
@@ -113,7 +130,7 @@ async function postJson(url, payload) {
   });
   const body = await response.json();
   if (!response.ok) {
-    throw new Error(body.error || `HTTP ${response.status}`);
+    throw new Error(body.error || formatHttpStatus(response.status));
   }
   return body;
 }
@@ -126,13 +143,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(field).value = defaults[field];
       }
     });
-    document.getElementById('pid-status').textContent = 'Loaded defaults into the form';
+    document.getElementById('pid-status').textContent = 'Значения по умолчанию загружены в форму';
   });
 
   document.getElementById('pid-tuning-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const status = document.getElementById('pid-status');
-    status.textContent = 'Applying PID tuning...';
+    status.textContent = 'Применяю настройки PID...';
     try {
       const payload = numberPayload(PID_FIELDS);
       const body = await postJson(api.pidTuning, payload);
@@ -141,14 +158,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       renderPid({ pid_tuning: body });
     } catch (error) {
-      status.textContent = `Error: ${error.message}`;
+      status.textContent = formatError(error.message);
     }
   });
 
   document.getElementById('motor-trim-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const status = document.getElementById('trim-status');
-    status.textContent = 'Saving trim...';
+    status.textContent = 'Сохраняю трим...';
     try {
       const body = await postJson(api.motorTrim, { trim: Number(document.getElementById('motor_trim_value').value) });
       if (state.payload) {
@@ -156,14 +173,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       renderTrim({ motor_trim: body });
     } catch (error) {
-      status.textContent = `Error: ${error.message}`;
+      status.textContent = formatError(error.message);
     }
   });
 
   document.getElementById('motor-test-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const status = document.getElementById('motor-test-status');
-    status.textContent = 'Running motor test...';
+    status.textContent = 'Запускаю проверку звучания моторов...';
     try {
       await postJson(api.motorTest, {
         pwm_mode: document.getElementById('test_pwm_mode').value,
@@ -173,14 +190,14 @@ document.addEventListener('DOMContentLoaded', () => {
         right_duty_percent: Number(document.getElementById('test_right_duty_percent').value),
         duration_ms: Number(document.getElementById('test_duration_ms').value),
       });
-      status.textContent = 'Motor test command sent';
+      status.textContent = 'Команда на проверку моторов отправлена';
     } catch (error) {
-      status.textContent = `Error: ${error.message}`;
+      status.textContent = formatError(error.message);
     }
   });
 
   refreshSettings().catch((error) => {
-    document.getElementById('pid-status').textContent = `Error: ${error.message}`;
+    document.getElementById('pid-status').textContent = formatError(error.message);
   });
   setInterval(() => {
     refreshSettings().catch(() => {});

@@ -36,18 +36,34 @@ class PidTuningStatus:
 
 
 _FIELD_NAMES = tuple(PidTuningSnapshot.__dataclass_fields__.keys())
+_FIELD_LABELS = {
+    "yaw_rate_kp": "Kp рысканья",
+    "yaw_rate_ki": "Ki рысканья",
+    "yaw_rate_kd": "Kd рысканья",
+    "yaw_rate_deadband_dps": "Мёртвая зона рысканья",
+    "yaw_rate_filter_hz": "Фильтр рысканья",
+    "stabilization_min_throttle": "Мин. газ стабилизации",
+    "neutral_stabilization_steering_limit": "Предел поворота стабилизации",
+    "neutral_stabilization_max_throttle": "Макс. газ стабилизации",
+}
+
+
+def _field_label(field_name: str) -> str:
+    return _FIELD_LABELS.get(field_name, field_name)
 
 
 def _require_float(mapping: Mapping[str, Any], field_name: str, default: float) -> float:
     value = mapping.get(field_name, default)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{field_name} must be a number")
+        raise ValueError(f"Значение поля «{_field_label(field_name)}» должно быть числом")
     return float(value)
 
 
 def _validate_range(field_name: str, value: float, minimum: float, maximum: float) -> None:
     if value < minimum or value > maximum:
-        raise ValueError(f"{field_name} must be between {minimum} and {maximum}")
+        raise ValueError(
+            f"Значение поля «{_field_label(field_name)}» должно быть в диапазоне от {minimum} до {maximum}"
+        )
 
 
 def validate_pid_tuning_snapshot(snapshot: PidTuningSnapshot) -> None:
@@ -71,7 +87,7 @@ def validate_pid_tuning_snapshot(snapshot: PidTuningSnapshot) -> None:
     )
     if snapshot.neutral_stabilization_max_throttle < snapshot.stabilization_min_throttle:
         raise ValueError(
-            "neutral_stabilization_max_throttle must be greater than or equal to stabilization_min_throttle"
+            "Значение поля «Макс. газ стабилизации» должно быть не меньше значения поля «Мин. газ стабилизации»"
         )
 
 
@@ -164,7 +180,7 @@ class PidTuningStore:
         validate_pid_tuning_snapshot(snapshot)
         with self._lock:
             if self._armed:
-                self._last_error = "pid tuning changes are allowed only while disarmed"
+                self._last_error = "Изменять PID можно только когда платформа разоружена"
                 raise RuntimeError(self._last_error)
             save_pid_tuning(self._settings_path, snapshot)
             next_revision = max(self._applied_revision, self._pending_revision or 0) + 1

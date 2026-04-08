@@ -25,6 +25,15 @@ _PIGPIO_DUTY_RANGE = 1_000_000
 _SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ = [100, 160, 200, 250, 320, 400, 500, 800, 1000, 1600, 2000, 4000, 8000]
 _DEFAULT_PWM_MODE = "SOFTWARE"
 _PWM_MODE_CHOICES = {"SOFTWARE", "HARDWARE"}
+_FIELD_LABELS = {
+    "trim": "Трим",
+    "left_frequency_hz": "Частота слева",
+    "left_duty_percent": "Скважность слева",
+    "right_frequency_hz": "Частота справа",
+    "right_duty_percent": "Скважность справа",
+    "duration_ms": "Длительность",
+    "pwm_mode": "Режим PWM",
+}
 _WEB_ASSET_DIR = Path(__file__).with_name("web")
 _SETTINGS_ASSET_TYPES = {
     "settings.html": "text/html; charset=utf-8",
@@ -51,33 +60,37 @@ class MotorTestRequest:
     duration_ms: int
 
 
+def _field_label(name: str) -> str:
+    return _FIELD_LABELS.get(name, name)
+
+
 def _require_int(payload: dict[str, Any], name: str) -> int:
     value = payload.get(name)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{name} must be an integer")
+        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть целым числом")
     return value
 
 
 def _require_number(payload: dict[str, Any], name: str) -> float:
     value = payload.get(name)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{name} must be a number")
+        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть числом")
     return float(value)
 
 
 def _require_pwm_mode(payload: dict[str, Any]) -> str:
     value = payload.get("pwm_mode", _DEFAULT_PWM_MODE)
     if not isinstance(value, str):
-        raise ValueError("pwm_mode must be SOFTWARE or HARDWARE")
+        raise ValueError("Значение поля «Режим PWM» должно быть SOFTWARE или HARDWARE")
     normalized = value.strip().upper()
     if normalized not in _PWM_MODE_CHOICES:
-        raise ValueError("pwm_mode must be SOFTWARE or HARDWARE")
+        raise ValueError("Значение поля «Режим PWM» должно быть SOFTWARE или HARDWARE")
     return normalized
 
 
 def _validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
     if value < minimum or value > maximum:
-        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть в диапазоне от {minimum} до {maximum}")
 
 
 def parse_motor_test_request(payload: dict[str, Any]) -> MotorTestRequest:
@@ -129,7 +142,7 @@ class MotorTestExecutor:
 
     def run(self, request: MotorTestRequest) -> None:
         if not self._lock.acquire(blocking=False):
-            raise MotorTestBusyError("motor test already active")
+            raise MotorTestBusyError("Проверка звучания моторов уже идёт")
 
         synth = self._resolve_synth(request.pwm_mode)
         try:
@@ -163,10 +176,10 @@ class MotorTestExecutor:
         if pwm_mode == current_mode:
             return self._synth
         if self._synth_factory is None:
-            raise ValueError(f"pwm_mode {pwm_mode} is not supported")
+            raise ValueError(f"Режим PWM {pwm_mode} не поддерживается")
         synth = self._synth_factory(pwm_mode)
         if synth is None:
-            raise ValueError(f"pwm_mode {pwm_mode} is not supported")
+            raise ValueError(f"Режим PWM {pwm_mode} не поддерживается")
         return synth
 
 
@@ -179,13 +192,14 @@ def build_control_page() -> str:
     last_frequency_index = len(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ) - 1
 
     page = """<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"ru\">
 <head>
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-  <title>BiBa Motor Test</title>
+  <title>Звуковой тест моторов BiBa</title>
     <style>
         body { font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+        h1 { margin-bottom: 1.5rem; }
         form { display: grid; gap: 1rem; }
         label { display: grid; gap: 0.35rem; }
         .input-row { display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr) 7rem; align-items: center; }
@@ -196,41 +210,42 @@ def build_control_page() -> str:
     </style>
 </head>
 <body>
+  <h1>Звуковой тест моторов BiBa</h1>
   <form id=\"motor-test-form\">
-        <label for=\"left_frequency_hz\">Left frequency (Hz)
+        <label for=\"left_frequency_hz\">Частота слева (Гц)
             <div class=\"input-row\">
                 <input id=\"left_frequency_hz\" name=\"left_frequency_hz\" type=\"range\" min=\"0\" max=\"__LAST_FREQUENCY_INDEX__\" step=\"1\" value=\"__LEFT_DEFAULT_INDEX__\">
                 <input id="left_frequency_hz_input" name="left_frequency_hz_input" type="number" min="100" max="8000" step="1" value="__LEFT_DEFAULT_FREQUENCY_HZ__">
             </div>
-            <small>Type any integer frequency; the slider stays on preset steps.</small>
+            <small>Можно ввести любую целую частоту; ползунок остаётся на предустановленных шагах.</small>
             <output for=\"left_frequency_hz\" id=\"left_frequency_hz_value\">__LEFT_DEFAULT_FREQUENCY_HZ__</output>
         </label>
-        <label for=\"left_duty_percent\">Left duty (%)
+        <label for=\"left_duty_percent\">Скважность слева (%)
             <input id=\"left_duty_percent\" name=\"left_duty_percent\" type=\"range\" min=\"0\" max=\"100\" value=\"40\">
             <output for=\"left_duty_percent\" id=\"left_duty_percent_value\">40</output>
         </label>
-        <label for=\"right_frequency_hz\">Right frequency (Hz)
+        <label for=\"right_frequency_hz\">Частота справа (Гц)
             <div class=\"input-row\">
                 <input id=\"right_frequency_hz\" name=\"right_frequency_hz\" type=\"range\" min=\"0\" max=\"__LAST_FREQUENCY_INDEX__\" step=\"1\" value=\"__RIGHT_DEFAULT_INDEX__\">
                 <input id="right_frequency_hz_input" name="right_frequency_hz_input" type="number" min="100" max="8000" step="1" value="__RIGHT_DEFAULT_FREQUENCY_HZ__">
             </div>
-            <small>Type any integer frequency; the slider stays on preset steps.</small>
+            <small>Можно ввести любую целую частоту; ползунок остаётся на предустановленных шагах.</small>
             <output for=\"right_frequency_hz\" id=\"right_frequency_hz_value\">__RIGHT_DEFAULT_FREQUENCY_HZ__</output>
         </label>
-        <label for=\"right_duty_percent\">Right duty (%)
+        <label for=\"right_duty_percent\">Скважность справа (%)
             <input id=\"right_duty_percent\" name=\"right_duty_percent\" type=\"range\" min=\"0\" max=\"100\" value=\"55\">
             <output for=\"right_duty_percent\" id=\"right_duty_percent_value\">55</output>
         </label>
-        <label for=\"pwm_mode\">PWM mode
+        <label for=\"pwm_mode\">Режим PWM
             <select id=\"pwm_mode\" name=\"pwm_mode\">
-                <option value=\"SOFTWARE\" selected>SOFTWARE</option>
-                <option value=\"HARDWARE\">HARDWARE</option>
+                <option value=\"SOFTWARE\" selected>Программный</option>
+                <option value=\"HARDWARE\">Аппаратный</option>
             </select>
         </label>
-        <label for=\"duration_ms\">Duration (ms)
+        <label for=\"duration_ms\">Длительность (мс)
             <input id=\"duration_ms\" name=\"duration_ms\" type=\"number\" min=\"100\" max=\"10000\" value=\"2000\">
         </label>
-    <button type=\"submit\">Send</button>
+    <button type=\"submit\">Отправить команду</button>
         <div id=\"status\" aria-live=\"polite\"></div>
   </form>
     <script>
@@ -375,7 +390,7 @@ def build_control_page() -> str:
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
-            statusNode.textContent = 'Sending...';
+            statusNode.textContent = 'Отправляю команду...';
             const payload = {
                 pwm_mode: document.getElementById('pwm_mode').value,
                 left_frequency_hz: Number(document.getElementById('left_frequency_hz_input').value),
@@ -393,11 +408,11 @@ def build_control_page() -> str:
                 });
                 const body = await response.json();
                 if (!response.ok) {
-                    throw new Error(body.error || `HTTP ${response.status}`);
+                    throw new Error(body.error || `Код HTTP ${response.status}`);
                 }
-                statusNode.textContent = 'Command sent';
+                statusNode.textContent = 'Команда отправлена';
             } catch (error) {
-                statusNode.textContent = `Error: ${error.message}`;
+                statusNode.textContent = `Ошибка: ${error.message}`;
             }
         });
     </script>
@@ -418,11 +433,11 @@ def build_control_page() -> str:
 def build_pid_tuning_page(defaults: PidTuningSnapshot) -> str:
         defaults_json = json.dumps(defaults.to_dict())
         return f"""<!DOCTYPE html>
-<html lang=\"en\">
+<html lang=\"ru\">
 <head>
     <meta charset=\"utf-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-    <title>BiBa PID Tuning</title>
+    <title>Настройка PID BiBa</title>
     <style>
         body {{ font-family: sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }}
         nav {{ margin-bottom: 1rem; }}
@@ -436,34 +451,34 @@ def build_pid_tuning_page(defaults: PidTuningSnapshot) -> str:
     </style>
 </head>
 <body>
-    <nav><a href=\"/motor-test\">Motor test</a></nav>
-    <h1>BiBa PID Tuning</h1>
+    <nav><a href=\"/motor-test\">Звуковой тест моторов</a></nav>
+    <h1>Настройка PID BiBa</h1>
     <div class=\"meta\">
-        <div id=\"armed_state\">State: unknown</div>
-        <div id=\"applied_revision\">Applied revision: n/a</div>
-        <div id=\"pending_revision\">Pending revision: none</div>
+        <div id=\"armed_state\">Состояние: неизвестно</div>
+        <div id=\"applied_revision\">Применённая версия: н/д</div>
+        <div id=\"pending_revision\">Ожидающая версия: нет</div>
     </div>
     <form id=\"pid-tuning-form\">
         <fieldset>
-            <legend>Yaw-rate PID</legend>
+            <legend>PID по скорости рысканья</legend>
             <label for=\"yaw_rate_kp\">Kp<input id=\"yaw_rate_kp\" name=\"yaw_rate_kp\" type=\"number\" min=\"0\" max=\"1\" step=\"0.001\"></label>
             <label for=\"yaw_rate_ki\">Ki<input id=\"yaw_rate_ki\" name=\"yaw_rate_ki\" type=\"number\" min=\"0\" max=\"1\" step=\"0.001\"></label>
             <label for=\"yaw_rate_kd\">Kd<input id=\"yaw_rate_kd\" name=\"yaw_rate_kd\" type=\"number\" min=\"0\" max=\"1\" step=\"0.001\"></label>
         </fieldset>
         <fieldset>
-            <legend>Yaw-rate shaping</legend>
-            <label for=\"yaw_rate_deadband_dps\">Deadband (dps)<input id=\"yaw_rate_deadband_dps\" name=\"yaw_rate_deadband_dps\" type=\"number\" min=\"0\" max=\"45\" step=\"0.1\"></label>
-            <label for=\"yaw_rate_filter_hz\">Filter (Hz)<input id=\"yaw_rate_filter_hz\" name=\"yaw_rate_filter_hz\" type=\"number\" min=\"0\" max=\"30\" step=\"0.1\"></label>
+            <legend>Формирование скорости рысканья</legend>
+            <label for=\"yaw_rate_deadband_dps\">Мёртвая зона (град/с)<input id=\"yaw_rate_deadband_dps\" name=\"yaw_rate_deadband_dps\" type=\"number\" min=\"0\" max=\"45\" step=\"0.1\"></label>
+            <label for=\"yaw_rate_filter_hz\">Фильтр (Гц)<input id=\"yaw_rate_filter_hz\" name=\"yaw_rate_filter_hz\" type=\"number\" min=\"0\" max=\"30\" step=\"0.1\"></label>
         </fieldset>
         <fieldset>
-            <legend>Low-speed stabilization</legend>
-            <label for=\"stabilization_min_throttle\">Min throttle<input id=\"stabilization_min_throttle\" name=\"stabilization_min_throttle\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
-            <label for=\"neutral_stabilization_steering_limit\">Steering limit<input id=\"neutral_stabilization_steering_limit\" name=\"neutral_stabilization_steering_limit\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
-            <label for=\"neutral_stabilization_max_throttle\">Max throttle<input id=\"neutral_stabilization_max_throttle\" name=\"neutral_stabilization_max_throttle\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
+            <legend>Стабилизация на малой скорости</legend>
+            <label for=\"stabilization_min_throttle\">Мин. газ<input id=\"stabilization_min_throttle\" name=\"stabilization_min_throttle\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
+            <label for=\"neutral_stabilization_steering_limit\">Предел поворота<input id=\"neutral_stabilization_steering_limit\" name=\"neutral_stabilization_steering_limit\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
+            <label for=\"neutral_stabilization_max_throttle\">Макс. газ<input id=\"neutral_stabilization_max_throttle\" name=\"neutral_stabilization_max_throttle\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
         </fieldset>
         <div class=\"actions\">
-            <button type=\"submit\">Apply tuning</button>
-            <button type=\"button\" id=\"load-defaults\">Load defaults</button>
+            <button type=\"submit\">Применить настройки</button>
+            <button type=\"button\" id=\"load-defaults\">Загрузить значения по умолчанию</button>
         </div>
         <div id=\"status\" class=\"status\" aria-live=\"polite\"></div>
     </form>
@@ -486,15 +501,15 @@ def build_pid_tuning_page(defaults: PidTuningSnapshot) -> str:
         }}
 
         function renderStatus(payload) {{
-            armedStateNode.textContent = `State: ${{payload.armed ? 'armed' : 'disarmed'}}`;
-            appliedRevisionNode.textContent = `Applied revision: ${{payload.applied_revision}}`;
-            pendingRevisionNode.textContent = `Pending revision: ${{payload.pending_revision ?? 'none'}}`;
+            armedStateNode.textContent = `Состояние: ${{payload.armed ? 'взведена' : 'разоружена'}}`;
+            appliedRevisionNode.textContent = `Применённая версия: ${{payload.applied_revision}}`;
+            pendingRevisionNode.textContent = `Ожидающая версия: ${{payload.pending_revision ?? 'нет'}}`;
             applyButton.disabled = payload.armed;
             applyValues(payload.pending || payload.current || DEFAULT_TUNING);
             if (payload.armed) {{
-                statusNode.textContent = 'Disarm the platform to apply tuning changes';
+                statusNode.textContent = 'Платформа должна быть разоружена, чтобы применить настройки';
             }} else if (payload.pending_revision !== null) {{
-                statusNode.textContent = 'Tuning update queued';
+                statusNode.textContent = 'Обновление PID поставлено в очередь';
             }}
         }}
 
@@ -507,12 +522,12 @@ def build_pid_tuning_page(defaults: PidTuningSnapshot) -> str:
 
         document.getElementById('load-defaults').addEventListener('click', () => {{
             applyValues(DEFAULT_TUNING);
-            statusNode.textContent = 'Loaded defaults into the form';
+            statusNode.textContent = 'Значения по умолчанию загружены в форму';
         }});
 
         form.addEventListener('submit', async (event) => {{
             event.preventDefault();
-            statusNode.textContent = 'Applying...';
+            statusNode.textContent = 'Применяю настройки...';
             const payload = Object.fromEntries(fields.map((field) => [field, Number(document.getElementById(field).value)]));
             try {{
                 const response = await fetch('/api/pid-tuning', {{
@@ -522,12 +537,12 @@ def build_pid_tuning_page(defaults: PidTuningSnapshot) -> str:
                 }});
                 const body = await response.json();
                 if (!response.ok) {{
-                    throw new Error(body.error || `HTTP ${{response.status}}`);
+                    throw new Error(body.error || `Код HTTP ${{response.status}}`);
                 }}
                 renderStatus(body);
-                statusNode.textContent = 'Tuning update queued';
+                statusNode.textContent = 'Обновление PID поставлено в очередь';
             }} catch (error) {{
-                statusNode.textContent = `Error: ${{error.message}}`;
+                statusNode.textContent = `Ошибка: ${{error.message}}`;
             }}
         }});
 
@@ -636,7 +651,7 @@ def _handle_motor_test_post(handler: BaseHTTPRequestHandler, executor) -> None:
         request = parse_motor_test_request(payload)
         executor.run(request)
     except json.JSONDecodeError:
-        _write_json_response(handler, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+        _write_json_response(handler, HTTPStatus.BAD_REQUEST, {"error": "Некорректный JSON"})
         return
     except ValueError as exc:
         _write_json_response(handler, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -717,7 +732,7 @@ def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store
                     snapshot = snapshot_from_mapping(payload, defaults=status.current)
                     pid_tuning_store.request_update(snapshot)
                 except json.JSONDecodeError:
-                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "Некорректный JSON"})
                     return
                 except ValueError as exc:
                     _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -741,7 +756,7 @@ def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store
                     trim = _parse_motor_trim_request(payload)
                     motor_trim_store.request_update(trim)
                 except json.JSONDecodeError:
-                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "Некорректный JSON"})
                     return
                 except ValueError as exc:
                     _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})

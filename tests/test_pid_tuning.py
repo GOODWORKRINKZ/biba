@@ -37,7 +37,7 @@ def test_snapshot_from_mapping_merges_with_defaults() -> None:
 
 
 def test_snapshot_from_mapping_rejects_invalid_ranges() -> None:
-    with pytest.raises(ValueError, match="neutral_stabilization_max_throttle"):
+    with pytest.raises(ValueError, match="Макс\. газ стабилизации"):
         snapshot_from_mapping(
             {
                 "stabilization_min_throttle": 0.2,
@@ -97,7 +97,7 @@ def test_pid_tuning_store_rejects_updates_while_armed(tmp_path) -> None:
     store = PidTuningStore(settings_path=settings_path, defaults=_defaults())
     store.set_armed(True)
 
-    with pytest.raises(RuntimeError, match="disarmed"):
+    with pytest.raises(RuntimeError, match="разоруж"):
         store.request_update(replace(_defaults(), yaw_rate_kp=0.02))
 
     status = store.snapshot_status()

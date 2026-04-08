@@ -97,7 +97,7 @@ class MotorTrimStore:
     def request_update(self, trim: float) -> int:
         with self._lock:
             if self._armed:
-                self._last_error = "motor trim changes are allowed only while disarmed"
+                self._last_error = "Изменять трим моторов можно только когда платформа разоружена"
                 raise RuntimeError(self._last_error)
             clamped_trim = save_motor_trim(self._settings_path, trim, max_effect=self._max_effect)
             next_revision = max(self._applied_revision, self._pending_revision or 0) + 1

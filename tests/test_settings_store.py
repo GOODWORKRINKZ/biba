@@ -26,7 +26,7 @@ def test_motor_trim_store_rejects_updates_while_armed(tmp_path) -> None:
     store = MotorTrimStore(settings_path=tmp_path / "motor-trim.json", max_effect=0.3)
     store.set_armed(True)
 
-    with pytest.raises(RuntimeError, match="disarmed"):
+    with pytest.raises(RuntimeError, match="разоруж"):
         store.request_update(0.15)
 
     status = store.snapshot_status()
