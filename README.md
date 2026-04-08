@@ -118,7 +118,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `THROTTLE_KALMAN_PROCESS_NOISE=0.02` — насколько быстро фильтр принимает изменения реального setpoint
 - `THROTTLE_KALMAN_MEASUREMENT_NOISE=0.5` — насколько сильно фильтр подавляет шум и ложные выбросы канала
 - `CH_SPEED_MODE=5` — `CH6` на передатчике; трёхпозиционный селектор скоростного режима для controller-side scaling газа и руля
-- `CH_DRIVE_MODE=6` — `CH7` на передатчике; трёхпозиционный селектор режимов движения: `manual`, `stabilized`, `heading_hold`
+- `CH_DRIVE_MODE=6` — `CH7` на передатчике; селектор режимов движения: `manual` и `stabilized`
 - `SPEED_MODE_LOW_THRESHOLD=-0.3` — нижний порог селектора в нормализованном диапазоне `-1..1`; ниже этого значения включается режим `1`
 - `SPEED_MODE_HIGH_THRESHOLD=0.3` — верхний порог селектора в нормализованном диапазоне `-1..1`; выше этого значения включается режим `3`
 - `SPEED_MODE_SLOW_SCALE=0.3333333333333333` — коэффициент для режима `1`
@@ -129,6 +129,9 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `IMU_SAMPLE_RATE_HZ=100.0`, `IMU_STALE_TIMEOUT_S=0.2`, `IMU_GYRO_BIAS_CALIBRATION_S=1.0`, `IMU_GYRO_Z_SIGN=1.0` — частота чтения, timeout свежести, длительность bias-калибровки и знак yaw-оси
 - `DRIVE_MODE_STEERING_DEADBAND=0.05`, `DRIVE_MODE_STEERING_LIMIT=1.0`, `DRIVE_MODE_YAW_RATE_MAX_DPS=90.0` — базовые ограничения assist-контура
 - `DRIVE_MODE_YAW_RATE_KP/KI/KD` — tuning-параметры yaw-rate контура stabilized режима
+- `DRIVE_MODE_YAW_RATE_DEADBAND_DPS`, `DRIVE_MODE_YAW_RATE_FILTER_HZ` — подавление мелкого gyro noise и сглаживание yaw-rate feedback
+- `DRIVE_MODE_STABILIZATION_MIN_THROTTLE`, `DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT`, `DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE` — low-speed ограничения stabilized режима
+- `PID_TUNING_SETTINGS_PATH=/data/pid-tuning.json` — persistent JSON с последними field-tuning значениями stabilized режима
 - `BMS_TELEMETRY_TRACE_ENABLED=0|1` — включает точные controller-side trace-логи на этапах consume/send для battery telemetry
 - `BEACON_ENABLED=0|1`
 - `BEACON_DELAY_S=300`
@@ -141,9 +144,9 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `ENABLE_RC_MELODIES=0|1` — включает выбор BLHeli-мелодий с передатчика
 - `CH_MELODY=8` — канал выбора мелодии, если `ENABLE_RC_MELODIES=1`
 - `STARTUP_MELODY=biba_signature` — стартовая BLHeli-мелодия при включённом melody-runtime
-- `MOTOR_TEST_API_ENABLED=0|1` — включает HTTP-страницу ручного теста моторных PWM
-- `MOTOR_TEST_API_HOST=0.0.0.0` — bind host для страницы ручного моторного теста
-- `MOTOR_TEST_API_PORT=8765` — bind port для страницы ручного моторного теста
+- `MOTOR_TEST_API_ENABLED=0|1` — включает встроенный HTTP tools UI контроллера
+- `MOTOR_TEST_API_HOST=0.0.0.0` — bind host для tools UI
+- `MOTOR_TEST_API_PORT=8765` — bind port для tools UI
 - `RAMP_ACCEL_RATE=2.0` — скорость разгона мотора (единиц/сек, 0→100% за 0.5с)
 - `RAMP_DECEL_RATE=2.0` — скорость отпускания/торможения (единиц/сек, 100%→0 за 0.5с)
 - `RAMP_REVERSE_DECEL_RATE=0.5` — скорость подхода к нулю перед сменой направления; меньше значение = мягче переход в реверс
@@ -161,11 +164,17 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 Этот trace нужен для офлайн-калибровки токов колёс против более медленного тока BMS и по умолчанию выключен.
 
-## Manual motor test page
+## Tools UI
 
-Для инженерной проверки моторных PWM доступна простая HTTP-страница на контроллере:
+Для инженерной проверки и полевого тюнинга на контроллере доступен встроенный HTTP tools UI:
 
-- адрес: `http://<robot-ip>:8765/motor-test`
+- `http://<robot-ip>:8765/motor-test`
+- `http://<robot-ip>:8765/pid-tuning`
+
+### Manual motor test page
+
+Страница `/motor-test` используется для коротких ручных проверок моторных PWM.
+
 - параметры:
    - частота левого канала `100..8000` Гц
    - скважность левого канала `0..100%`
@@ -177,6 +186,26 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 Это диагностический путь для коротких ручных тестов драйверов и моторных каналов. Он не заменяет обычное CRSF-управление.
 
+### PID tuning page
+
+Страница `/pid-tuning` нужна для полевой настройки stabilized режима без правки env и без пересборки образа.
+
+- изменения применяются live и сразу сохраняются в `PID_TUNING_SETTINGS_PATH`
+- обновления разрешены только пока платформа `disarmed`
+- API `GET /api/pid-tuning` возвращает текущие значения, defaults, pending и revision state
+- API `POST /api/pid-tuning` принимает новые tuning-параметры
+- страница сама опрашивает status API, показывает `pending revision` и блокирует `Apply tuning`, пока платформа `armed`
+
+Доступные параметры:
+
+- `yaw_rate_kp`, `yaw_rate_ki`, `yaw_rate_kd`
+- `yaw_rate_deadband_dps`, `yaw_rate_filter_hz`
+- `stabilization_min_throttle`
+- `neutral_stabilization_steering_limit`
+- `neutral_stabilization_max_throttle`
+
+При старте контроллер автоматически загружает последнее сохранённое значение из persistent volume, поэтому удачный field tuning переживает restart и обновление образа. После submit страница может кратко показать queued `pending revision`, а затем перейти в applied state на следующем цикле main loop.
+
 Для текущего кода и текущего робота default уже `SOFTWARE`. Режим `HARDWARE` оставлен только для совместимых конфигураций, где PWM-линии не конфликтуют между собой.
 
 Если после сборки одно из колёс едет в обратную сторону, достаточно выставить для него значение `1`.
@@ -185,7 +214,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 - автоматический SOS после длительного failsafe
 - ручное включение с тумблера передатчика через `CH_BEACON`
-- режимы движения на `CH_DRIVE_MODE`: `manual`, `stabilized`, `heading_hold`
+- режимы движения на `CH_DRIVE_MODE`: `manual`, `stabilized`
 - общий мьют обычных звуков через `CH_MUTE`
 - отключение маяка через `BEACON_ENABLED=0`
 

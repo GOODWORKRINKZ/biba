@@ -5,8 +5,11 @@ import json
 import threading
 import urllib.error
 import urllib.request
+from dataclasses import asdict
 
 import pytest
+
+from pid_tuning import PidTuningSnapshot, PidTuningStore
 
 
 def test_parse_motor_test_request_accepts_valid_payload() -> None:
@@ -351,6 +354,185 @@ def test_build_control_page_contains_expected_inputs() -> None:
     assert "output.textContent = numberInput.value;" in page
     assert "numberInput.addEventListener('change', () => {" in page
     assert "updateFromNumber(numberInput.value);" in page
+
+
+def _pid_defaults() -> PidTuningSnapshot:
+    return PidTuningSnapshot(
+        yaw_rate_kp=0.01,
+        yaw_rate_ki=0.0,
+        yaw_rate_kd=0.001,
+        yaw_rate_deadband_dps=4.0,
+        yaw_rate_filter_hz=5.0,
+        stabilization_min_throttle=0.1,
+        neutral_stabilization_steering_limit=0.12,
+        neutral_stabilization_max_throttle=0.25,
+    )
+
+
+def test_build_pid_tuning_page_contains_expected_inputs() -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    page = motor_test_api.build_pid_tuning_page(_pid_defaults())
+
+    assert "BiBa PID Tuning" in page
+    assert "yaw_rate_kp" in page
+    assert "yaw_rate_ki" in page
+    assert "yaw_rate_kd" in page
+    assert "yaw_rate_deadband_dps" in page
+    assert "yaw_rate_filter_hz" in page
+    assert "stabilization_min_throttle" in page
+    assert "neutral_stabilization_steering_limit" in page
+    assert "neutral_stabilization_max_throttle" in page
+    assert "/api/pid-tuning" in page
+    assert "/motor-test" in page
+    assert "refreshStatus" in page
+    assert "payload.pending || payload.current || DEFAULT_TUNING" in page
+    assert "applyButton.disabled = payload.armed" in page
+    assert "setInterval(refreshStatus, 1000);" in page
+
+
+def test_http_server_serves_pid_tuning_page(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        def run(self, request) -> None:
+            del request
+
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults())
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/pid-tuning", timeout=2.0) as response:
+            body = response.read().decode("utf-8")
+
+        assert response.status == 200
+        assert "yaw_rate_kp" in body
+        assert "Apply tuning" in body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_returns_current_pid_tuning_status(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        def run(self, request) -> None:
+            del request
+
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults())
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/pid-tuning", timeout=2.0) as response:
+            body = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 200
+        assert body["armed"] is False
+        assert body["current"] == asdict(_pid_defaults())
+        assert body["defaults"] == asdict(_pid_defaults())
+        assert body["pending"] is None
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_rejects_pid_tuning_update_while_armed(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        def run(self, request) -> None:
+            del request
+
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults())
+    store.set_armed(True)
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = json.dumps({"yaw_rate_kp": 0.02}).encode("utf-8")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/pid-tuning",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request, timeout=2.0)
+
+        body = json.loads(exc_info.value.read().decode("utf-8"))
+        assert exc_info.value.code == 409
+        assert "disarmed" in body["error"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_accepts_pid_tuning_update_while_disarmed(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        def run(self, request) -> None:
+            del request
+
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults())
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = json.dumps(
+            {
+                "yaw_rate_kp": 0.02,
+                "yaw_rate_filter_hz": 3.0,
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/pid-tuning",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=2.0) as response:
+            body = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 200
+        assert body["pending_revision"] == 1
+        assert body["pending"]["yaw_rate_kp"] == pytest.approx(0.02)
+        assert body["pending"]["yaw_rate_filter_hz"] == pytest.approx(3.0)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
 
 
 def test_http_server_serves_control_page() -> None:

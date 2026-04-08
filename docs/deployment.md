@@ -121,7 +121,7 @@ bash ~/biba/scripts/diagnostics.sh
 | `THROTTLE_FILTER_MODE` | `NONE` | Фильтрация газа до wheel-mix; `NONE` отключает, `KALMAN` сглаживает выбросы канала |
 | `THROTTLE_KALMAN_PROCESS_NOISE` | `0.02` | Насколько быстро фильтр принимает изменение реального газа |
 | `THROTTLE_KALMAN_MEASUREMENT_NOISE` | `0.5` | Насколько сильно фильтр подавляет шум и ложные выбросы канала |
-| `CH_DRIVE_MODE` | `6` | `CH7`; трёхпозиционный селектор `manual` / `stabilized` / `heading_hold` |
+| `CH_DRIVE_MODE` | `6` | `CH7`; селектор режимов `manual` / `stabilized` |
 | `BEACON_ENABLED` | `1` | Включить звуковой маяк/SOS на роботе |
 | `BEACON_DELAY_S` | `300` | Через сколько секунд failsafe включать авто-SOS |
 | `CH_BEACON` | `7` | `CH8`; канал тумблера для ручного включения маяка |
@@ -135,13 +135,24 @@ bash ~/biba/scripts/diagnostics.sh
 | `IMU_STALE_TIMEOUT_S` | `0.2` | После какого возраста sample assist отключается в fallback |
 | `IMU_GYRO_BIAS_CALIBRATION_S` | `1.0` | Длительность bias-калибровки гиры в разоружённом состоянии |
 | `IMU_GYRO_Z_SIGN` | `1.0` | Знак yaw-оси, если IMU установлена зеркально |
-| `DRIVE_MODE_STEERING_DEADBAND` | `0.05` | Deadband steering stick для heading latch |
+| `DRIVE_MODE_STEERING_DEADBAND` | `0.05` | Deadband steering stick для stabilized assist |
 | `DRIVE_MODE_STEERING_LIMIT` | `1.0` | Верхний предел steering output assist-контура |
-| `DRIVE_MODE_YAW_RATE_MAX_DPS` | `90.0` | Максимальный целевой yaw-rate для stabilized/heading-hold |
-| `HEADING_HOLD_MAX_RATE_DPS` | `45.0` | Ограничение outer-loop yaw-rate для heading-hold |
+| `DRIVE_MODE_YAW_RATE_MAX_DPS` | `90.0` | Максимальный целевой yaw-rate для stabilized режима |
+| `DRIVE_MODE_YAW_RATE_KP` | `0.010` | `Kp` yaw-rate PID контура stabilized режима |
+| `DRIVE_MODE_YAW_RATE_KI` | `0.0` | `Ki` yaw-rate PID контура stabilized режима |
+| `DRIVE_MODE_YAW_RATE_KD` | `0.001` | `Kd` yaw-rate PID контура stabilized режима |
+| `DRIVE_MODE_YAW_RATE_DEADBAND_DPS` | `4.0` | Deadband по измеренному yaw-rate для подавления мелкого шума гиры |
+| `DRIVE_MODE_YAW_RATE_FILTER_HZ` | `5.0` | Low-pass фильтр измеренного yaw-rate |
+| `DRIVE_MODE_STABILIZATION_MIN_THROTTLE` | `0.1` | Ниже этого газа stabilized-контур не подруливает при нейтральном руле |
+| `DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT` | `0.12` | Максимальная величина автоматической подрулёжки на нейтрали |
+| `DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE` | `0.25` | До какого газа действует ограничение neutral stabilization |
+| `PID_TUNING_SETTINGS_PATH` | `/data/pid-tuning.json` | Persistent JSON с последними значениями field tuning |
 | `MOTOR_TRIM_MAX_EFFECT` | `0.30` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
 | `MOTOR_TRIM_CONFIRM_HOLD_S` | `5.0` | Длительность trim-жеста для входа и подтверждения |
 | `MOTOR_TRIM_SETTINGS_PATH` | `/data/motor-trim.json` | Путь к persistent JSON-файлу сохранённого trim |
+| `MOTOR_TEST_API_ENABLED` | `1` | Включает встроенный HTTP tools UI контроллера |
+| `MOTOR_TEST_API_HOST` | `0.0.0.0` | Bind host для tools UI |
+| `MOTOR_TEST_API_PORT` | `8765` | Bind port для tools UI |
 | `ENABLE_RC_MELODIES` | `0` | Включает выбор BLHeli-мелодий с передатчика |
 | `CH_MELODY` | `8` | Канал выбора мелодии при `ENABLE_RC_MELODIES=1` |
 | `STARTUP_MELODY` | `biba_signature` | Стартовая BLHeli-мелодия |
@@ -192,6 +203,12 @@ DRIVE_MODE_YAW_RATE_MAX_DPS=90.0
 DRIVE_MODE_YAW_RATE_KP=0.010
 DRIVE_MODE_YAW_RATE_KI=0.0
 DRIVE_MODE_YAW_RATE_KD=0.001
+DRIVE_MODE_YAW_RATE_DEADBAND_DPS=4.0
+DRIVE_MODE_YAW_RATE_FILTER_HZ=5.0
+DRIVE_MODE_STABILIZATION_MIN_THROTTLE=0.1
+DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT=0.12
+DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE=0.25
+PID_TUNING_SETTINGS_PATH=/data/pid-tuning.json
 MOTOR_TRIM_MAX_EFFECT=0.30
 MOTOR_TRIM_CONFIRM_HOLD_S=5.0
 MOTOR_TRIM_SETTINGS_PATH=/data/motor-trim.json
@@ -255,6 +272,34 @@ BiBa использует моторный synth/audio runtime для:
 5. Контроллер сохранит текущее effective trim в `/data/motor-trim.json` и выйдет из trim-mode.
 
 Вне trim-mode live `CH9` не используется: применяется только последнее сохранённое значение.
+
+### PID tuning page
+
+В том же controller runtime доступна встроенная страница полевого тюнинга stabilized режима:
+
+1. Откройте `http://<robot-ip>:8765/pid-tuning`.
+2. Разармите платформу.
+3. Измените PID и low-speed параметры.
+4. Нажмите apply.
+
+Поведение страницы:
+
+- изменения применяются live без рестарта контейнера
+- значения сразу сохраняются в `PID_TUNING_SETTINGS_PATH`
+- после рестарта controller загружает последние сохранённые значения автоматически
+- пока платформа `armed`, `POST /api/pid-tuning` отклоняется
+- кнопка apply в UI блокируется, пока платформа `armed`
+- страница сама опрашивает status API и показывает `pending revision`, пока main loop не применит новый snapshot
+
+Через страницу доступны:
+
+- `yaw_rate_kp`, `yaw_rate_ki`, `yaw_rate_kd`
+- `yaw_rate_deadband_dps`, `yaw_rate_filter_hz`
+- `stabilization_min_throttle`
+- `neutral_stabilization_steering_limit`
+- `neutral_stabilization_max_throttle`
+
+Для ручного PWM-теста рядом остаётся старая инженерная страница `http://<robot-ip>:8765/motor-test`.
 
 ### Обновление voice assets на роботе
 

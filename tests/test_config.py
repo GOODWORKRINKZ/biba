@@ -38,6 +38,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     monkeypatch.delenv("MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", raising=False)
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_DEADBAND_DPS", raising=False)
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_FILTER_HZ", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_STABILIZATION_MIN_THROTTLE", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE", raising=False)
+    monkeypatch.delenv("PID_TUNING_SETTINGS_PATH", raising=False)
 
     module = importlib.reload(config_module)
 
@@ -94,6 +98,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S == pytest.approx(0.0)
     assert module.DRIVE_MODE_YAW_RATE_DEADBAND_DPS == pytest.approx(4.0)
     assert module.DRIVE_MODE_YAW_RATE_FILTER_HZ == pytest.approx(5.0)
+    assert module.DRIVE_MODE_STABILIZATION_MIN_THROTTLE == pytest.approx(0.1)
+    assert module.DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT == pytest.approx(0.12)
+    assert module.DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE == pytest.approx(0.25)
+    assert module.PID_TUNING_SETTINGS_PATH == "/data/pid-tuning.json"
     assert module.LOG_LEVEL == "INFO"
 
 
@@ -234,6 +242,10 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setenv("MOTOR_CURRENT_TRACE_MIN_INTERVAL_S", "0.04")
     monkeypatch.setenv("DRIVE_MODE_YAW_RATE_DEADBAND_DPS", "2.5")
     monkeypatch.setenv("DRIVE_MODE_YAW_RATE_FILTER_HZ", "7.5")
+    monkeypatch.setenv("DRIVE_MODE_STABILIZATION_MIN_THROTTLE", "0.14")
+    monkeypatch.setenv("DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT", "0.06")
+    monkeypatch.setenv("DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE", "0.18")
+    monkeypatch.setenv("PID_TUNING_SETTINGS_PATH", "/tmp/pid-tuning.json")
 
     module = importlib.reload(config_module)
 
@@ -280,6 +292,10 @@ def test_config_applies_environment_overrides(monkeypatch: pytest.MonkeyPatch, c
     assert module.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S == pytest.approx(0.04)
     assert module.DRIVE_MODE_YAW_RATE_DEADBAND_DPS == pytest.approx(2.5)
     assert module.DRIVE_MODE_YAW_RATE_FILTER_HZ == pytest.approx(7.5)
+    assert module.DRIVE_MODE_STABILIZATION_MIN_THROTTLE == pytest.approx(0.14)
+    assert module.DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT == pytest.approx(0.06)
+    assert module.DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE == pytest.approx(0.18)
+    assert module.PID_TUNING_SETTINGS_PATH == "/tmp/pid-tuning.json"
 
 
 def test_config_ignores_invalid_numeric_environment_values(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
@@ -357,6 +373,11 @@ def test_config_defaults_drive_mode_and_imu_settings(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KP", raising=False)
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KI", raising=False)
     monkeypatch.delenv("DRIVE_MODE_YAW_RATE_KD", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_DEADBAND_DPS", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_YAW_RATE_FILTER_HZ", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_STABILIZATION_MIN_THROTTLE", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT", raising=False)
+    monkeypatch.delenv("DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE", raising=False)
     monkeypatch.delenv("IMU_ENABLED", raising=False)
     monkeypatch.delenv("IMU_I2C_BUS", raising=False)
     monkeypatch.delenv("IMU_I2C_ADDRESS", raising=False)
@@ -377,6 +398,11 @@ def test_config_defaults_drive_mode_and_imu_settings(monkeypatch: pytest.MonkeyP
     assert module.DRIVE_MODE_YAW_RATE_KP == pytest.approx(0.01)
     assert module.DRIVE_MODE_YAW_RATE_KI == pytest.approx(0.0)
     assert module.DRIVE_MODE_YAW_RATE_KD == pytest.approx(0.001)
+    assert module.DRIVE_MODE_YAW_RATE_DEADBAND_DPS == pytest.approx(4.0)
+    assert module.DRIVE_MODE_YAW_RATE_FILTER_HZ == pytest.approx(5.0)
+    assert module.DRIVE_MODE_STABILIZATION_MIN_THROTTLE == pytest.approx(0.1)
+    assert module.DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT == pytest.approx(0.12)
+    assert module.DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE == pytest.approx(0.25)
     assert module.IMU_ENABLED is False
     assert module.IMU_I2C_BUS == 1
     assert module.IMU_I2C_ADDRESS == 0x68
@@ -399,6 +425,14 @@ def test_config_defaults_trim_settings(monkeypatch: pytest.MonkeyPatch, config_m
     assert module.MOTOR_TRIM_MAX_EFFECT == pytest.approx(0.30)
     assert module.MOTOR_TRIM_CONFIRM_HOLD_S == pytest.approx(5.0)
     assert module.MOTOR_TRIM_SETTINGS_PATH == "/data/motor-trim.json"
+
+
+def test_config_defaults_pid_tuning_settings(monkeypatch: pytest.MonkeyPatch, config_module) -> None:
+    monkeypatch.delenv("PID_TUNING_SETTINGS_PATH", raising=False)
+
+    module = importlib.reload(config_module)
+
+    assert module.PID_TUNING_SETTINGS_PATH == "/data/pid-tuning.json"
 
 
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
@@ -444,6 +478,11 @@ def test_env_example_exposes_drive_mode_and_imu_environment_variables() -> None:
     assert "DRIVE_MODE_STEERING_LIMIT=" in env_example
     assert "DRIVE_MODE_YAW_RATE_MAX_DPS=" in env_example
     assert "DRIVE_MODE_YAW_RATE_KP=" in env_example
+    assert "DRIVE_MODE_YAW_RATE_DEADBAND_DPS=" in env_example
+    assert "DRIVE_MODE_YAW_RATE_FILTER_HZ=" in env_example
+    assert "DRIVE_MODE_STABILIZATION_MIN_THROTTLE=" in env_example
+    assert "DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT=" in env_example
+    assert "DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE=" in env_example
     assert "HEADING_HOLD_KP=" not in env_example
     assert "HEADING_HOLD_MAX_RATE_DPS=" not in env_example
     assert "IMU_ENABLED=" in env_example
@@ -454,6 +493,13 @@ def test_env_example_exposes_drive_mode_and_imu_environment_variables() -> None:
     assert "IMU_STALE_TIMEOUT_S=" in env_example
     assert "IMU_GYRO_BIAS_CALIBRATION_S=" in env_example
     assert "IMU_GYRO_Z_SIGN=" in env_example
+
+
+def test_env_example_exposes_pid_tuning_settings_path() -> None:
+    with open(".env.example", encoding="utf-8") as env_file:
+        env_example = env_file.read()
+
+    assert "PID_TUNING_SETTINGS_PATH=" in env_example
 
 
 def test_docker_compose_exposes_trim_environment_variables() -> None:
@@ -502,6 +548,11 @@ def test_docker_compose_exposes_drive_mode_and_imu_environment_variables() -> No
     assert "DRIVE_MODE_STEERING_LIMIT:" in compose
     assert "DRIVE_MODE_YAW_RATE_MAX_DPS:" in compose
     assert "DRIVE_MODE_YAW_RATE_KP:" in compose
+    assert "DRIVE_MODE_YAW_RATE_DEADBAND_DPS:" in compose
+    assert "DRIVE_MODE_YAW_RATE_FILTER_HZ:" in compose
+    assert "DRIVE_MODE_STABILIZATION_MIN_THROTTLE:" in compose
+    assert "DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT:" in compose
+    assert "DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE:" in compose
     assert "HEADING_HOLD_KP:" not in compose
     assert "HEADING_HOLD_MAX_RATE_DPS:" not in compose
     assert "IMU_ENABLED:" in compose
@@ -512,6 +563,14 @@ def test_docker_compose_exposes_drive_mode_and_imu_environment_variables() -> No
     assert "IMU_STALE_TIMEOUT_S:" in compose
     assert "IMU_GYRO_BIAS_CALIBRATION_S:" in compose
     assert "IMU_GYRO_Z_SIGN:" in compose
+
+
+def test_docker_compose_exposes_pid_tuning_settings_path() -> None:
+    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+        compose = compose_file.read()
+
+    assert "PID_TUNING_SETTINGS_PATH:" in compose
+    assert "PID_TUNING_SETTINGS_PATH: ${PID_TUNING_SETTINGS_PATH:-/data/pid-tuning.json}" in compose
 
 
 def test_docker_compose_exposes_bts7960_environment_variables() -> None:

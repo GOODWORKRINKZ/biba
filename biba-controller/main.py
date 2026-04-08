@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import logging
 import os
 import signal
@@ -33,6 +34,7 @@ from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 from motors.ramping import ScalarKalmanFilter
 from motor_test_api import MotorTestExecutor, create_motor_test_server
+from pid_tuning import PidTuningSnapshot, PidTuningStore, load_pid_tuning
 from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
@@ -432,13 +434,34 @@ def _motor_test_active(executor) -> bool:
     return bool(executor is not None and getattr(executor, "is_active", False))
 
 
-def _create_motor_test_server(executor):
+def _supports_kwarg(callable_obj, argument_name: str) -> bool:
+    parameters = inspect.signature(callable_obj).parameters.values()
+    if argument_name in inspect.signature(callable_obj).parameters:
+        return True
+    return any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+
+
+def _supports_positional_argument(callable_obj) -> bool:
+    parameters = inspect.signature(callable_obj).parameters.values()
+    return any(
+        parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.VAR_POSITIONAL,
+        )
+        for parameter in parameters
+    )
+
+
+def _create_motor_test_server(executor, *, pid_tuning_store: PidTuningStore | None = None):
     if executor is None:
         return None
     return create_motor_test_server(
         executor,
         host=config.MOTOR_TEST_API_HOST,
         port=config.MOTOR_TEST_API_PORT,
+        pid_tuning_store=pid_tuning_store,
     )
 
 
@@ -708,6 +731,63 @@ def _save_motor_trim(trim: float) -> None:
     }
     temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     os.replace(temp_path, settings_path)
+
+
+def _default_pid_tuning_snapshot() -> PidTuningSnapshot:
+    return PidTuningSnapshot(
+        yaw_rate_kp=config.DRIVE_MODE_YAW_RATE_KP,
+        yaw_rate_ki=config.DRIVE_MODE_YAW_RATE_KI,
+        yaw_rate_kd=config.DRIVE_MODE_YAW_RATE_KD,
+        yaw_rate_deadband_dps=config.DRIVE_MODE_YAW_RATE_DEADBAND_DPS,
+        yaw_rate_filter_hz=config.DRIVE_MODE_YAW_RATE_FILTER_HZ,
+        stabilization_min_throttle=config.DRIVE_MODE_STABILIZATION_MIN_THROTTLE,
+        neutral_stabilization_steering_limit=config.DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT,
+        neutral_stabilization_max_throttle=config.DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE,
+    )
+
+
+def _load_pid_tuning_state() -> tuple[PidTuningSnapshot, PidTuningStore]:
+    defaults = _default_pid_tuning_snapshot()
+    current = load_pid_tuning(config.PID_TUNING_SETTINGS_PATH, defaults=defaults)
+    return current, PidTuningStore(
+        settings_path=config.PID_TUNING_SETTINGS_PATH,
+        defaults=defaults,
+        current=current,
+    )
+
+
+def _apply_pending_pid_tuning_update(
+    assisted_drive: AssistedDriveController,
+    pid_tuning_store: PidTuningStore | None,
+    *,
+    armed: bool,
+) -> AssistedDriveController:
+    if pid_tuning_store is None:
+        return assisted_drive
+
+    pid_tuning_store.set_armed(armed)
+    if armed:
+        return assisted_drive
+
+    pending_update = pid_tuning_store.consume_pending_update()
+    if pending_update is None:
+        return assisted_drive
+
+    revision, snapshot = pending_update
+    try:
+        if _supports_positional_argument(_create_assisted_drive_controller):
+            updated_controller = _create_assisted_drive_controller(snapshot)
+        else:
+            updated_controller = _create_assisted_drive_controller()
+    except Exception as exc:
+        message = f"failed to apply pid tuning revision {revision}: {exc}"
+        pid_tuning_store.record_apply_error(message)
+        LOGGER.warning("Failed to apply PID tuning revision %s: %s", revision, exc)
+        return assisted_drive
+
+    pid_tuning_store.mark_applied(revision)
+    LOGGER.info("Applied PID tuning revision %s", revision)
+    return updated_controller
 
 
 def _encode_battery_status_bits(
@@ -1054,18 +1134,24 @@ def _create_imu_reader():
         return NullIMUReader()
 
 
-def _create_assisted_drive_controller() -> AssistedDriveController:
+def _create_assisted_drive_controller(snapshot: PidTuningSnapshot | None = None) -> AssistedDriveController:
+    if snapshot is None:
+        snapshot = _default_pid_tuning_snapshot()
+
     return AssistedDriveController(
         AssistedDriveConfig(
             throttle_deadband=config.MOTOR_DEADBAND,
+            stabilization_min_throttle=snapshot.stabilization_min_throttle,
             steering_deadband=config.DRIVE_MODE_STEERING_DEADBAND,
             steering_limit=config.DRIVE_MODE_STEERING_LIMIT,
+            neutral_stabilization_steering_limit=snapshot.neutral_stabilization_steering_limit,
+            neutral_stabilization_max_throttle=snapshot.neutral_stabilization_max_throttle,
             yaw_rate_max_dps=config.DRIVE_MODE_YAW_RATE_MAX_DPS,
-            yaw_rate_kp=config.DRIVE_MODE_YAW_RATE_KP,
-            yaw_rate_ki=config.DRIVE_MODE_YAW_RATE_KI,
-            yaw_rate_kd=config.DRIVE_MODE_YAW_RATE_KD,
-            yaw_rate_deadband_dps=config.DRIVE_MODE_YAW_RATE_DEADBAND_DPS,
-            yaw_rate_filter_hz=config.DRIVE_MODE_YAW_RATE_FILTER_HZ,
+            yaw_rate_kp=snapshot.yaw_rate_kp,
+            yaw_rate_ki=snapshot.yaw_rate_ki,
+            yaw_rate_kd=snapshot.yaw_rate_kd,
+            yaw_rate_deadband_dps=snapshot.yaw_rate_deadband_dps,
+            yaw_rate_filter_hz=snapshot.yaw_rate_filter_hz,
             stale_timeout_s=config.IMU_STALE_TIMEOUT_S,
             gyro_bias_calibration_s=config.IMU_GYRO_BIAS_CALIBRATION_S,
         )
@@ -1179,7 +1265,11 @@ def main() -> int:
     bms_poller: Optional[BMSPoller] = None
     current_reader = _create_motor_current_reader()
     imu_reader = _create_imu_reader()
-    assisted_drive = _create_assisted_drive_controller()
+    pid_tuning_snapshot, pid_tuning_store = _load_pid_tuning_state()
+    if _supports_positional_argument(_create_assisted_drive_controller):
+        assisted_drive = _create_assisted_drive_controller(pid_tuning_snapshot)
+    else:
+        assisted_drive = _create_assisted_drive_controller()
     stats = SystemStats()
     pi = _connect_pigpio()
     if pi.connected:
@@ -1191,7 +1281,10 @@ def main() -> int:
         drive = _NullDrive()
         buzzer = _NullBuzzer()
     motor_test_executor = _create_motor_test_executor(buzzer, drive)
-    motor_test_server = _create_motor_test_server(motor_test_executor)
+    if _supports_kwarg(_create_motor_test_server, "pid_tuning_store"):
+        motor_test_server = _create_motor_test_server(motor_test_executor, pid_tuning_store=pid_tuning_store)
+    else:
+        motor_test_server = _create_motor_test_server(motor_test_executor)
     motor_test_server_thread = _start_motor_test_server(motor_test_server)
     beacon = BeaconManager(
         delay_s=config.BEACON_DELAY_S,
@@ -1351,6 +1444,12 @@ def main() -> int:
                         connected=had_connection,
                         armed=armed,
                     )
+
+                assisted_drive = _apply_pending_pid_tuning_update(
+                    assisted_drive,
+                    pid_tuning_store,
+                    armed=armed,
+                )
 
                 trim_gesture_requested = (not armed) and _trim_gesture_active(channels)
                 if trim_gesture_requested:

@@ -10,6 +10,22 @@ from bms.daly import BatteryState
 from motors.assisted_drive import AssistedDriveResult, DriveMode
 from motors.current_control import MotorCurrentSample
 from motors.current_sense import NullMotorCurrentReader
+from pid_tuning import PidTuningSnapshot, PidTuningStore
+
+
+def _pid_tuning_snapshot(**overrides: float) -> PidTuningSnapshot:
+    values = {
+        "yaw_rate_kp": 0.01,
+        "yaw_rate_ki": 0.0,
+        "yaw_rate_kd": 0.001,
+        "yaw_rate_deadband_dps": 4.0,
+        "yaw_rate_filter_hz": 5.0,
+        "stabilization_min_throttle": 0.1,
+        "neutral_stabilization_steering_limit": 0.12,
+        "neutral_stabilization_max_throttle": 0.25,
+    }
+    values.update(overrides)
+    return PidTuningSnapshot(**values)
 
 
 def test_is_armed_uses_configured_channel_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -386,11 +402,13 @@ def test_create_motor_test_server_uses_executor_when_present(monkeypatch: pytest
     main = importlib.import_module("main")
     captured: dict[str, object] = {}
     fake_server = object()
+    pid_tuning_store = object()
 
-    def fake_server_factory(executor, *, host: str, port: int):
+    def fake_server_factory(executor, *, host: str, port: int, pid_tuning_store=None):
         captured["executor"] = executor
         captured["host"] = host
         captured["port"] = port
+        captured["pid_tuning_store"] = pid_tuning_store
         return fake_server
 
     monkeypatch.setattr(main.config, "MOTOR_TEST_API_HOST", "0.0.0.0")
@@ -398,12 +416,177 @@ def test_create_motor_test_server_uses_executor_when_present(monkeypatch: pytest
     monkeypatch.setattr(main, "create_motor_test_server", fake_server_factory)
 
     executor = object()
-    server = main._create_motor_test_server(executor)
+    server = main._create_motor_test_server(executor, pid_tuning_store=pid_tuning_store)
 
     assert server is fake_server
     assert captured["executor"] is executor
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 8765
+    assert captured["pid_tuning_store"] is pid_tuning_store
+
+
+def test_load_pid_tuning_state_uses_saved_snapshot(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    settings_path = tmp_path / "pid-tuning.json"
+    saved = _pid_tuning_snapshot(
+        yaw_rate_kp=0.031,
+        yaw_rate_filter_hz=7.5,
+        stabilization_min_throttle=0.18,
+        neutral_stabilization_max_throttle=0.33,
+    )
+    settings_path.write_text(
+        json.dumps({"values": saved.to_dict(), "updated_at": 123.0}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(main.config, "DRIVE_MODE_YAW_RATE_KP", 0.01)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_YAW_RATE_KI", 0.0)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_YAW_RATE_KD", 0.001)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_YAW_RATE_DEADBAND_DPS", 4.0)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_YAW_RATE_FILTER_HZ", 5.0)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_STABILIZATION_MIN_THROTTLE", 0.1)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_NEUTRAL_STABILIZATION_STEERING_LIMIT", 0.12)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_NEUTRAL_STABILIZATION_MAX_THROTTLE", 0.25)
+    monkeypatch.setattr(main.config, "PID_TUNING_SETTINGS_PATH", str(settings_path))
+
+    current, store = main._load_pid_tuning_state()
+
+    assert current == saved
+    status = store.snapshot_status()
+    assert status.current == saved
+    assert status.defaults == _pid_tuning_snapshot()
+
+
+def test_create_assisted_drive_controller_uses_pid_tuning_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    snapshot = _pid_tuning_snapshot(
+        yaw_rate_kp=0.042,
+        yaw_rate_ki=0.003,
+        yaw_rate_kd=0.004,
+        yaw_rate_deadband_dps=6.0,
+        yaw_rate_filter_hz=8.0,
+        stabilization_min_throttle=0.22,
+        neutral_stabilization_steering_limit=0.09,
+        neutral_stabilization_max_throttle=0.31,
+    )
+
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.06)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_STEERING_DEADBAND", 0.07)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_STEERING_LIMIT", 0.8)
+    monkeypatch.setattr(main.config, "DRIVE_MODE_YAW_RATE_MAX_DPS", 120.0)
+    monkeypatch.setattr(main.config, "IMU_STALE_TIMEOUT_S", 0.4)
+    monkeypatch.setattr(main.config, "IMU_GYRO_BIAS_CALIBRATION_S", 1.7)
+
+    controller = main._create_assisted_drive_controller(snapshot)
+
+    assert controller._config.throttle_deadband == pytest.approx(0.06)
+    assert controller._config.steering_deadband == pytest.approx(0.07)
+    assert controller._config.steering_limit == pytest.approx(0.8)
+    assert controller._config.yaw_rate_max_dps == pytest.approx(120.0)
+    assert controller._config.yaw_rate_kp == pytest.approx(0.042)
+    assert controller._config.yaw_rate_ki == pytest.approx(0.003)
+    assert controller._config.yaw_rate_kd == pytest.approx(0.004)
+    assert controller._config.yaw_rate_deadband_dps == pytest.approx(6.0)
+    assert controller._config.yaw_rate_filter_hz == pytest.approx(8.0)
+    assert controller._config.stabilization_min_throttle == pytest.approx(0.22)
+    assert controller._config.neutral_stabilization_steering_limit == pytest.approx(0.09)
+    assert controller._config.neutral_stabilization_max_throttle == pytest.approx(0.31)
+    assert controller._config.stale_timeout_s == pytest.approx(0.4)
+    assert controller._config.gyro_bias_calibration_s == pytest.approx(1.7)
+
+
+def test_apply_pending_pid_tuning_update_rebuilds_controller_while_disarmed(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    defaults = _pid_tuning_snapshot()
+    pending = _pid_tuning_snapshot(yaw_rate_kp=0.055, neutral_stabilization_max_throttle=0.2)
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=defaults)
+    store.request_update(pending)
+
+    current_controller = object()
+    rebuilt_controller = object()
+    created_snapshots: list[PidTuningSnapshot] = []
+
+    def fake_create_assisted_drive_controller(snapshot: PidTuningSnapshot | None = None):
+        assert snapshot is not None
+        created_snapshots.append(snapshot)
+        return rebuilt_controller
+
+    monkeypatch.setattr(main, "_create_assisted_drive_controller", fake_create_assisted_drive_controller)
+
+    result = main._apply_pending_pid_tuning_update(current_controller, store, armed=False)
+
+    assert result is rebuilt_controller
+    assert created_snapshots == [pending]
+    status = store.snapshot_status()
+    assert status.armed is False
+    assert status.current == pending
+    assert status.pending is None
+    assert status.applied_revision == 1
+
+
+def test_apply_pending_pid_tuning_update_skips_rebuild_while_armed(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    defaults = _pid_tuning_snapshot()
+    pending = _pid_tuning_snapshot(yaw_rate_kp=0.055)
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=defaults)
+    store.request_update(pending)
+    current_controller = object()
+    created_snapshots: list[PidTuningSnapshot] = []
+
+    def fake_create_assisted_drive_controller(snapshot: PidTuningSnapshot | None = None):
+        if snapshot is not None:
+            created_snapshots.append(snapshot)
+        return object()
+
+    monkeypatch.setattr(main, "_create_assisted_drive_controller", fake_create_assisted_drive_controller)
+
+    result = main._apply_pending_pid_tuning_update(current_controller, store, armed=True)
+
+    assert result is current_controller
+    assert created_snapshots == []
+    status = store.snapshot_status()
+    assert status.armed is True
+    assert status.current == defaults
+    assert status.pending == pending
+    assert status.applied_revision == 0
+
+
+def test_apply_pending_pid_tuning_update_keeps_pending_revision_on_rebuild_error(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    main = importlib.import_module("main")
+    defaults = _pid_tuning_snapshot()
+    pending = _pid_tuning_snapshot(yaw_rate_kp=0.055)
+    store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=defaults)
+    store.request_update(pending)
+    current_controller = object()
+
+    def fake_create_assisted_drive_controller(snapshot: PidTuningSnapshot | None = None):
+        del snapshot
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(main, "_create_assisted_drive_controller", fake_create_assisted_drive_controller)
+
+    with caplog.at_level(logging.WARNING, logger="biba-controller"):
+        result = main._apply_pending_pid_tuning_update(current_controller, store, armed=False)
+
+    assert result is current_controller
+    status = store.snapshot_status()
+    assert status.armed is False
+    assert status.current == defaults
+    assert status.pending == pending
+    assert status.pending_revision == 1
+    assert status.applied_revision == 0
+    assert status.last_error == "failed to apply pid tuning revision 1: boom"
+    assert "Failed to apply PID tuning revision 1: boom" in caplog.text
 
 
 def test_shutdown_motor_test_server_closes_server() -> None:

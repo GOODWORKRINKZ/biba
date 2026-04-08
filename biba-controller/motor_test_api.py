@@ -10,6 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Event, Lock
 from typing import Any
 
+from pid_tuning import PidTuningSnapshot, snapshot_from_mapping
+
 
 _MIN_FREQUENCY_HZ = 100
 _MAX_FREQUENCY_HZ = 8_000
@@ -404,6 +406,130 @@ def build_control_page() -> str:
     )
 
 
+def build_pid_tuning_page(defaults: PidTuningSnapshot) -> str:
+        defaults_json = json.dumps(defaults.to_dict())
+        return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"utf-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+    <title>BiBa PID Tuning</title>
+    <style>
+        body {{ font-family: sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }}
+        nav {{ margin-bottom: 1rem; }}
+        form {{ display: grid; gap: 1rem; }}
+        fieldset {{ display: grid; gap: 0.75rem; }}
+        label {{ display: grid; gap: 0.35rem; }}
+        input[type=number] {{ width: 100%; max-width: 12rem; }}
+        .actions {{ display: flex; gap: 0.75rem; flex-wrap: wrap; }}
+        .status {{ min-height: 1.5rem; }}
+        .meta {{ display: grid; gap: 0.35rem; margin-bottom: 1rem; }}
+    </style>
+</head>
+<body>
+    <nav><a href=\"/motor-test\">Motor test</a></nav>
+    <h1>BiBa PID Tuning</h1>
+    <div class=\"meta\">
+        <div id=\"armed_state\">State: unknown</div>
+        <div id=\"applied_revision\">Applied revision: n/a</div>
+        <div id=\"pending_revision\">Pending revision: none</div>
+    </div>
+    <form id=\"pid-tuning-form\">
+        <fieldset>
+            <legend>Yaw-rate PID</legend>
+            <label for=\"yaw_rate_kp\">Kp<input id=\"yaw_rate_kp\" name=\"yaw_rate_kp\" type=\"number\" min=\"0\" max=\"1\" step=\"0.001\"></label>
+            <label for=\"yaw_rate_ki\">Ki<input id=\"yaw_rate_ki\" name=\"yaw_rate_ki\" type=\"number\" min=\"0\" max=\"1\" step=\"0.001\"></label>
+            <label for=\"yaw_rate_kd\">Kd<input id=\"yaw_rate_kd\" name=\"yaw_rate_kd\" type=\"number\" min=\"0\" max=\"1\" step=\"0.001\"></label>
+        </fieldset>
+        <fieldset>
+            <legend>Yaw-rate shaping</legend>
+            <label for=\"yaw_rate_deadband_dps\">Deadband (dps)<input id=\"yaw_rate_deadband_dps\" name=\"yaw_rate_deadband_dps\" type=\"number\" min=\"0\" max=\"45\" step=\"0.1\"></label>
+            <label for=\"yaw_rate_filter_hz\">Filter (Hz)<input id=\"yaw_rate_filter_hz\" name=\"yaw_rate_filter_hz\" type=\"number\" min=\"0\" max=\"30\" step=\"0.1\"></label>
+        </fieldset>
+        <fieldset>
+            <legend>Low-speed stabilization</legend>
+            <label for=\"stabilization_min_throttle\">Min throttle<input id=\"stabilization_min_throttle\" name=\"stabilization_min_throttle\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
+            <label for=\"neutral_stabilization_steering_limit\">Steering limit<input id=\"neutral_stabilization_steering_limit\" name=\"neutral_stabilization_steering_limit\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
+            <label for=\"neutral_stabilization_max_throttle\">Max throttle<input id=\"neutral_stabilization_max_throttle\" name=\"neutral_stabilization_max_throttle\" type=\"number\" min=\"0\" max=\"1\" step=\"0.01\"></label>
+        </fieldset>
+        <div class=\"actions\">
+            <button type=\"submit\">Apply tuning</button>
+            <button type=\"button\" id=\"load-defaults\">Load defaults</button>
+        </div>
+        <div id=\"status\" class=\"status\" aria-live=\"polite\"></div>
+    </form>
+    <script>
+        const DEFAULT_TUNING = {defaults_json};
+        const form = document.getElementById('pid-tuning-form');
+        const applyButton = form.querySelector('button[type="submit"]');
+        const statusNode = document.getElementById('status');
+        const armedStateNode = document.getElementById('armed_state');
+        const appliedRevisionNode = document.getElementById('applied_revision');
+        const pendingRevisionNode = document.getElementById('pending_revision');
+        const fields = Object.keys(DEFAULT_TUNING);
+
+        function applyValues(values) {{
+            for (const field of fields) {{
+                if (values[field] !== undefined) {{
+                    document.getElementById(field).value = values[field];
+                }}
+            }}
+        }}
+
+        function renderStatus(payload) {{
+            armedStateNode.textContent = `State: ${{payload.armed ? 'armed' : 'disarmed'}}`;
+            appliedRevisionNode.textContent = `Applied revision: ${{payload.applied_revision}}`;
+            pendingRevisionNode.textContent = `Pending revision: ${{payload.pending_revision ?? 'none'}}`;
+            applyButton.disabled = payload.armed;
+            applyValues(payload.pending || payload.current || DEFAULT_TUNING);
+            if (payload.armed) {{
+                statusNode.textContent = 'Disarm the platform to apply tuning changes';
+            }} else if (payload.pending_revision !== null) {{
+                statusNode.textContent = 'Tuning update queued';
+            }}
+        }}
+
+        async function refreshStatus() {{
+            const response = await fetch('/api/pid-tuning');
+            const body = await response.json();
+            renderStatus(body);
+            return body;
+        }}
+
+        document.getElementById('load-defaults').addEventListener('click', () => {{
+            applyValues(DEFAULT_TUNING);
+            statusNode.textContent = 'Loaded defaults into the form';
+        }});
+
+        form.addEventListener('submit', async (event) => {{
+            event.preventDefault();
+            statusNode.textContent = 'Applying...';
+            const payload = Object.fromEntries(fields.map((field) => [field, Number(document.getElementById(field).value)]));
+            try {{
+                const response = await fetch('/api/pid-tuning', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify(payload),
+                }});
+                const body = await response.json();
+                if (!response.ok) {{
+                    throw new Error(body.error || `HTTP ${{response.status}}`);
+                }}
+                renderStatus(body);
+                statusNode.textContent = 'Tuning update queued';
+            }} catch (error) {{
+                statusNode.textContent = `Error: ${{error.message}}`;
+            }}
+        }});
+
+        refreshStatus();
+        setInterval(refreshStatus, 1000);
+    </script>
+</body>
+</html>
+"""
+
+
 def _write_json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
@@ -413,42 +539,95 @@ def _write_json_response(handler: BaseHTTPRequestHandler, status: int, payload: 
     handler.wfile.write(body)
 
 
-def create_motor_test_server(executor, *, host: str, port: int) -> ThreadingHTTPServer:
+def _write_html_response(handler: BaseHTTPRequestHandler, body: str) -> None:
+    encoded = body.encode("utf-8")
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Content-Length", str(len(encoded)))
+    handler.end_headers()
+    handler.wfile.write(encoded)
+
+
+def _serialize_pid_tuning_status(status) -> dict[str, Any]:
+    return {
+        "armed": status.armed,
+        "applied_revision": status.applied_revision,
+        "pending_revision": status.pending_revision,
+        "current": status.current.to_dict(),
+        "defaults": status.defaults.to_dict(),
+        "pending": None if status.pending is None else status.pending.to_dict(),
+        "last_error": status.last_error,
+    }
+
+
+def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store=None) -> ThreadingHTTPServer:
     class MotorTestRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            if self.path != "/motor-test":
-                self.send_error(HTTPStatus.NOT_FOUND)
+            if self.path == "/motor-test":
+                _write_html_response(self, build_control_page())
                 return
-
-            body = build_control_page().encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            if self.path == "/pid-tuning":
+                if pid_tuning_store is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                status = pid_tuning_store.snapshot_status()
+                _write_html_response(self, build_pid_tuning_page(status.defaults))
+                return
+            if self.path == "/api/pid-tuning":
+                if pid_tuning_store is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                _write_json_response(self, HTTPStatus.OK, _serialize_pid_tuning_status(pid_tuning_store.snapshot_status()))
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
-            if self.path != "/api/motor-test":
-                self.send_error(HTTPStatus.NOT_FOUND)
+            if self.path == "/api/motor-test":
+                content_length = int(self.headers.get("Content-Length", "0"))
+                raw_body = self.rfile.read(content_length)
+                try:
+                    payload = json.loads(raw_body.decode("utf-8"))
+                    request = parse_motor_test_request(payload)
+                    executor.run(request)
+                except json.JSONDecodeError:
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+                    return
+                except ValueError as exc:
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                    return
+                except MotorTestBusyError as exc:
+                    _write_json_response(self, HTTPStatus.CONFLICT, {"error": str(exc)})
+                    return
+
+                _write_json_response(self, HTTPStatus.OK, {"status": "ok"})
                 return
 
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_body = self.rfile.read(content_length)
-            try:
-                payload = json.loads(raw_body.decode("utf-8"))
-                request = parse_motor_test_request(payload)
-                executor.run(request)
-            except json.JSONDecodeError:
-                _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
-                return
-            except ValueError as exc:
-                _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
-                return
-            except MotorTestBusyError as exc:
-                _write_json_response(self, HTTPStatus.CONFLICT, {"error": str(exc)})
+            if self.path == "/api/pid-tuning":
+                if pid_tuning_store is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+
+                content_length = int(self.headers.get("Content-Length", "0"))
+                raw_body = self.rfile.read(content_length)
+                try:
+                    payload = json.loads(raw_body.decode("utf-8"))
+                    status = pid_tuning_store.snapshot_status()
+                    snapshot = snapshot_from_mapping(payload, defaults=status.current)
+                    pid_tuning_store.request_update(snapshot)
+                except json.JSONDecodeError:
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+                    return
+                except ValueError as exc:
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                    return
+                except RuntimeError as exc:
+                    _write_json_response(self, HTTPStatus.CONFLICT, {"error": str(exc)})
+                    return
+
+                _write_json_response(self, HTTPStatus.OK, _serialize_pid_tuning_status(pid_tuning_store.snapshot_status()))
                 return
 
-            _write_json_response(self, HTTPStatus.OK, {"status": "ok"})
+            self.send_error(HTTPStatus.NOT_FOUND)
 
         def log_message(self, format: str, *args: object) -> None:
             del format, args
