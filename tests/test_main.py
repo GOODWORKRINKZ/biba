@@ -11,6 +11,7 @@ from motors.assisted_drive import AssistedDriveResult, DriveMode
 from motors.current_control import MotorCurrentSample
 from motors.current_sense import NullMotorCurrentReader
 from pid_tuning import PidTuningSnapshot, PidTuningStore
+from settings_store import MotorTrimStore
 
 
 def _pid_tuning_snapshot(**overrides: float) -> PidTuningSnapshot:
@@ -403,12 +404,14 @@ def test_create_motor_test_server_uses_executor_when_present(monkeypatch: pytest
     captured: dict[str, object] = {}
     fake_server = object()
     pid_tuning_store = object()
+    motor_trim_store = object()
 
-    def fake_server_factory(executor, *, host: str, port: int, pid_tuning_store=None):
+    def fake_server_factory(executor, *, host: str, port: int, pid_tuning_store=None, motor_trim_store=None):
         captured["executor"] = executor
         captured["host"] = host
         captured["port"] = port
         captured["pid_tuning_store"] = pid_tuning_store
+        captured["motor_trim_store"] = motor_trim_store
         return fake_server
 
     monkeypatch.setattr(main.config, "MOTOR_TEST_API_HOST", "0.0.0.0")
@@ -416,13 +419,18 @@ def test_create_motor_test_server_uses_executor_when_present(monkeypatch: pytest
     monkeypatch.setattr(main, "create_motor_test_server", fake_server_factory)
 
     executor = object()
-    server = main._create_motor_test_server(executor, pid_tuning_store=pid_tuning_store)
+    server = main._create_motor_test_server(
+        executor,
+        pid_tuning_store=pid_tuning_store,
+        motor_trim_store=motor_trim_store,
+    )
 
     assert server is fake_server
     assert captured["executor"] is executor
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 8765
     assert captured["pid_tuning_store"] is pid_tuning_store
+    assert captured["motor_trim_store"] is motor_trim_store
 
 
 def test_load_pid_tuning_state_uses_saved_snapshot(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -455,6 +463,26 @@ def test_load_pid_tuning_state_uses_saved_snapshot(tmp_path, monkeypatch: pytest
     status = store.snapshot_status()
     assert status.current == saved
     assert status.defaults == _pid_tuning_snapshot()
+
+
+def test_load_motor_trim_state_uses_saved_trim(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    main = importlib.import_module("main")
+    settings_path = tmp_path / "motor-trim.json"
+    settings_path.write_text(
+        json.dumps({"trim": 0.12, "updated_at": 123.0}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_SETTINGS_PATH", str(settings_path))
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.3)
+
+    current, store = main._load_motor_trim_state()
+
+    assert current == pytest.approx(0.12)
+    status = store.snapshot_status()
+    assert status.current == pytest.approx(0.12)
+    assert status.pending is None
+    assert status.applied_revision == 0
 
 
 def test_create_assisted_drive_controller_uses_pid_tuning_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -587,6 +615,231 @@ def test_apply_pending_pid_tuning_update_keeps_pending_revision_on_rebuild_error
     assert status.applied_revision == 0
     assert status.last_error == "failed to apply pid tuning revision 1: boom"
     assert "Failed to apply PID tuning revision 1: boom" in caplog.text
+
+
+def test_apply_pending_motor_trim_update_applies_pending_trim_while_disarmed(tmp_path) -> None:
+    main = importlib.import_module("main")
+    store = MotorTrimStore(
+        settings_path=tmp_path / "motor-trim.json",
+        max_effect=0.3,
+        current=0.02,
+    )
+    store.request_update(0.14)
+
+    result = main._apply_pending_motor_trim_update(0.02, store, armed=False)
+
+    assert result == pytest.approx(0.14)
+    status = store.snapshot_status()
+    assert status.armed is False
+    assert status.current == pytest.approx(0.14)
+    assert status.pending is None
+    assert status.applied_revision == 1
+
+
+def test_apply_pending_motor_trim_update_keeps_pending_trim_while_armed(tmp_path) -> None:
+    main = importlib.import_module("main")
+    store = MotorTrimStore(
+        settings_path=tmp_path / "motor-trim.json",
+        max_effect=0.3,
+        current=0.02,
+    )
+    store.request_update(0.14)
+
+    result = main._apply_pending_motor_trim_update(0.02, store, armed=True)
+
+    assert result == pytest.approx(0.02)
+    status = store.snapshot_status()
+    assert status.armed is True
+    assert status.current == pytest.approx(0.02)
+    assert status.pending == pytest.approx(0.14)
+    assert status.pending_revision == 1
+
+
+def test_main_applies_pending_motor_trim_store_update_while_disarmed(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = importlib.import_module("main")
+    applied_outputs: list[tuple[float, float]] = []
+    trim_store = MotorTrimStore(
+        settings_path=tmp_path / "motor-trim.json",
+        max_effect=0.3,
+        current=0.0,
+    )
+    trim_store.request_update(0.2)
+
+    def frame(throttle: float, arm: float) -> list[float]:
+        return [0.0, throttle, 0.0, 0.0, arm, 1.0, 0.0, 0.0, 0.0]
+
+    class FakePi:
+        connected = True
+
+        def stop(self) -> None:
+            pass
+
+    class FakeReceiver:
+        def __init__(self, *args, **kwargs) -> None:
+            self.serial_port = object()
+            self._frames = [
+                frame(0.0, 0.0),
+                frame(1.0, 1.0),
+            ]
+
+        def open(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def get_channels(self):
+            frame_value = self._frames.pop(0)
+            if not self._frames:
+                main.RUNNING = False
+            return frame_value
+
+    class FakeTelemetry:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def attach(self, serial_port) -> None:
+            assert serial_port is not None
+
+        def send_battery(self, *args, **kwargs) -> None:
+            pass
+
+        def send_system_stats(self, *args, **kwargs) -> None:
+            pass
+
+    class FakeBMS:
+        def open(self) -> None:
+            raise FileNotFoundError("/dev/ttyUSB0")
+
+        def close(self) -> None:
+            pass
+
+    class FakeDrive:
+        def mix_and_ramp(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del steering, dt
+            return throttle, throttle
+
+        def apply_output(self, left_duty: float, right_duty: float, **kwargs) -> tuple[float, float]:
+            applied_outputs.append((left_duty, right_duty))
+            return left_duty, right_duty
+
+        def drive(self, throttle: float, steering: float, dt: float = 0.02) -> tuple[float, float]:
+            del throttle, steering, dt
+            return (0.0, 0.0)
+
+        def stop(self) -> None:
+            pass
+
+        def check_failsafe(self, last_frame_time: float) -> bool:
+            del last_frame_time
+            return False
+
+        def emergency_stop(self) -> None:
+            pass
+
+    class FakeMotorSynth:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def play_named(self, name: str) -> None:
+            del name
+
+        def startup_tone(self) -> None:
+            pass
+
+        def shutdown_tone(self) -> None:
+            pass
+
+        def connected_tone(self) -> None:
+            pass
+
+        def disconnected_tone(self) -> None:
+            pass
+
+        def arm_tone(self) -> None:
+            pass
+
+        def disarm_tone(self) -> None:
+            pass
+
+        def failsafe_tone(self) -> None:
+            pass
+
+        def off(self) -> None:
+            pass
+
+        def set_control_active(self, active: bool) -> None:
+            del active
+
+        def play_named_async(self, name: str) -> None:
+            del name
+
+        def play_spectral_async(self, path: str) -> None:
+            del path
+
+        def sos_beacon(self) -> None:
+            pass
+
+    class FakeBeacon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def on_connected(self) -> None:
+            pass
+
+        def set_manual(self, *args, **kwargs) -> None:
+            pass
+
+        def on_failsafe(self, *args, **kwargs) -> None:
+            pass
+
+        def should_sos(self, *args, **kwargs) -> bool:
+            return False
+
+    class FakeAssistedDrive:
+        def update(self, *, throttle: float, steering: float, **kwargs):
+            del kwargs
+            return type("Result", (), {"throttle": throttle, "steering": steering})()
+
+    monotonic_counter = iter(index * 0.5 for index in range(100))
+
+    monkeypatch.setattr(main.pigpio, "pi", lambda: FakePi())
+    monkeypatch.setattr(main, "CRSFReceiver", FakeReceiver)
+    monkeypatch.setattr(main, "CRSFTelemetry", FakeTelemetry)
+    monkeypatch.setattr(main, "_create_bms", lambda: FakeBMS())
+    monkeypatch.setattr(main, "_create_motor_current_reader", lambda: NullMotorCurrentReader())
+    monkeypatch.setattr(main, "_create_imu_reader", lambda: main.NullIMUReader())
+    monkeypatch.setattr(main, "_load_pid_tuning_state", lambda: (_pid_tuning_snapshot(), None))
+    monkeypatch.setattr(main, "_load_motor_trim_state", lambda: (0.0, trim_store))
+    monkeypatch.setattr(main, "_create_assisted_drive_controller", lambda snapshot=None: FakeAssistedDrive())
+    monkeypatch.setattr(main, "_create_motor_pair", lambda pi: (object(), object()))
+    monkeypatch.setattr(main, "DifferentialDrive", lambda *args, **kwargs: FakeDrive())
+    monkeypatch.setattr(main, "MotorSynth", FakeMotorSynth)
+    monkeypatch.setattr(main, "BeaconManager", FakeBeacon)
+    monkeypatch.setattr(main, "_create_motor_test_server", lambda executor, pid_tuning_store=None, motor_trim_store=None: None)
+    monkeypatch.setattr(main.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main.time, "monotonic", lambda: next(monotonic_counter))
+    monkeypatch.setattr(main.config, "STARTUP_MELODY", "")
+    monkeypatch.setattr(main.config, "STARTUP_VOICE_ENABLED", False)
+    monkeypatch.setattr(main.config, "CH_ARM", 4)
+    monkeypatch.setattr(main.config, "CH_THROTTLE", 1)
+    monkeypatch.setattr(main.config, "CH_STEERING", 3)
+    monkeypatch.setattr(main.config, "CH_SPEED_MODE", 5)
+    monkeypatch.setattr(main.config, "CH_TRIM", 8)
+    monkeypatch.setattr(main.config, "ARM_THRESHOLD", 0.3)
+    monkeypatch.setattr(main.config, "MOTOR_DEADBAND", 0.05)
+    monkeypatch.setattr(main.config, "MOTOR_TRIM_MAX_EFFECT", 0.3)
+    monkeypatch.setattr(main.config, "BMS_POLL_INTERVAL_S", 999.0)
+    monkeypatch.setattr(main, "RUNNING", True)
+
+    assert main.main() == 0
+    assert applied_outputs[-1][0] == pytest.approx(1.0)
+    assert applied_outputs[-1][1] == pytest.approx(0.8)
+    assert trim_store.snapshot_status().current == pytest.approx(0.2)
 
 
 def test_shutdown_motor_test_server_closes_server() -> None:

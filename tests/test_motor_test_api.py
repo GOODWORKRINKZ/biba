@@ -10,6 +10,7 @@ from dataclasses import asdict
 import pytest
 
 from pid_tuning import PidTuningSnapshot, PidTuningStore
+from settings_store import MotorTrimStore
 
 
 def test_parse_motor_test_request_accepts_valid_payload() -> None:
@@ -369,6 +370,14 @@ def _pid_defaults() -> PidTuningSnapshot:
     )
 
 
+def _create_trim_store(tmp_path, *, current: float = 0.0) -> MotorTrimStore:
+    return MotorTrimStore(
+        settings_path=tmp_path / "motor-trim.json",
+        max_effect=0.3,
+        current=current,
+    )
+
+
 def test_build_pid_tuning_page_contains_expected_inputs() -> None:
     motor_test_api = importlib.import_module("motor_test_api")
 
@@ -529,6 +538,184 @@ def test_http_server_accepts_pid_tuning_update_while_disarmed(tmp_path) -> None:
         assert body["pending_revision"] == 1
         assert body["pending"]["yaw_rate_kp"] == pytest.approx(0.02)
         assert body["pending"]["yaw_rate_filter_hz"] == pytest.approx(3.0)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_serves_settings_page_and_assets(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        is_active = False
+
+        def run(self, request) -> None:
+            del request
+
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults()),
+        motor_trim_store=_create_trim_store(tmp_path, current=0.07),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/settings", timeout=2.0) as response:
+            body = response.read().decode("utf-8")
+
+        assert response.status == 200
+        assert "/settings/assets/settings.css" in body
+        assert "/settings/assets/settings.js" in body
+        assert "/settings/assets/biba-neon-sign.svg" in body
+        assert "/api/settings" in body
+
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{server.server_port}/settings/assets/settings.css",
+            timeout=2.0,
+        ) as css_response:
+            css_body = css_response.read().decode("utf-8")
+
+        assert css_response.status == 200
+        assert ".settings-shell" in css_body
+
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{server.server_port}/settings/assets/biba-neon-sign.svg",
+            timeout=2.0,
+        ) as svg_response:
+            svg_body = svg_response.read().decode("utf-8")
+
+        assert svg_response.status == 200
+        assert "letter-b1" in svg_body
+        assert "╔═════════════════════════════════════════════╗" in svg_body
+        assert "███████╗" in svg_body
+        assert "textLength=" not in svg_body
+        assert "lengthAdjust=" not in svg_body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_returns_aggregated_settings_status(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        is_active = True
+
+        def run(self, request) -> None:
+            del request
+
+    pid_store = PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults())
+    trim_store = _create_trim_store(tmp_path, current=0.05)
+    trim_store.set_live_state(trim_mode_active=True, live_value=0.11)
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=pid_store,
+        motor_trim_store=trim_store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/settings", timeout=2.0) as response:
+            body = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 200
+        assert body["platform"]["armed"] is False
+        assert body["platform"]["trim_mode_active"] is True
+        assert body["pid_tuning"]["current"] == asdict(_pid_defaults())
+        assert body["motor_trim"]["current"] == pytest.approx(0.05)
+        assert body["motor_trim"]["live_value"] == pytest.approx(0.11)
+        assert body["motor_test"]["active"] is True
+        assert 100 in body["motor_test"]["frequency_options_hz"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_accepts_motor_trim_update_while_disarmed(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        is_active = False
+
+        def run(self, request) -> None:
+            del request
+
+    trim_store = _create_trim_store(tmp_path)
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults()),
+        motor_trim_store=trim_store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = json.dumps({"trim": 0.14}).encode("utf-8")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/settings/motor-trim",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=2.0) as response:
+            body = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 200
+        assert body["pending_revision"] == 1
+        assert body["pending"] == pytest.approx(0.14)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+
+def test_http_server_rejects_motor_trim_update_while_armed(tmp_path) -> None:
+    motor_test_api = importlib.import_module("motor_test_api")
+
+    class FakeExecutor:
+        is_active = False
+
+        def run(self, request) -> None:
+            del request
+
+    trim_store = _create_trim_store(tmp_path)
+    trim_store.set_armed(True)
+    server = motor_test_api.create_motor_test_server(
+        FakeExecutor(),
+        host="127.0.0.1",
+        port=0,
+        pid_tuning_store=PidTuningStore(settings_path=tmp_path / "pid-tuning.json", defaults=_pid_defaults()),
+        motor_trim_store=trim_store,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = json.dumps({"trim": 0.14}).encode("utf-8")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/settings/motor-trim",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request, timeout=2.0)
+
+        body = json.loads(exc_info.value.read().decode("utf-8"))
+        assert exc_info.value.code == 409
+        assert "disarmed" in body["error"]
     finally:
         server.shutdown()
         server.server_close()

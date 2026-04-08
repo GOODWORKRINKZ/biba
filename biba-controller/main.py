@@ -35,6 +35,7 @@ from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 from motors.ramping import ScalarKalmanFilter
 from motor_test_api import MotorTestExecutor, create_motor_test_server
 from pid_tuning import PidTuningSnapshot, PidTuningStore, load_pid_tuning
+from settings_store import MotorTrimStore
 from system_stats import SystemStats
 
 LOGGER = logging.getLogger("biba-controller")
@@ -454,7 +455,12 @@ def _supports_positional_argument(callable_obj) -> bool:
     )
 
 
-def _create_motor_test_server(executor, *, pid_tuning_store: PidTuningStore | None = None):
+def _create_motor_test_server(
+    executor,
+    *,
+    pid_tuning_store: PidTuningStore | None = None,
+    motor_trim_store: MotorTrimStore | None = None,
+):
     if executor is None:
         return None
     return create_motor_test_server(
@@ -462,6 +468,7 @@ def _create_motor_test_server(executor, *, pid_tuning_store: PidTuningStore | No
         host=config.MOTOR_TEST_API_HOST,
         port=config.MOTOR_TEST_API_PORT,
         pid_tuning_store=pid_tuning_store,
+        motor_trim_store=motor_trim_store,
     )
 
 
@@ -471,7 +478,7 @@ def _start_motor_test_server(server) -> threading.Thread | None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     LOGGER.info(
-        "Motor test API listening on http://%s:%s/motor-test",
+        "Settings UI listening on http://%s:%s/settings (legacy /motor-test, /pid-tuning)",
         config.MOTOR_TEST_API_HOST,
         getattr(server, "server_port", config.MOTOR_TEST_API_PORT),
     )
@@ -756,6 +763,15 @@ def _load_pid_tuning_state() -> tuple[PidTuningSnapshot, PidTuningStore]:
     )
 
 
+def _load_motor_trim_state() -> tuple[float, MotorTrimStore]:
+    current = _load_saved_motor_trim()
+    return current, MotorTrimStore(
+        settings_path=config.MOTOR_TRIM_SETTINGS_PATH,
+        max_effect=config.MOTOR_TRIM_MAX_EFFECT,
+        current=current,
+    )
+
+
 def _apply_pending_pid_tuning_update(
     assisted_drive: AssistedDriveController,
     pid_tuning_store: PidTuningStore | None,
@@ -788,6 +804,34 @@ def _apply_pending_pid_tuning_update(
     pid_tuning_store.mark_applied(revision)
     LOGGER.info("Applied PID tuning revision %s", revision)
     return updated_controller
+
+
+def _apply_pending_motor_trim_update(
+    saved_motor_trim: float,
+    motor_trim_store: MotorTrimStore | None,
+    *,
+    armed: bool,
+) -> float:
+    if motor_trim_store is None:
+        return saved_motor_trim
+
+    motor_trim_store.set_armed(armed)
+    if armed:
+        return saved_motor_trim
+
+    pending_update = motor_trim_store.consume_pending_update()
+    if pending_update is None:
+        return saved_motor_trim
+
+    revision, trim = pending_update
+    try:
+        motor_trim_store.mark_applied(revision)
+    except ValueError as exc:
+        motor_trim_store.record_apply_error(str(exc))
+        return saved_motor_trim
+
+    LOGGER.info("Motor trim revision %s applied trim=%.3f", revision, trim)
+    return trim
 
 
 def _encode_battery_status_bits(
@@ -1266,6 +1310,7 @@ def main() -> int:
     current_reader = _create_motor_current_reader()
     imu_reader = _create_imu_reader()
     pid_tuning_snapshot, pid_tuning_store = _load_pid_tuning_state()
+    saved_motor_trim, motor_trim_store = _load_motor_trim_state()
     if _supports_positional_argument(_create_assisted_drive_controller):
         assisted_drive = _create_assisted_drive_controller(pid_tuning_snapshot)
     else:
@@ -1281,10 +1326,12 @@ def main() -> int:
         drive = _NullDrive()
         buzzer = _NullBuzzer()
     motor_test_executor = _create_motor_test_executor(buzzer, drive)
+    motor_test_server_kwargs: dict[str, object] = {}
     if _supports_kwarg(_create_motor_test_server, "pid_tuning_store"):
-        motor_test_server = _create_motor_test_server(motor_test_executor, pid_tuning_store=pid_tuning_store)
-    else:
-        motor_test_server = _create_motor_test_server(motor_test_executor)
+        motor_test_server_kwargs["pid_tuning_store"] = pid_tuning_store
+    if _supports_kwarg(_create_motor_test_server, "motor_trim_store"):
+        motor_test_server_kwargs["motor_trim_store"] = motor_trim_store
+    motor_test_server = _create_motor_test_server(motor_test_executor, **motor_test_server_kwargs)
     motor_test_server_thread = _start_motor_test_server(motor_test_server)
     beacon = BeaconManager(
         delay_s=config.BEACON_DELAY_S,
@@ -1322,7 +1369,6 @@ def main() -> int:
     had_connection = False
     low_voltage_active = False
     melody_zone = -1
-    saved_motor_trim = _load_saved_motor_trim()
     trim_gesture_started_at: float | None = None
     trim_gesture_consumed = False
     left_current_sample = MotorCurrentSample(current_a=None, valid=False)
@@ -1450,6 +1496,11 @@ def main() -> int:
                     pid_tuning_store,
                     armed=armed,
                 )
+                saved_motor_trim = _apply_pending_motor_trim_update(
+                    saved_motor_trim,
+                    motor_trim_store,
+                    armed=armed,
+                )
 
                 trim_gesture_requested = (not armed) and _trim_gesture_active(channels)
                 if trim_gesture_requested:
@@ -1462,6 +1513,8 @@ def main() -> int:
                         if trim_mode_active:
                             saved_motor_trim = _live_motor_trim_from_channels(channels)
                             _save_motor_trim(saved_motor_trim)
+                            if motor_trim_store is not None:
+                                motor_trim_store.sync_current(saved_motor_trim)
                             trim_mode_active = False
                             _play_named_if_allowed(
                                 buzzer,
@@ -1485,6 +1538,11 @@ def main() -> int:
                     trim_gesture_consumed = False
 
                 motor_trim = _live_motor_trim_from_channels(channels) if trim_mode_active else saved_motor_trim
+                if motor_trim_store is not None:
+                    motor_trim_store.set_live_state(
+                        trim_mode_active=trim_mode_active,
+                        live_value=motor_trim if trim_mode_active else None,
+                    )
 
                 raw_throttle = _get_channel(channels, config.CH_THROTTLE)
                 manual_motor_test_active = _motor_test_active(motor_test_executor)

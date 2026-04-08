@@ -7,10 +7,12 @@ import logging
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Event, Lock
 from typing import Any
 
 from pid_tuning import PidTuningSnapshot, snapshot_from_mapping
+from settings_store import MotorTrimStatus
 
 
 _MIN_FREQUENCY_HZ = 100
@@ -23,6 +25,13 @@ _PIGPIO_DUTY_RANGE = 1_000_000
 _SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ = [100, 160, 200, 250, 320, 400, 500, 800, 1000, 1600, 2000, 4000, 8000]
 _DEFAULT_PWM_MODE = "SOFTWARE"
 _PWM_MODE_CHOICES = {"SOFTWARE", "HARDWARE"}
+_WEB_ASSET_DIR = Path(__file__).with_name("web")
+_SETTINGS_ASSET_TYPES = {
+    "settings.html": "text/html; charset=utf-8",
+    "settings.css": "text/css; charset=utf-8",
+    "settings.js": "application/javascript; charset=utf-8",
+    "biba-neon-sign.svg": "image/svg+xml; charset=utf-8",
+}
 
 
 LOGGER = logging.getLogger(__name__)
@@ -548,6 +557,14 @@ def _write_html_response(handler: BaseHTTPRequestHandler, body: str) -> None:
     handler.wfile.write(encoded)
 
 
+def _write_bytes_response(handler: BaseHTTPRequestHandler, body: bytes, *, content_type: str) -> None:
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def _serialize_pid_tuning_status(status) -> dict[str, Any]:
     return {
         "armed": status.armed,
@@ -560,9 +577,106 @@ def _serialize_pid_tuning_status(status) -> dict[str, Any]:
     }
 
 
-def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store=None) -> ThreadingHTTPServer:
+def _serialize_motor_trim_status(status: MotorTrimStatus) -> dict[str, Any]:
+    return {
+        "current": status.current,
+        "pending": status.pending,
+        "applied_revision": status.applied_revision,
+        "pending_revision": status.pending_revision,
+        "armed": status.armed,
+        "trim_mode_active": status.trim_mode_active,
+        "live_value": status.live_value,
+        "last_error": status.last_error,
+    }
+
+
+def _read_settings_asset(name: str) -> bytes | None:
+    content_type = _SETTINGS_ASSET_TYPES.get(name)
+    if content_type is None:
+        return None
+    asset_path = _WEB_ASSET_DIR / name
+    if not asset_path.exists():
+        return None
+    return asset_path.read_bytes()
+
+
+def _serialize_settings_status(executor, pid_tuning_store=None, motor_trim_store=None) -> dict[str, Any]:
+    pid_status = None if pid_tuning_store is None else pid_tuning_store.snapshot_status()
+    trim_status = None if motor_trim_store is None else motor_trim_store.snapshot_status()
+    armed = False
+    if pid_status is not None:
+        armed = pid_status.armed
+    elif trim_status is not None:
+        armed = trim_status.armed
+
+    return {
+        "platform": {
+            "armed": armed,
+            "trim_mode_active": False if trim_status is None else trim_status.trim_mode_active,
+        },
+        "pid_tuning": None if pid_status is None else _serialize_pid_tuning_status(pid_status),
+        "motor_trim": None if trim_status is None else _serialize_motor_trim_status(trim_status),
+        "motor_test": {
+            "active": bool(getattr(executor, "is_active", False)),
+            "default_pwm_mode": _DEFAULT_PWM_MODE,
+            "frequency_options_hz": list(_SOFTWARE_PWM_FREQUENCY_OPTIONS_HZ),
+        },
+    }
+
+
+def _parse_motor_trim_request(payload: dict[str, Any]) -> float:
+    return _require_number(payload, "trim")
+
+
+def _handle_motor_test_post(handler: BaseHTTPRequestHandler, executor) -> None:
+    content_length = int(handler.headers.get("Content-Length", "0"))
+    raw_body = handler.rfile.read(content_length)
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+        request = parse_motor_test_request(payload)
+        executor.run(request)
+    except json.JSONDecodeError:
+        _write_json_response(handler, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+        return
+    except ValueError as exc:
+        _write_json_response(handler, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        return
+    except MotorTestBusyError as exc:
+        _write_json_response(handler, HTTPStatus.CONFLICT, {"error": str(exc)})
+        return
+
+    _write_json_response(handler, HTTPStatus.OK, {"status": "ok"})
+
+
+def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store=None, motor_trim_store=None) -> ThreadingHTTPServer:
     class MotorTestRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            if self.path == "/settings":
+                body = _read_settings_asset("settings.html")
+                if body is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                _write_bytes_response(self, body, content_type=_SETTINGS_ASSET_TYPES["settings.html"])
+                return
+            if self.path.startswith("/settings/assets/"):
+                asset_name = self.path.removeprefix("/settings/assets/")
+                body = _read_settings_asset(asset_name)
+                if body is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                _write_bytes_response(self, body, content_type=_SETTINGS_ASSET_TYPES[asset_name])
+                return
+            if self.path == "/api/settings":
+                _write_json_response(
+                    self,
+                    HTTPStatus.OK,
+                    _serialize_settings_status(
+                        executor,
+                        pid_tuning_store=pid_tuning_store,
+                        motor_trim_store=motor_trim_store,
+                    ),
+                )
+                return
             if self.path == "/motor-test":
                 _write_html_response(self, build_control_page())
                 return
@@ -573,7 +687,7 @@ def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store
                 status = pid_tuning_store.snapshot_status()
                 _write_html_response(self, build_pid_tuning_page(status.defaults))
                 return
-            if self.path == "/api/pid-tuning":
+            if self.path in {"/api/pid-tuning", "/api/settings/pid-tuning"}:
                 if pid_tuning_store is None:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
@@ -583,26 +697,14 @@ def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store
 
         def do_POST(self) -> None:
             if self.path == "/api/motor-test":
-                content_length = int(self.headers.get("Content-Length", "0"))
-                raw_body = self.rfile.read(content_length)
-                try:
-                    payload = json.loads(raw_body.decode("utf-8"))
-                    request = parse_motor_test_request(payload)
-                    executor.run(request)
-                except json.JSONDecodeError:
-                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
-                    return
-                except ValueError as exc:
-                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
-                    return
-                except MotorTestBusyError as exc:
-                    _write_json_response(self, HTTPStatus.CONFLICT, {"error": str(exc)})
-                    return
-
-                _write_json_response(self, HTTPStatus.OK, {"status": "ok"})
+                _handle_motor_test_post(self, executor)
                 return
 
-            if self.path == "/api/pid-tuning":
+            if self.path == "/api/settings/motor-test":
+                _handle_motor_test_post(self, executor)
+                return
+
+            if self.path in {"/api/pid-tuning", "/api/settings/pid-tuning"}:
                 if pid_tuning_store is None:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
@@ -625,6 +727,34 @@ def create_motor_test_server(executor, *, host: str, port: int, pid_tuning_store
                     return
 
                 _write_json_response(self, HTTPStatus.OK, _serialize_pid_tuning_status(pid_tuning_store.snapshot_status()))
+                return
+
+            if self.path == "/api/settings/motor-trim":
+                if motor_trim_store is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+
+                content_length = int(self.headers.get("Content-Length", "0"))
+                raw_body = self.rfile.read(content_length)
+                try:
+                    payload = json.loads(raw_body.decode("utf-8"))
+                    trim = _parse_motor_trim_request(payload)
+                    motor_trim_store.request_update(trim)
+                except json.JSONDecodeError:
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
+                    return
+                except ValueError as exc:
+                    _write_json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                    return
+                except RuntimeError as exc:
+                    _write_json_response(self, HTTPStatus.CONFLICT, {"error": str(exc)})
+                    return
+
+                _write_json_response(
+                    self,
+                    HTTPStatus.OK,
+                    _serialize_motor_trim_status(motor_trim_store.snapshot_status()),
+                )
                 return
 
             self.send_error(HTTPStatus.NOT_FOUND)

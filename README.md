@@ -144,9 +144,9 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `ENABLE_RC_MELODIES=0|1` — включает выбор BLHeli-мелодий с передатчика
 - `CH_MELODY=8` — канал выбора мелодии, если `ENABLE_RC_MELODIES=1`
 - `STARTUP_MELODY=biba_signature` — стартовая BLHeli-мелодия при включённом melody-runtime
-- `MOTOR_TEST_API_ENABLED=0|1` — включает встроенный HTTP tools UI контроллера
-- `MOTOR_TEST_API_HOST=0.0.0.0` — bind host для tools UI
-- `MOTOR_TEST_API_PORT=8765` — bind port для tools UI
+- `MOTOR_TEST_API_ENABLED=0|1` — включает встроенный HTTP settings UI контроллера
+- `MOTOR_TEST_API_HOST=0.0.0.0` — bind host для settings UI
+- `MOTOR_TEST_API_PORT=8765` — bind port для settings UI
 - `RAMP_ACCEL_RATE=2.0` — скорость разгона мотора (единиц/сек, 0→100% за 0.5с)
 - `RAMP_DECEL_RATE=2.0` — скорость отпускания/торможения (единиц/сек, 100%→0 за 0.5с)
 - `RAMP_REVERSE_DECEL_RATE=0.5` — скорость подхода к нулю перед сменой направления; меньше значение = мягче переход в реверс
@@ -164,47 +164,36 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 
 Этот trace нужен для офлайн-калибровки токов колёс против более медленного тока BMS и по умолчанию выключен.
 
-## Tools UI
+## Settings UI
 
-Для инженерной проверки и полевого тюнинга на контроллере доступен встроенный HTTP tools UI:
+Для инженерной проверки и полевого тюнинга на контроллере доступен встроенный HTTP settings UI:
 
-- `http://<robot-ip>:8765/motor-test`
-- `http://<robot-ip>:8765/pid-tuning`
+- `http://<robot-ip>:8765/settings` — основной операторский экран
+- `http://<robot-ip>:8765/motor-test` — legacy manual PWM page
+- `http://<robot-ip>:8765/pid-tuning` — legacy PID-only page
 
-### Manual motor test page
+Страница `/settings` собирает в одном месте:
 
-Страница `/motor-test` используется для коротких ручных проверок моторных PWM.
+- live platform status и revision state
+- field tuning stabilized режима
+- сохранённый motor trim с отображением live trim-mode значения
+- ручной motor sound / PWM test
 
-- параметры:
-   - частота левого канала `100..8000` Гц
-   - скважность левого канала `0..100%`
-   - частота правого канала `100..8000` Гц
-   - скважность правого канала `0..100%`
-   - длительность теста в миллисекундах
+Backend surface для новой страницы:
 
-Страница отправляет `POST /api/motor-test` в тот же controller runtime. Команда выполняется ограниченное время и затем оба канала принудительно выключаются.
+- `GET /api/settings` — агрегированный snapshot platform, pid_tuning, motor_trim и motor_test
+- `POST /api/settings/pid-tuning` — новые tuning-параметры stabilized режима
+- `POST /api/settings/motor-trim` — сохранение нового trim пока платформа `disarmed`
+- `POST /api/settings/motor-test` — короткий manual PWM test
 
-Это диагностический путь для коротких ручных тестов драйверов и моторных каналов. Он не заменяет обычное CRSF-управление.
+PID tuning на `/settings` работает без рестарта контейнера и сразу сохраняется в `PID_TUNING_SETTINGS_PATH`. Обновления разрешены только пока платформа `disarmed`, а страница показывает `pending revision`, пока main loop не применит новый snapshot.
 
-### PID tuning page
+Motor trim на `/settings` показывает текущее сохранённое значение, queued revision state и live значение в trim-mode. Trim по-прежнему можно менять двумя путями:
 
-Страница `/pid-tuning` нужна для полевой настройки stabilized режима без правки env и без пересборки образа.
+- через операторскую страницу `/settings`
+- через transmitter gesture в `disarm` с live источником на `CH9`
 
-- изменения применяются live и сразу сохраняются в `PID_TUNING_SETTINGS_PATH`
-- обновления разрешены только пока платформа `disarmed`
-- API `GET /api/pid-tuning` возвращает текущие значения, defaults, pending и revision state
-- API `POST /api/pid-tuning` принимает новые tuning-параметры
-- страница сама опрашивает status API, показывает `pending revision` и блокирует `Apply tuning`, пока платформа `armed`
-
-Доступные параметры:
-
-- `yaw_rate_kp`, `yaw_rate_ki`, `yaw_rate_kd`
-- `yaw_rate_deadband_dps`, `yaw_rate_filter_hz`
-- `stabilization_min_throttle`
-- `neutral_stabilization_steering_limit`
-- `neutral_stabilization_max_throttle`
-
-При старте контроллер автоматически загружает последнее сохранённое значение из persistent volume, поэтому удачный field tuning переживает restart и обновление образа. После submit страница может кратко показать queued `pending revision`, а затем перейти в applied state на следующем цикле main loop.
+Legacy страницы `/motor-test` и `/pid-tuning` оставлены для совместимости и быстрых инженерных проверок.
 
 Для текущего кода и текущего робота default уже `SOFTWARE`. Режим `HARDWARE` оставлен только для совместимых конфигураций, где PWM-линии не конфликтуют между собой.
 
@@ -227,9 +216,11 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - при `disarm` держите первые четыре канала в максимуме 5 секунд, чтобы войти в trim-mode
 - в trim-mode на Lua-экране появляется badge `t`
 - пока trim-mode активен, контроллер берёт trim напрямую из `CH9`
-- полный ход `CH9` используется целиком для точности, но на моторы применяется только до `20%` коррекции
+- полный ход `CH9` используется целиком для точности, но на моторы применяется только до `MOTOR_TRIM_MAX_EFFECT` коррекции
 - при повторном 5-секундном жесте в `disarm` текущее значение `CH9` сохраняется в `/data/motor-trim.json`
 - после выхода из trim-mode используется уже сохранённое значение, а `CH9` снова игнорируется
+
+То же сохранённое значение видно и редактируется на `http://<robot-ip>:8765/settings`.
 
 Файл trim хранится на named Docker volume `biba-controller-data`, поэтому переживает перезапуск контейнера и обновление образа.
 

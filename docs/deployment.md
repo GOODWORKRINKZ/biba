@@ -150,9 +150,9 @@ bash ~/biba/scripts/diagnostics.sh
 | `MOTOR_TRIM_MAX_EFFECT` | `0.30` | Максимальная односторонняя коррекция PWM от полного хода `CH9` |
 | `MOTOR_TRIM_CONFIRM_HOLD_S` | `5.0` | Длительность trim-жеста для входа и подтверждения |
 | `MOTOR_TRIM_SETTINGS_PATH` | `/data/motor-trim.json` | Путь к persistent JSON-файлу сохранённого trim |
-| `MOTOR_TEST_API_ENABLED` | `1` | Включает встроенный HTTP tools UI контроллера |
-| `MOTOR_TEST_API_HOST` | `0.0.0.0` | Bind host для tools UI |
-| `MOTOR_TEST_API_PORT` | `8765` | Bind port для tools UI |
+| `MOTOR_TEST_API_ENABLED` | `1` | Включает встроенный HTTP settings UI контроллера |
+| `MOTOR_TEST_API_HOST` | `0.0.0.0` | Bind host для settings UI |
+| `MOTOR_TEST_API_PORT` | `8765` | Bind port для settings UI |
 | `ENABLE_RC_MELODIES` | `0` | Включает выбор BLHeli-мелодий с передатчика |
 | `CH_MELODY` | `8` | Канал выбора мелодии при `ENABLE_RC_MELODIES=1` |
 | `STARTUP_MELODY` | `biba_signature` | Стартовая BLHeli-мелодия |
@@ -273,33 +273,37 @@ BiBa использует моторный synth/audio runtime для:
 
 Вне trim-mode live `CH9` не используется: применяется только последнее сохранённое значение.
 
-### PID tuning page
+То же значение доступно и в HTTP settings UI на `http://<robot-ip>:8765/settings`, где его можно увидеть, сохранить из браузера и сверить с live trim-mode state.
 
-В том же controller runtime доступна встроенная страница полевого тюнинга stabilized режима:
+### Settings UI
 
-1. Откройте `http://<robot-ip>:8765/pid-tuning`.
+В том же controller runtime доступен встроенный settings UI:
+
+1. Откройте `http://<robot-ip>:8765/settings`.
 2. Разармите платформу.
-3. Измените PID и low-speed параметры.
-4. Нажмите apply.
+3. Измените PID, trim или запустите короткий motor test.
+4. Нажмите нужную action-кнопку в секции.
 
-Поведение страницы:
+Поведение `/settings`:
 
-- изменения применяются live без рестарта контейнера
-- значения сразу сохраняются в `PID_TUNING_SETTINGS_PATH`
-- после рестарта controller загружает последние сохранённые значения автоматически
-- пока платформа `armed`, `POST /api/pid-tuning` отклоняется
-- кнопка apply в UI блокируется, пока платформа `armed`
-- страница сама опрашивает status API и показывает `pending revision`, пока main loop не применит новый snapshot
+- `GET /api/settings` возвращает агрегированный snapshot platform, pid_tuning, motor_trim и motor_test
+- PID tuning изменения применяются live без рестарта контейнера и сразу сохраняются в `PID_TUNING_SETTINGS_PATH`
+- motor trim изменения ставятся в pending и применяются только пока платформа `disarmed`
+- после рестарта controller загружает последние сохранённые PID/trim значения автоматически
+- пока платформа `armed`, `POST /api/settings/pid-tuning` и `POST /api/settings/motor-trim` отклоняются
+- UI сама опрашивает status API и показывает pending revision state
 
-Через страницу доступны:
+В `/settings` доступны:
 
 - `yaw_rate_kp`, `yaw_rate_ki`, `yaw_rate_kd`
 - `yaw_rate_deadband_dps`, `yaw_rate_filter_hz`
 - `stabilization_min_throttle`
 - `neutral_stabilization_steering_limit`
 - `neutral_stabilization_max_throttle`
+- сохранённый motor trim и live trim-mode значение
+- manual motor PWM/sound test
 
-Для ручного PWM-теста рядом остаётся старая инженерная страница `http://<robot-ip>:8765/motor-test`.
+Legacy страницы `http://<robot-ip>:8765/pid-tuning` и `http://<robot-ip>:8765/motor-test` остаются доступными для совместимости и быстрых инженерных проверок.
 
 ### Обновление voice assets на роботе
 

@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">БиБа animated gradient ASCII logo</title>
+  <desc id="desc">Animated settings logo derived from the original terminal-style ASCII БиБа SVG, with the four letter regions flickering independently.</desc>
+  <defs>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#48e7ff"/>
+      <stop offset="52%" stop-color="#ff5fd2"/>
+      <stop offset="100%" stop-color="#8f6bff"/>
+    </linearGradient>
+    <filter id="frameGlow" x="-20%" y="-25%" width="140%" height="150%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="letterGlow" x="-20%" y="-25%" width="140%" height="150%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="clip-b1">
+      <rect x="248" y="82" width="148" height="184" rx="10"/>
+    </clipPath>
+    <clipPath id="clip-i">
+      <rect x="413" y="82" width="186" height="184" rx="10"/>
+    </clipPath>
+    <clipPath id="clip-b2">
+      <rect x="617" y="82" width="148" height="184" rx="10"/>
+    </clipPath>
+    <clipPath id="clip-a">
+      <rect x="767" y="82" width="164" height="184" rx="10"/>
+    </clipPath>
+    <style>
+      .ascii-frame,
+      .ascii-letter {
+        text-anchor: middle;
+        fill: url(#textGradient);
+        stroke: #16091f;
+        stroke-opacity: 0.36;
+        stroke-width: 0.8;
+        paint-order: stroke fill;
+        font-family: DejaVu Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 28px;
+        font-weight: 700;
+        text-rendering: geometricPrecision;
+      }
+
+      .ascii-frame {
+        opacity: 0.58;
+        filter: url(#frameGlow);
+      }
+
+      .ascii-letter {
+        filter: url(#letterGlow);
+      }
+
+      .segment {
+        transform-box: fill-box;
+        transform-origin: center;
+      }
+
+      #letter-b1 {
+        animation: glowBreath 4.6s ease-in-out infinite;
+      }
+
+      #letter-i {
+        animation: flickerQuick 3.1s steps(2, end) infinite;
+      }
+
+      #letter-b2 {
+        animation: surgeBloom 5.2s ease-in-out infinite;
+      }
+
+      #letter-a {
+        animation: shimmerWave 4.1s ease-in-out infinite;
+      }
+
+      @keyframes glowBreath {
+        0%, 100% { opacity: 0.76; transform: translateY(0px) scale(1); }
+        50% { opacity: 1; transform: translateY(-2px) scale(1.012); }
+      }
+
+      @keyframes flickerQuick {
+        0%, 14%, 19%, 100% { opacity: 0.95; }
+        15%, 17% { opacity: 0.24; }
+        18% { opacity: 0.84; }
+        66% { opacity: 0.46; }
+      }
+
+      @keyframes surgeBloom {
+        0%, 100% { opacity: 0.74; transform: scale(1); }
+        42% { opacity: 0.82; }
+        49% { opacity: 1; transform: scale(1.015); }
+        58% { opacity: 0.72; }
+      }
+
+      @keyframes shimmerWave {
+        0%, 100% { opacity: 0.82; transform: translateY(0px); }
+        35% { opacity: 0.93; transform: translateY(-1px); }
+        70% { opacity: 0.62; transform: translateY(2px); }
+      }
+    </style>
+  </defs>
+
+  <text class="ascii-frame" x="600" y="68" xml:space="preserve">
+    <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+    <tspan x="600" dy="30">║                                             ║</tspan>
+    <tspan x="600" dy="30">║                                             ║</tspan>
+    <tspan x="600" dy="30">║                                             ║</tspan>
+    <tspan x="600" dy="30">║                                             ║</tspan>
+    <tspan x="600" dy="30">║                                             ║</tspan>
+    <tspan x="600" dy="30">║                                             ║</tspan>
+    <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
+  </text>
+
+  <g id="letter-b1" class="segment" clip-path="url(#clip-b1)">
+    <text class="ascii-letter" x="600" y="68" xml:space="preserve">
+      <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+      <tspan x="600" dy="30">║  ███████╗  ██╗   ███╗  ███████╗  █████╗     ║</tspan>
+      <tspan x="600" dy="30">║  ██╔════╝  ██║  ████║  ██╔════╝ ██╔══██╗    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╗   ██║ ██╔██║  ██████╗  ███████║    ║</tspan>
+      <tspan x="600" dy="30">║  ██╔══██╗  ██║██╔╝██║  ██╔══██╗ ██╔══██║    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╔╝  ████╔╝ ██║  ██████╔╝ ██║  ██║    ║</tspan>
+      <tspan x="600" dy="30">║  ╚═════╝   ╚═══╝  ╚═╝  ╚═════╝  ╚═╝  ╚═╝    ║</tspan>
+      <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
+    </text>
+  </g>
+
+  <g id="letter-i" class="segment" clip-path="url(#clip-i)">
+    <text class="ascii-letter" x="600" y="68" xml:space="preserve">
+      <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+      <tspan x="600" dy="30">║  ███████╗  ██╗   ███╗  ███████╗  █████╗     ║</tspan>
+      <tspan x="600" dy="30">║  ██╔════╝  ██║  ████║  ██╔════╝ ██╔══██╗    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╗   ██║ ██╔██║  ██████╗  ███████║    ║</tspan>
+      <tspan x="600" dy="30">║  ██╔══██╗  ██║██╔╝██║  ██╔══██╗ ██╔══██║    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╔╝  ████╔╝ ██║  ██████╔╝ ██║  ██║    ║</tspan>
+      <tspan x="600" dy="30">║  ╚═════╝   ╚═══╝  ╚═╝  ╚═════╝  ╚═╝  ╚═╝    ║</tspan>
+      <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
+    </text>
+  </g>
+
+  <g id="letter-b2" class="segment" clip-path="url(#clip-b2)">
+    <text class="ascii-letter" x="600" y="68" xml:space="preserve">
+      <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+      <tspan x="600" dy="30">║  ███████╗  ██╗   ███╗  ███████╗  █████╗     ║</tspan>
+      <tspan x="600" dy="30">║  ██╔════╝  ██║  ████║  ██╔════╝ ██╔══██╗    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╗   ██║ ██╔██║  ██████╗  ███████║    ║</tspan>
+      <tspan x="600" dy="30">║  ██╔══██╗  ██║██╔╝██║  ██╔══██╗ ██╔══██║    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╔╝  ████╔╝ ██║  ██████╔╝ ██║  ██║    ║</tspan>
+      <tspan x="600" dy="30">║  ╚═════╝   ╚═══╝  ╚═╝  ╚═════╝  ╚═╝  ╚═╝    ║</tspan>
+      <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
+    </text>
+  </g>
+
+  <g id="letter-a" class="segment" clip-path="url(#clip-a)">
+    <text class="ascii-letter" x="600" y="68" xml:space="preserve">
+      <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+      <tspan x="600" dy="30">║  ███████╗  ██╗   ███╗  ███████╗  █████╗     ║</tspan>
+      <tspan x="600" dy="30">║  ██╔════╝  ██║  ████║  ██╔════╝ ██╔══██╗    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╗   ██║ ██╔██║  ██████╗  ███████║    ║</tspan>
+      <tspan x="600" dy="30">║  ██╔══██╗  ██║██╔╝██║  ██╔══██╗ ██╔══██║    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╔╝  ████╔╝ ██║  ██████╔╝ ██║  ██║    ║</tspan>
+      <tspan x="600" dy="30">║  ╚═════╝   ╚═══╝  ╚═╝  ╚═════╝  ╚═╝  ╚═╝    ║</tspan>
+      <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
+    </text>
+  </g>
+</svg>

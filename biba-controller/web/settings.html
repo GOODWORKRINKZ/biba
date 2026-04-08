@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BiBa Robot Settings</title>
+  <link rel="stylesheet" href="/settings/assets/settings.css">
+  <script>
+    window.BIBA_SETTINGS_API = {
+      settings: '/api/settings',
+      pidTuning: '/api/settings/pid-tuning',
+      motorTrim: '/api/settings/motor-trim',
+      motorTest: '/api/settings/motor-test'
+    };
+  </script>
+  <script defer src="/settings/assets/settings.js"></script>
+</head>
+<body class="settings-shell">
+  <main class="settings-app">
+    <header class="hero-panel">
+      <img class="hero-logo" src="/settings/assets/biba-neon-sign.svg" alt="Animated neon BiBa logo">
+      <div class="hero-copy">
+        <p class="eyebrow">BiBa robot console</p>
+        <h1>Robot Settings</h1>
+        <p class="subtitle">Field tuning, saved trim control, and motor sound test in one place.</p>
+      </div>
+    </header>
+
+    <section class="status-strip" aria-live="polite">
+      <div class="status-pill"><span class="label">Platform</span><strong id="platform-armed">unknown</strong></div>
+      <div class="status-pill"><span class="label">Trim mode</span><strong id="platform-trim-mode">unknown</strong></div>
+      <div class="status-pill"><span class="label">PID rev</span><strong id="platform-pid-revision">n/a</strong></div>
+      <div class="status-pill"><span class="label">Trim rev</span><strong id="platform-trim-revision">n/a</strong></div>
+    </section>
+
+    <section id="stabilized-tuning" class="settings-card settings-card-wide">
+      <div class="card-header">
+        <div>
+          <p class="card-kicker">Stabilized drive</p>
+          <h2>PID tuning</h2>
+        </div>
+        <button type="button" id="load-defaults" class="secondary-button">Load defaults</button>
+      </div>
+      <form id="pid-tuning-form" class="settings-form">
+        <fieldset>
+          <legend>Yaw-rate PID</legend>
+          <label>Kp<input id="yaw_rate_kp" name="yaw_rate_kp" type="number" min="0" max="1" step="0.001"></label>
+          <label>Ki<input id="yaw_rate_ki" name="yaw_rate_ki" type="number" min="0" max="1" step="0.001"></label>
+          <label>Kd<input id="yaw_rate_kd" name="yaw_rate_kd" type="number" min="0" max="1" step="0.001"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Yaw-rate shaping</legend>
+          <label>Deadband (dps)<input id="yaw_rate_deadband_dps" name="yaw_rate_deadband_dps" type="number" min="0" max="45" step="0.1"></label>
+          <label>Filter (Hz)<input id="yaw_rate_filter_hz" name="yaw_rate_filter_hz" type="number" min="0" max="30" step="0.1"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Low-speed stabilization</legend>
+          <label>Min throttle<input id="stabilization_min_throttle" name="stabilization_min_throttle" type="number" min="0" max="1" step="0.01"></label>
+          <label>Steering limit<input id="neutral_stabilization_steering_limit" name="neutral_stabilization_steering_limit" type="number" min="0" max="1" step="0.01"></label>
+          <label>Max throttle<input id="neutral_stabilization_max_throttle" name="neutral_stabilization_max_throttle" type="number" min="0" max="1" step="0.01"></label>
+        </fieldset>
+        <div class="actions-row">
+          <button id="pid-apply" type="submit">Apply tuning</button>
+          <p id="pid-status" class="form-status"></p>
+        </div>
+      </form>
+    </section>
+
+    <section id="motor-trim" class="settings-card">
+      <div class="card-header compact-header">
+        <div>
+          <p class="card-kicker">Wheel balance</p>
+          <h2>Motor trim</h2>
+        </div>
+      </div>
+      <form id="motor-trim-form" class="settings-form single-column">
+        <label>Saved trim<input id="motor_trim_value" name="trim" type="number" min="-0.3" max="0.3" step="0.01"></label>
+        <div class="trim-readout">
+          <span>Live trim mode value</span>
+          <strong id="motor-trim-live-value">n/a</strong>
+        </div>
+        <div class="actions-row">
+          <button id="trim-apply" type="submit">Save trim</button>
+          <p id="trim-status" class="form-status"></p>
+        </div>
+      </form>
+    </section>
+
+    <section id="motor-test" class="settings-card settings-card-wide">
+      <div class="card-header compact-header">
+        <div>
+          <p class="card-kicker">Motor sound test</p>
+          <h2>Manual PWM</h2>
+        </div>
+      </div>
+      <form id="motor-test-form" class="settings-form motor-test-grid">
+        <label>PWM mode
+          <select id="test_pwm_mode" name="pwm_mode">
+            <option value="SOFTWARE">SOFTWARE</option>
+            <option value="HARDWARE">HARDWARE</option>
+          </select>
+        </label>
+        <label>Left frequency (Hz)<input id="test_left_frequency_hz" name="left_frequency_hz" type="number" min="100" max="8000" step="1" value="1000"></label>
+        <label>Left duty (%)<input id="test_left_duty_percent" name="left_duty_percent" type="number" min="0" max="100" step="1" value="40"></label>
+        <label>Right frequency (Hz)<input id="test_right_frequency_hz" name="right_frequency_hz" type="number" min="100" max="8000" step="1" value="1200"></label>
+        <label>Right duty (%)<input id="test_right_duty_percent" name="right_duty_percent" type="number" min="0" max="100" step="1" value="55"></label>
+        <label>Duration (ms)<input id="test_duration_ms" name="duration_ms" type="number" min="100" max="10000" step="100" value="1200"></label>
+        <div class="actions-row actions-row-wide">
+          <button id="motor-test-run" type="submit">Run motor test</button>
+          <p id="motor-test-status" class="form-status"></p>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
