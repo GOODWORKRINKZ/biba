@@ -60,7 +60,7 @@ firmware/
 ├── src/
 │   ├── main.c                 # tiny entrypoint, calls the mode dispatcher
 │   ├── app/                   # portable control-loop code (PID, limiter, telemetry)
-│   ├── drivers/               # BTS7960, ADC-based current/voltage sense, CRSF, IMU, buzzer
+│   ├── drivers/               # BTS7960, ADC-based current/voltage sense, CRSF, IMU
 │   ├── hal/                   # STM32Cube wrapper (clocks, DMA, peripherals)
 │   ├── modes/                 # standalone / companion / dispatcher
 │   └── proto/                 # shared SPI wire format with the SBC

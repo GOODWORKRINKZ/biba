@@ -280,6 +280,14 @@ current-sense калибровка и таймауты failsafe.
 - BTS7960 питаются отдельным силовым 5V/6V, а земля должна быть общей с
   STM32. VCC BOARD на STM32 — с 3.3V линии USB-UART программатора или
   с BEC.
+- **Motor-audio требует target с четырьмя независимыми таймерами PWM.**
+  `BLUEPILL_F103C8` держит все 4 канала на TIM1 — одна несущая, звук
+  через колёса невозможен. Для motor-audio (voice playback / мелодии
+  через BTS7960) используйте target `BIBA_F103_REV_A`: у него
+  `L_RPWM=TIM1_CH1`, `L_LPWM=TIM2_CH1` (remap на PA15),
+  `R_RPWM=TIM3_CH4`, `R_LPWM=TIM4_CH4`, что даёт 4 независимых
+  частоты/duty одновременно. Подробная распиновка — в
+  [`firmware/targets/BIBA_F103_REV_A/target.md`](../firmware/targets/BIBA_F103_REV_A/target.md).
 
 ### SPI к Raspberry Pi (companion mode)
 

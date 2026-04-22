@@ -36,7 +36,6 @@ Raspberry Pi over SPI2. It is the default target of every CI build.
 | I2C1 SCL / SDA — IMU                      | PB6 / PB7   |
 | IMU INT1                                  | PB2         |
 | Status LED (active low)                   | PC13        |
-| Aux tone (TIM2_CH1 remap)                 | PA15        |
 
 ## Caveats
 
@@ -46,3 +45,6 @@ Raspberry Pi over SPI2. It is the default target of every CI build.
   TIM1_CH2 / TIM1_CH3. CRSF therefore rides on USART3.
 - BTS7960 drivers need an independent 5 V / 6 V power supply; ground
   must be shared with the MCU.
+- **No motor-audio on this target.** All four PWM lines share TIM1, so
+  they share a single carrier frequency. Use `BIBA_F103_REV_A` for
+  sound-via-wheels playback.

@@ -54,9 +54,24 @@ static void handle_command(const biba_proto_frame_t *cmd)
         break;
     case BIBA_CMD_GET_TELEMETRY:
     case BIBA_CMD_SET_CONFIG:
-    case BIBA_CMD_PLAY_TONE:
-    default:
         /* Follow-up patches handle the long-tail commands. */
+        break;
+    case BIBA_CMD_SET_MOTOR_AUDIO:
+        if (cmd->payload_len >= sizeof(biba_proto_motor_audio_t)) {
+            biba_proto_motor_audio_t m;
+            memcpy(&m, cmd->payload, sizeof(m));
+            uint32_t freq[4];
+            float    duty[4];
+            for (unsigned i = 0; i < 4; ++i) {
+                freq[i] = m.freq_hz[i];
+                duty[i] = (float)m.duty_q8[i] / 255.0f;
+            }
+            /* Ignore the return value: on targets without per-channel
+             * timers this is a no-op by design. */
+            (void)biba_hal_motor_audio_set_all(freq, duty);
+        }
+        break;
+    default:
         break;
     }
 }

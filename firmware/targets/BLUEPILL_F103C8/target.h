@@ -9,8 +9,9 @@
  * the "Подключение STM32F103" section of docs/wiring.md.
  *
  *   - TIM1 owns all four BTS7960 PWM channels so the four lines stay in
- *     phase and dead-time can be inserted between RPWM/LPWM of the same
- *     side.
+ *     phase. That locks all four to the same carrier frequency, which
+ *     is fine for traction but can't produce motor-audio; for that,
+ *     use BIBA_F103_REV_A.
  *   - USART1 is deliberately unused: its AF pins PA9/PA10 are taken by
  *     PWM.
  *   - ADC1 runs a circular DMA scan over PA0..PA6.
@@ -26,6 +27,13 @@
 #define BIBA_TARGET_HAS_CRSF        1
 #define BIBA_TARGET_HAS_IMU         1
 #define BIBA_TARGET_HAS_SPI_SLAVE   1
+
+/* Blue Pill keeps the historical "all 4 motor PWM lines on TIM1"
+ * layout. That gives a single carrier frequency across all four
+ * channels, which is fine for traction but cannot produce motor-audio
+ * (four independent frequencies). Targets that need audio use
+ * BIBA_F103_REV_A instead. */
+#define BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM 0
 
 /* STM32 HAL-style macros. We guard inclusion so this header stays
  * usable from native_test (where STM32 HAL headers are absent). */
@@ -110,10 +118,5 @@
 #define BIBA_PIN_STATUS_LED_PORT     GPIOC
 #define BIBA_PIN_STATUS_LED_PIN      GPIO_PIN_13
 #define BIBA_STATUS_LED_ACTIVE_LOW   1
-
-/* --- Optional auxiliary buzzer / tone (TIM2_CH1 remap) ------------------ */
-
-#define BIBA_PIN_AUX_TONE_PORT       GPIOA
-#define BIBA_PIN_AUX_TONE_PIN        GPIO_PIN_15
 
 #endif /* BIBA_TARGET_H */

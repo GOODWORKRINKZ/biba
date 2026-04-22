@@ -158,4 +158,66 @@ def test_command_values_match_firmware():
     assert int(Command.GET_TELEMETRY) == 0x11
     assert int(Command.ARM) == 0x20
     assert int(Command.DISARM) == 0x21
+    assert int(Command.SET_CONFIG) == 0x30
+    assert int(Command.SET_MOTOR_AUDIO) == 0x40
     assert int(TelemetryId.SNAPSHOT) == 0x82
+
+
+def test_build_motor_audio_matches_firmware_layout():
+    """Payload layout mirrors biba_proto_motor_audio_t in biba_proto.h:
+
+        uint16_t freq_hz[4];   // little-endian
+        uint8_t  duty_q8[4];
+        uint8_t  flags;
+    """
+    from stm32_link.protocol import (
+        build_motor_audio,
+        MOTOR_AUDIO_FLAG_AUDIO_MODE,
+        MOTOR_AUDIO_FLAG_OUTPUTS_ENABLE,
+    )
+
+    raw = build_motor_audio(
+        seq=42,
+        freq_hz=(440, 554, 659, 880),
+        duty_q8=(64, 96, 128, 200),
+        flags=MOTOR_AUDIO_FLAG_AUDIO_MODE | MOTOR_AUDIO_FLAG_OUTPUTS_ENABLE,
+    )
+    parsed = parse_frame(raw)
+    assert parsed.cmd == int(Command.SET_MOTOR_AUDIO)
+    assert parsed.seq == 42
+    freqs = struct.unpack("<HHHH", parsed.payload[:8])
+    duties = struct.unpack("<BBBB", parsed.payload[8:12])
+    flags = parsed.payload[12]
+    assert freqs == (440, 554, 659, 880)
+    assert duties == (64, 96, 128, 200)
+    assert flags == 0b11
+
+
+def test_build_motor_audio_silences_channel_with_zero_freq():
+    from stm32_link.protocol import build_motor_audio
+
+    raw = build_motor_audio(
+        seq=1,
+        freq_hz=(0, 0, 0, 0),
+        duty_q8=(0, 0, 0, 0),
+    )
+    parsed = parse_frame(raw)
+    assert parsed.payload[:8] == b"\x00" * 8
+    assert parsed.payload[8:12] == b"\x00" * 4
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        dict(seq=0, freq_hz=(0, 0, 0), duty_q8=(0, 0, 0, 0)),   # wrong length
+        dict(seq=0, freq_hz=(0, 0, 0, 0), duty_q8=(0, 0, 0)),   # wrong length
+        dict(seq=0, freq_hz=(0x10000, 0, 0, 0), duty_q8=(0, 0, 0, 0)),  # OOR freq
+        dict(seq=0, freq_hz=(0, 0, 0, 0), duty_q8=(256, 0, 0, 0)),      # OOR duty
+        dict(seq=0, freq_hz=(0, 0, 0, 0), duty_q8=(0, 0, 0, 0), flags=256),
+    ],
+)
+def test_build_motor_audio_rejects_invalid_args(kwargs):
+    from stm32_link.protocol import build_motor_audio
+
+    with pytest.raises(ValueError):
+        build_motor_audio(**kwargs)

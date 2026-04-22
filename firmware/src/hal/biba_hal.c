@@ -12,12 +12,10 @@
 
 #include "stm32f1xx_hal.h"
 
-#include <math.h>
 #include <string.h>
 
 /* --- Peripheral handles ------------------------------------------------- */
 
-static TIM_HandleTypeDef htim1;     /* motor PWM, 4 channels */
 static ADC_HandleTypeDef hadc1;     /* current/voltage scan */
 static DMA_HandleTypeDef hdma_adc1;
 static UART_HandleTypeDef huart3;   /* CRSF */
@@ -43,7 +41,6 @@ static bool s_mode_sel_latched_companion;
 
 static void clock_config(void);
 static void gpio_init(void);
-static void tim1_pwm_init(void);
 static void adc1_init(void);
 static void usart3_init(uint32_t baud);
 static void spi2_slave_init(void);
@@ -56,7 +53,9 @@ void biba_hal_init(void)
     HAL_Init();
     clock_config();
 
-    /* Release JTAG so PB3/PB4/PA15 become GPIO. */
+    /* Release JTAG so PB3/PB4/PA15 become available as GPIO/AF. On
+     * BIBA_F103_REV_A this also frees PA15 for TIM2_CH1 (L_LPWM via
+     * TIM2 partial remap 1). */
     __HAL_RCC_AFIO_CLK_ENABLE();
     __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
@@ -72,7 +71,9 @@ void biba_hal_init(void)
     s_mode_sel_latched_companion =
         (HAL_GPIO_ReadPin(BIBA_PIN_MODE_SEL_PORT, BIBA_PIN_MODE_SEL_PIN) == GPIO_PIN_RESET);
 
-    tim1_pwm_init();
+    /* Motor PWM init lives in biba_hal_motor.c so the topology (single
+     * shared timer vs. per-channel timers) can vary per target. */
+    biba_hal_motor_pwm_init();
     adc1_init();
     i2c1_init();
     /* USART3 and SPI2 are brought up lazily by the first call from the
@@ -123,37 +124,7 @@ void biba_hal_right_enable(bool enabled)
     HAL_GPIO_WritePin(BIBA_PIN_RIGHT_LEN_PORT, BIBA_PIN_RIGHT_LEN_PIN, s);
 }
 
-/* TIM1 uses a common ARR. 72 MHz / (PSC+1) / (ARR+1) = BIBA_PWM_FREQUENCY_HZ. */
-static uint16_t pwm_duty_to_compare(float duty_abs)
-{
-    if (duty_abs < 0.0f) duty_abs = 0.0f;
-    if (duty_abs > 1.0f) duty_abs = 1.0f;
-    uint32_t arr = __HAL_TIM_GET_AUTORELOAD(&htim1);
-    return (uint16_t)lroundf(duty_abs * (float)arr);
-}
-
-static void set_channel_pair(uint32_t rpwm_chan, uint32_t lpwm_chan, float duty)
-{
-    if (duty > 1.0f) duty = 1.0f;
-    if (duty < -1.0f) duty = -1.0f;
-    if (duty >= 0.0f) {
-        __HAL_TIM_SET_COMPARE(&htim1, lpwm_chan, 0);
-        __HAL_TIM_SET_COMPARE(&htim1, rpwm_chan, pwm_duty_to_compare(duty));
-    } else {
-        __HAL_TIM_SET_COMPARE(&htim1, rpwm_chan, 0);
-        __HAL_TIM_SET_COMPARE(&htim1, lpwm_chan, pwm_duty_to_compare(-duty));
-    }
-}
-
-void biba_hal_motor_pwm_left(float duty)
-{
-    set_channel_pair(TIM_CHANNEL_1, TIM_CHANNEL_2, duty);
-}
-
-void biba_hal_motor_pwm_right(float duty)
-{
-    set_channel_pair(TIM_CHANNEL_3, TIM_CHANNEL_4, duty);
-}
+/* Motor-PWM helpers moved to biba_hal_motor.c. */
 
 uint16_t biba_hal_adc_sample(unsigned channel_index)
 {
@@ -296,13 +267,7 @@ static void gpio_init(void)
     g.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(BIBA_PIN_MODE_SEL_PORT, &g);
 
-    /* TIM1_CH1..CH4 on PA8..PA11 as AF push-pull. */
-    g.Pin = BIBA_PIN_LEFT_RPWM_PIN | BIBA_PIN_LEFT_LPWM_PIN
-          | BIBA_PIN_RIGHT_RPWM_PIN | BIBA_PIN_RIGHT_LPWM_PIN;
-    g.Mode = GPIO_MODE_AF_PP;
-    g.Pull = GPIO_NOPULL;
-    g.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(GPIOA, &g);
+    /* TIM channel AF pin init and timer setup live in biba_hal_motor.c. */
 
     /* ADC analog inputs PA0..PA6. */
     g.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3
@@ -310,54 +275,6 @@ static void gpio_init(void)
     g.Mode = GPIO_MODE_ANALOG;
     g.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOA, &g);
-}
-
-static void tim1_pwm_init(void)
-{
-    __HAL_RCC_TIM1_CLK_ENABLE();
-
-    /* PWM base: 72 MHz APB2 timer clock. Use PSC=0 so TIM1 stays at 72 MHz;
-     * derive ARR from BIBA_PWM_FREQUENCY_HZ. */
-    uint32_t arr = (72000000u / BIBA_PWM_FREQUENCY_HZ) - 1u;
-
-    htim1.Instance = TIM1;
-    htim1.Init.Prescaler = 0;
-    htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim1.Init.Period = arr;
-    htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    htim1.Init.RepetitionCounter = 0;
-    htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-    HAL_TIM_PWM_Init(&htim1);
-
-    TIM_OC_InitTypeDef oc = {0};
-    oc.OCMode = TIM_OCMODE_PWM1;
-    oc.Pulse = 0;
-    oc.OCPolarity = TIM_OCPOLARITY_HIGH;
-    oc.OCFastMode = TIM_OCFAST_DISABLE;
-    HAL_TIM_PWM_ConfigChannel(&htim1, &oc, TIM_CHANNEL_1);
-    HAL_TIM_PWM_ConfigChannel(&htim1, &oc, TIM_CHANNEL_2);
-    HAL_TIM_PWM_ConfigChannel(&htim1, &oc, TIM_CHANNEL_3);
-    HAL_TIM_PWM_ConfigChannel(&htim1, &oc, TIM_CHANNEL_4);
-
-    TIM_BreakDeadTimeConfigTypeDef bd = {0};
-    bd.OffStateRunMode = TIM_OSSR_DISABLE;
-    bd.OffStateIDLEMode = TIM_OSSI_DISABLE;
-    bd.LockLevel = TIM_LOCKLEVEL_OFF;
-    /* Dead-time generator: for DTG < 128 the delay is DTG * (1 / f_DTS).
-     * With TIM1 on 72 MHz and CKD = DIV1, each LSB = ~13.9 ns, so
-     * BIBA_PWM_DEADTIME_NS = 500 ns -> DTG = 36. Clamp to the 7-bit
-     * range the fast DTG encoding supports. */
-    uint32_t dtg = (uint32_t)((BIBA_PWM_DEADTIME_NS * 72ULL + 999ULL) / 1000ULL);
-    if (dtg > 127u) dtg = 127u;
-    bd.DeadTime = (uint8_t)dtg;
-    bd.BreakState = TIM_BREAK_DISABLE;
-    bd.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
-    HAL_TIMEx_ConfigBreakDeadTime(&htim1, &bd);
-
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 }
 
 static void adc1_init(void)

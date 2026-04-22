@@ -108,9 +108,14 @@ spelled exactly as they appear in `BLUEPILL_F103C8/target.h`:
 - `BIBA_TARGET_HAS_CRSF`
 - `BIBA_TARGET_HAS_IMU`
 - `BIBA_TARGET_HAS_SPI_SLAVE`
+- `BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM` — `1` if each of the four
+  motor-PWM lines is on its own hardware timer (enables motor-audio),
+  `0` if they share a single timer
 - `BIBA_PIN_{LEFT,RIGHT}_{RPWM,LPWM,REN,LEN}_{PORT,PIN}`
+- When `BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM == 1` also:
+  `BIBA_PWM_{LEFT,RIGHT}_{RPWM,LPWM}_{TIM,CHANNEL,CLK_ENABLE,AF_REMAP}`
 - `BIBA_ADC_CHAN_*` and `BIBA_ADC_SCAN_LEN`
-- `BIBA_PIN_{CRSF_TX,CRSF_RX,SPI_*,DATA_READY,MODE_SEL,I2C_*,IMU_INT1,STATUS_LED,AUX_TONE}_{PORT,PIN}`
+- `BIBA_PIN_{CRSF_TX,CRSF_RX,SPI_*,DATA_READY,MODE_SEL,I2C_*,IMU_INT1,STATUS_LED}_{PORT,PIN}`
 - `BIBA_STATUS_LED_ACTIVE_LOW`
 
 If your board fundamentally can't provide one of the listed pins

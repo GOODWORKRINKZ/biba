@@ -46,7 +46,7 @@ class Command(enum.IntEnum):
     ARM = 0x20
     DISARM = 0x21
     SET_CONFIG = 0x30
-    PLAY_TONE = 0x40
+    SET_MOTOR_AUDIO = 0x40
 
 
 class TelemetryId(enum.IntEnum):
@@ -256,3 +256,63 @@ def build_ping(seq: int) -> bytes:
 def build_arm(seq: int, armed: bool) -> bytes:
     cmd = Command.ARM if armed else Command.DISARM
     return build_frame(cmd, seq)
+
+
+# Channel indices for BIBA_CMD_SET_MOTOR_AUDIO. Must stay in sync with
+# ``biba_motor_audio_channel_t`` in firmware/src/proto/biba_proto.h.
+MOTOR_AUDIO_CHANNEL_COUNT = 4
+MOTOR_AUDIO_CH_LEFT_RPWM = 0
+MOTOR_AUDIO_CH_LEFT_LPWM = 1
+MOTOR_AUDIO_CH_RIGHT_RPWM = 2
+MOTOR_AUDIO_CH_RIGHT_LPWM = 3
+
+# Flag bits for build_motor_audio().
+MOTOR_AUDIO_FLAG_AUDIO_MODE = 1 << 0
+MOTOR_AUDIO_FLAG_OUTPUTS_ENABLE = 1 << 1
+
+
+def build_motor_audio(
+    seq: int,
+    freq_hz: Tuple[int, int, int, int],
+    duty_q8: Tuple[int, int, int, int],
+    flags: int = 0,
+) -> bytes:
+    """Build a BIBA_CMD_SET_MOTOR_AUDIO frame.
+
+    ``freq_hz`` and ``duty_q8`` are 4-tuples indexed by the
+    ``MOTOR_AUDIO_CH_*`` constants. A frequency of 0 silences the
+    channel. Duty is a 0..255 unsigned value (0 = 0 %, 255 = 100 %).
+    ``flags`` is a bitfield built from ``MOTOR_AUDIO_FLAG_*``.
+
+    The payload layout mirrors ``biba_proto_motor_audio_t`` in
+    firmware/src/proto/biba_proto.h:
+
+        uint16_t freq_hz[4];   // little-endian
+        uint8_t  duty_q8[4];
+        uint8_t  flags;
+    """
+    if len(freq_hz) != MOTOR_AUDIO_CHANNEL_COUNT:
+        raise ValueError("freq_hz must have 4 entries")
+    if len(duty_q8) != MOTOR_AUDIO_CHANNEL_COUNT:
+        raise ValueError("duty_q8 must have 4 entries")
+    for f in freq_hz:
+        if not 0 <= int(f) <= 0xFFFF:
+            raise ValueError(f"freq_hz out of range: {f}")
+    for d in duty_q8:
+        if not 0 <= int(d) <= 0xFF:
+            raise ValueError(f"duty_q8 out of range: {d}")
+    if not 0 <= int(flags) <= 0xFF:
+        raise ValueError(f"flags out of range: {flags}")
+    payload = struct.pack(
+        "<HHHHBBBBB",
+        int(freq_hz[0]),
+        int(freq_hz[1]),
+        int(freq_hz[2]),
+        int(freq_hz[3]),
+        int(duty_q8[0]),
+        int(duty_q8[1]),
+        int(duty_q8[2]),
+        int(duty_q8[3]),
+        int(flags),
+    )
+    return build_frame(Command.SET_MOTOR_AUDIO, seq, 0, payload)

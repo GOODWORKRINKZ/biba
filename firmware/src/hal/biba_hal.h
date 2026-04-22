@@ -44,11 +44,39 @@ bool biba_hal_mode_sel_is_companion(void);
 void biba_hal_left_enable(bool enabled);
 void biba_hal_right_enable(bool enabled);
 
-/* --- Motor PWM (TIM1_CH1..CH4) ------------------------------------------ */
+/* --- Motor PWM ---------------------------------------------------------- */
 
-/* `duty` is [-1.0, 1.0]. Negative drives LPWM, positive drives RPWM. */
+/* Initialise the four BTS7960 motor-PWM lines. The exact topology is
+ * per-target: BLUEPILL_F103C8 uses a single shared timer (TIM1), while
+ * BIBA_F103_REV_A binds each line to its own hardware timer so the
+ * motor-audio API below can run four independent carriers at once. */
+void biba_hal_motor_pwm_init(void);
+
+/* Traction-mode drive. `duty` is [-1.0, 1.0]. Negative drives LPWM,
+ * positive drives RPWM. Shared carrier, BIBA_PWM_FREQUENCY_HZ (20 kHz). */
 void biba_hal_motor_pwm_left(float duty);
 void biba_hal_motor_pwm_right(float duty);
+
+/* --- Motor audio -------------------------------------------------------- */
+
+/* Per-channel PWM frequency + duty, batched. The `ch` index matches
+ * `biba_motor_audio_channel_t` (see proto/biba_proto.h):
+ *   0 = L_RPWM, 1 = L_LPWM, 2 = R_RPWM, 3 = R_LPWM.
+ *
+ * `freq_hz` of 0 silences the channel. `duty_unit` is [0.0, 1.0].
+ *
+ * Returns true if the target supports per-channel carriers and the
+ * update has been programmed; false if the target keeps a single
+ * carrier and the caller's audio intent cannot be honoured. The traction
+ * API (biba_hal_motor_pwm_left/right) stays usable either way. */
+bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
+                                  const float    duty_unit[4]);
+
+/* Switch the four motor-PWM carriers between shared-traction-carrier
+ * (20 kHz) and independent-audio-carrier mode. On targets without
+ * per-channel timers both calls are no-ops and return false. */
+bool biba_hal_motor_audio_begin(void);
+bool biba_hal_motor_audio_end(void);
 
 /* --- ADC scan ----------------------------------------------------------- */
 
