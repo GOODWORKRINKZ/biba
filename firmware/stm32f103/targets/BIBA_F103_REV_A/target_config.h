@@ -15,6 +15,12 @@
 /* 1:20 battery divider for up to ~66 V packs. */
 #define BIBA_VBAT_DIVIDER_RATIO      20.0f
 
+/* PA5 is repurposed as a chassis NTC on the Rev A board, so the rail
+ * reading is meaningless; pin the divider to the VBAT ratio just to
+ * keep the reported value bounded. Real NTC decoding would live in a
+ * future driver module. */
+#define BIBA_RAIL_12V_DIVIDER_RATIO  20.0f
+
 /* Tighter current limits because the Rev A board uses 5 mΩ shunts. */
 #define BIBA_LEFT_MAX_CURRENT_A      25.0f
 #define BIBA_RIGHT_MAX_CURRENT_A     25.0f

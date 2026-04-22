@@ -68,6 +68,13 @@
 #ifndef BIBA_VBAT_DIVIDER_RATIO
 #  define BIBA_VBAT_DIVIDER_RATIO      11.0f
 #endif
+/* PA5 rail tap uses its own divider. Defaults to the VBAT ratio because
+ * the reference Blue Pill wiring shares the 1:11 ladder; a custom board
+ * with a dedicated 12 V rail divider should override this in its
+ * targets/<TARGET>/target_config.h. */
+#ifndef BIBA_RAIL_12V_DIVIDER_RATIO
+#  define BIBA_RAIL_12V_DIVIDER_RATIO  BIBA_VBAT_DIVIDER_RATIO
+#endif
 #ifndef BIBA_ADC_VREF_V
 #  define BIBA_ADC_VREF_V              3.3f
 #endif

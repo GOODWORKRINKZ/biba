@@ -250,7 +250,7 @@ SPI-slave к Raspberry Pi. Подробности — в
 | TIM1_CH2 — Left LPWM                          | PA9        |
 | TIM1_CH3 — Right RPWM                         | PA10       |
 | TIM1_CH4 — Right LPWM                         | PA11       |
-| Left BTS7960 R_EN / L_EN                      | PB0 / PB1  |
+| Left BTS7960 R_EN / L_EN                      | PB3 / PB4  |
 | Right BTS7960 R_EN / L_EN                     | PB5 / PB8  |
 | ADC1 IN0..IN3 — 4× BTS7960 `IS` (L+R, L+R)    | PA0..PA3   |
 | ADC1 IN4 — VBAT через делитель 1:11           | PA4        |

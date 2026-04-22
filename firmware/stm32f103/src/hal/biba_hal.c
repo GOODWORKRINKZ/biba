@@ -84,9 +84,13 @@ void     biba_hal_delay_ms(uint32_t ms) { HAL_Delay(ms); }
 
 void biba_hal_status_led_set(bool on)
 {
-    /* Blue Pill LED is active-low. */
+    /* Honour the target's active-level so targets like BIBA_F103_REV_A
+     * (active-high LED on PB5) and BLUEPILL_F103C8 (active-low LED on
+     * PC13) share the same call site. */
+    GPIO_PinState lit   = BIBA_STATUS_LED_ACTIVE_LOW ? GPIO_PIN_RESET : GPIO_PIN_SET;
+    GPIO_PinState unlit = BIBA_STATUS_LED_ACTIVE_LOW ? GPIO_PIN_SET   : GPIO_PIN_RESET;
     HAL_GPIO_WritePin(BIBA_PIN_STATUS_LED_PORT, BIBA_PIN_STATUS_LED_PIN,
-                      on ? GPIO_PIN_RESET : GPIO_PIN_SET);
+                      on ? lit : unlit);
 }
 
 void biba_hal_data_ready_set(bool on)
