@@ -1,0 +1,97 @@
+name: "G: Build STM32F103 firmware"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "firmware/stm32f103/**"
+      - ".github/workflows/G-Build-STM32F103.yml"
+  pull_request:
+    paths:
+      - "firmware/stm32f103/**"
+      - ".github/workflows/G-Build-STM32F103.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    name: Native unit tests (pio test -e native_test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-native-${{ runner.os }}-${{ hashFiles('firmware/stm32f103/platformio.ini') }}
+          restore-keys: |
+            pio-native-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Run native test env
+        working-directory: firmware/stm32f103
+        run: pio test -e native_test
+
+  firmware-build:
+    name: Firmware build (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [standalone, companion, combined]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-fw-${{ matrix.env }}-${{ runner.os }}-${{ hashFiles('firmware/stm32f103/platformio.ini') }}
+          restore-keys: |
+            pio-fw-${{ matrix.env }}-${{ runner.os }}-
+            pio-fw-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build ${{ matrix.env }}
+        working-directory: firmware/stm32f103
+        run: pio run -e ${{ matrix.env }}
+
+      - name: Upload firmware artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: biba-stm32f103-${{ matrix.env }}
+          path: |
+            firmware/stm32f103/.pio/build/${{ matrix.env }}/firmware.bin
+            firmware/stm32f103/.pio/build/${{ matrix.env }}/firmware.elf
+          if-no-files-found: warn
+          retention-days: 14

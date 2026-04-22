@@ -4,3 +4,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 .worktrees/
+firmware/stm32f103/.pio/
+firmware/stm32f103/.vscode/
+firmware/stm32f103/.pioenvs/
+firmware/stm32f103/.piolibdeps/
