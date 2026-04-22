@@ -227,7 +227,7 @@ sudo i2cdetect -y 1
 Для BMI160/BMI166-compatible IMU обычно ожидается `0x68` или `0x69`, для ST LSM6DS3-class чаще `0x6A` или `0x6B`, так что в таблице `i2cdetect` должен появиться ещё один адрес рядом с ADS1115.
 ## Подключение STM32F103
 
-Прошивка [firmware/stm32f103](../firmware/stm32f103) — опциональный
+Прошивка [firmware](../firmware) — опциональный
 STM32F103C8T6 ("Blue Pill") добавочный контроллер, который умеет
 работать либо самостоятельно (CRSF + BTS7960 + лимитер), либо
 SPI-slave к Raspberry Pi. Подробности — в
@@ -239,7 +239,7 @@ SPI-slave к Raspberry Pi. Подробности — в
 ### Распиновка STM32F103C8T6 (target `BLUEPILL_F103C8`)
 
 Это эталонная распиновка target'а `BLUEPILL_F103C8`
-(см. [`firmware/stm32f103/targets/BLUEPILL_F103C8/target.md`](../firmware/stm32f103/targets/BLUEPILL_F103C8/target.md)).
+(см. [`firmware/targets/BLUEPILL_F103C8/target.md`](../firmware/targets/BLUEPILL_F103C8/target.md)).
 Другие target'ы (например, `BIBA_F103_REV_A`) могут назначать эти
 функции на другие пины — всегда сверяйтесь с `target.md` конкретной
 платы, которую собираете.
@@ -264,7 +264,7 @@ SPI-slave к Raspberry Pi. Подробности — в
 | Status LED (on-board blue pill)               | PC13       |
 | SWD (оставлять для прошивки / отладки)        | PA13 / PA14 |
 
-Конкретные значения собраны в `firmware/stm32f103/include/biba_board.h` и
+Конкретные значения собраны в `firmware/include/biba_board.h` и
 `include/biba_config.h` — там же настраиваются частота PWM,
 current-sense калибровка и таймауты failsafe.
 

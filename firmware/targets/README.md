@@ -55,7 +55,7 @@ all `<target, mode>` pairs and uploads `<target>-<mode>.bin` artefacts.
    your board and copy its directory:
 
    ```bash
-   cp -r firmware/stm32f103/targets/BLUEPILL_F103C8 firmware/stm32f103/targets/<YOUR_TARGET>
+   cp -r firmware/targets/BLUEPILL_F103C8 firmware/targets/<YOUR_TARGET>
    ```
 
 2. **Edit `target.h`.** Set `BIBA_TARGET_NAME`, flip the

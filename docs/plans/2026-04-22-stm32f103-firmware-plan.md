@@ -4,7 +4,7 @@
 
 **Goal:** Add a separate PlatformIO STM32F103 firmware project, shared SPI protocol definitions, host-side firmware tests, optional Python SPI link scaffolding, firmware docs, and a dedicated CI workflow without breaking the current Raspberry Pi controller path.
 
-**Architecture:** Keep the new firmware fully isolated under `firmware/stm32f103/`, implement shared protocol and control logic in hardware-agnostic C modules that can be exercised by `native_test`, and keep board-specific STM32Cube/HAL code as thin wrappers behind internal interfaces. On the Linux side, add a minimal `biba-controller/stm32_link/` package that mirrors the protocol, stays off by default behind a feature flag, and coexists with the existing GPIO/motor runtime.
+**Architecture:** Keep the new firmware fully isolated under `firmware/`, implement shared protocol and control logic in hardware-agnostic C modules that can be exercised by `native_test`, and keep board-specific STM32Cube/HAL code as thin wrappers behind internal interfaces. On the Linux side, add a minimal `biba-controller/stm32_link/` package that mirrors the protocol, stays off by default behind a feature flag, and coexists with the existing GPIO/motor runtime.
 
 **Tech Stack:** PlatformIO, STM32Cube HAL, C11, Unity test framework through PlatformIO `native`, Python 3, pytest, GitHub Actions.
 
@@ -13,13 +13,13 @@
 ### Task 1: Create the STM32 project skeleton and build matrix
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/platformio.ini`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/include/biba_board.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/include/biba_config.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/include/biba_version.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/main.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/modes/mode_dispatcher.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/modes/mode_dispatcher.h`
+- Create: `/home/runner/work/biba/biba/firmware/platformio.ini`
+- Create: `/home/runner/work/biba/biba/firmware/include/biba_board.h`
+- Create: `/home/runner/work/biba/biba/firmware/include/biba_config.h`
+- Create: `/home/runner/work/biba/biba/firmware/include/biba_version.h`
+- Create: `/home/runner/work/biba/biba/firmware/src/main.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/modes/mode_dispatcher.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/modes/mode_dispatcher.h`
 
 **Step 1: Write the failing build skeleton**
 
@@ -41,7 +41,7 @@ Set:
 
 **Step 2: Run build to verify it fails in a useful way**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone`
+Run: `cd /home/runner/work/biba/biba/firmware && pio run -e standalone`
 Expected: FAIL because source modules referenced by `main.c` and the dispatcher do not exist yet.
 
 **Step 3: Write minimal implementation**
@@ -55,15 +55,15 @@ Add:
 
 **Step 4: Run build to verify it passes**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone -e companion -e combined`
+Run: `cd /home/runner/work/biba/biba/firmware && pio run -e standalone -e companion -e combined`
 Expected: PASS for all three envs.
 
 ### Task 2: Add shared protocol framing and native tests first
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/proto/biba_proto.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/proto/biba_proto.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/test/test_biba_proto/test_main.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/proto/biba_proto.h`
+- Create: `/home/runner/work/biba/biba/firmware/src/proto/biba_proto.c`
+- Create: `/home/runner/work/biba/biba/firmware/test/test_biba_proto/test_main.c`
 
 **Step 1: Write the failing test**
 
@@ -77,7 +77,7 @@ Add native tests covering:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test -f test_biba_proto`
+Run: `cd /home/runner/work/biba/biba/firmware && pio test -e native_test -f test_biba_proto`
 Expected: FAIL because protocol functions are missing.
 
 **Step 3: Write minimal implementation**
@@ -93,17 +93,17 @@ Implement:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test -f test_biba_proto`
+Run: `cd /home/runner/work/biba/biba/firmware && pio test -e native_test -f test_biba_proto`
 Expected: PASS.
 
 ### Task 3: Add control math modules behind host-side tests
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/app/control_loop.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/app/control_loop.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/app/failsafe.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/app/failsafe.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/test/test_control_loop/test_main.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/app/control_loop.h`
+- Create: `/home/runner/work/biba/biba/firmware/src/app/control_loop.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/app/failsafe.h`
+- Create: `/home/runner/work/biba/biba/firmware/src/app/failsafe.c`
+- Create: `/home/runner/work/biba/biba/firmware/test/test_control_loop/test_main.c`
 
 **Step 1: Write the failing test**
 
@@ -117,7 +117,7 @@ Add native tests for:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test -f test_control_loop`
+Run: `cd /home/runner/work/biba/biba/firmware && pio test -e native_test -f test_control_loop`
 Expected: FAIL because the limiter, PID, and failsafe code does not exist.
 
 **Step 3: Write minimal implementation**
@@ -131,15 +131,15 @@ Implement:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test -f test_control_loop`
+Run: `cd /home/runner/work/biba/biba/firmware && pio test -e native_test -f test_control_loop`
 Expected: PASS.
 
 ### Task 4: Add CRSF parser coverage before firmware-side integration
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/crsf.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/crsf.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/test/test_crsf/test_main.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/crsf.h`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/crsf.c`
+- Create: `/home/runner/work/biba/biba/firmware/test/test_crsf/test_main.c`
 
 **Step 1: Write the failing test**
 
@@ -155,7 +155,7 @@ Use `/home/runner/work/biba/biba/tests/test_crsf.py` as the behavior reference.
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test -f test_crsf`
+Run: `cd /home/runner/work/biba/biba/firmware && pio test -e native_test -f test_crsf`
 Expected: FAIL because the parser module is missing.
 
 **Step 3: Write minimal implementation**
@@ -169,24 +169,24 @@ Implement:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test -f test_crsf`
+Run: `cd /home/runner/work/biba/biba/firmware && pio test -e native_test -f test_crsf`
 Expected: PASS.
 
 ### Task 5: Add the HAL and driver seams needed for all firmware envs to compile
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_clock.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_gpio.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_pwm.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_adc.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_spi_slave.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_i2c.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/hal/biba_hal_usart.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/bts7960.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/current_sense.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/voltage_sense.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/imu.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/drivers/buzzer_motor.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_clock.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_gpio.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_pwm.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_adc.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_spi_slave.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_i2c.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/hal/biba_hal_usart.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/bts7960.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/current_sense.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/voltage_sense.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/imu.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/drivers/buzzer_motor.c`
 
 **Step 1: Write the compile target**
 
@@ -194,7 +194,7 @@ Wire these files into the STM32 envs and make the dispatcher depend on them.
 
 **Step 2: Run build to verify it fails**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone`
+Run: `cd /home/runner/work/biba/biba/firmware && pio run -e standalone`
 Expected: FAIL on missing HAL symbols and incomplete init paths.
 
 **Step 3: Write minimal implementation**
@@ -213,17 +213,17 @@ Keep sensor and actuator drivers as small stateful wrappers over the HAL functio
 
 **Step 4: Run build to verify it passes**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone -e companion -e combined`
+Run: `cd /home/runner/work/biba/biba/firmware && pio run -e standalone -e companion -e combined`
 Expected: PASS.
 
 ### Task 6: Implement mode-specific runtime glue
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/modes/mode_standalone.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/modes/mode_companion.c`
-- Modify: `/home/runner/work/biba/biba/firmware/stm32f103/src/modes/mode_dispatcher.c`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/app/telemetry.h`
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/src/app/telemetry.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/modes/mode_standalone.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/modes/mode_companion.c`
+- Modify: `/home/runner/work/biba/biba/firmware/src/modes/mode_dispatcher.c`
+- Create: `/home/runner/work/biba/biba/firmware/src/app/telemetry.h`
+- Create: `/home/runner/work/biba/biba/firmware/src/app/telemetry.c`
 
 **Step 1: Add failing native coverage where practical**
 
@@ -238,8 +238,8 @@ Add tests asserting:
 
 Run:
 
-- `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test`
-- `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e combined`
+- `cd /home/runner/work/biba/biba/firmware && pio test -e native_test`
+- `cd /home/runner/work/biba/biba/firmware && pio run -e combined`
 
 Expected: FAIL because runtime glue is incomplete.
 
@@ -257,8 +257,8 @@ Implement a cooperative super-loop with:
 
 Run:
 
-- `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test`
-- `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone -e companion -e combined`
+- `cd /home/runner/work/biba/biba/firmware && pio test -e native_test`
+- `cd /home/runner/work/biba/biba/firmware && pio run -e standalone -e companion -e combined`
 
 Expected: PASS.
 
@@ -311,7 +311,7 @@ Expected: PASS.
 ### Task 8: Document the new hardware path and firmware architecture
 
 **Files:**
-- Create: `/home/runner/work/biba/biba/firmware/stm32f103/README.md`
+- Create: `/home/runner/work/biba/biba/firmware/README.md`
 - Create: `/home/runner/work/biba/biba/docs/stm32_architecture.md`
 - Modify: `/home/runner/work/biba/biba/docs/wiring.md`
 - Modify: `/home/runner/work/biba/biba/README.md`
@@ -375,15 +375,15 @@ Keep `/home/runner/work/biba/biba/.github/workflows/G-Build-All.yml` and `/home/
 
 Add:
 
-- `firmware/stm32f103/.pio/`
-- `firmware/stm32f103/.vscode/`
+- `firmware/.pio/`
+- `firmware/.vscode/`
 
 **Step 2: Run focused firmware and Python verification**
 
 Run:
 
-- `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio test -e native_test`
-- `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone -e companion -e combined`
+- `cd /home/runner/work/biba/biba/firmware && pio test -e native_test`
+- `cd /home/runner/work/biba/biba/firmware && pio run -e standalone -e companion -e combined`
 - `cd /home/runner/work/biba/biba && pytest tests/test_stm32_link_protocol.py tests/test_stm32_link_client.py tests/test_config.py tests/test_current_control.py tests/test_crsf.py -q`
 
 Expected: PASS.
@@ -412,7 +412,7 @@ After committing the implementation, run the parallel validation tool with a PR 
 
 **Step 1: Flash standalone firmware**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e standalone -t upload`
+Run: `cd /home/runner/work/biba/biba/firmware && pio run -e standalone -t upload`
 
 Verify:
 
@@ -423,7 +423,7 @@ Verify:
 
 **Step 2: Flash companion or combined firmware**
 
-Run: `cd /home/runner/work/biba/biba/firmware/stm32f103 && pio run -e combined -t upload`
+Run: `cd /home/runner/work/biba/biba/firmware && pio run -e combined -t upload`
 
 Verify:
 

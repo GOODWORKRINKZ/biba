@@ -6,7 +6,7 @@ hardware is wired up operators can flip the environment flag and consume
 telemetry / push setpoints over SPI through the :class:`STM32Link` client.
 
 The on-wire format lives in :mod:`biba_controller.stm32_link.protocol`
-and mirrors the C headers under ``firmware/stm32f103/src/proto`` byte
+and mirrors the C headers under ``firmware/src/proto`` byte
 for byte. Unit tests in ``tests/test_stm32_link_protocol.py`` keep the
 two implementations locked together.
 """

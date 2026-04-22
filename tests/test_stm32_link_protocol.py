@@ -1,7 +1,7 @@
 """Tests for the Python side of the biba_proto SPI wire format.
 
 The firmware has a matching C test-suite under
-``firmware/stm32f103/test/test_biba_proto``; any divergence in either
+``firmware/test/test_biba_proto``; any divergence in either
 implementation will break both this file and ``pio test -e native_test``.
 """
 

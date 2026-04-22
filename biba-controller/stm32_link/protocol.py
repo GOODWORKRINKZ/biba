@@ -1,7 +1,7 @@
 """Pure-Python implementation of the biba_proto SPI wire format.
 
 Keep this module in lock-step with
-``firmware/stm32f103/src/proto/biba_proto.h``. The bundled unit tests
+``firmware/src/proto/biba_proto.h``. The bundled unit tests
 check CRC vectors and telemetry round-trips against fixed byte sequences
 so that a change on one side without a matching change on the other
 trips CI immediately.

@@ -38,7 +38,7 @@ BiBa — это колесная робот-платформа на базе Ras
 
 Подробное описание подключения находится в [docs/wiring.md](docs/wiring.md).
 
-Опциональная прошивка для STM32F103 ("Blue Pill") add-on, который умеет работать либо самостоятельно, либо SPI-slave-ом к Pi, живёт в [`firmware/stm32f103/`](firmware/stm32f103/). Архитектура описана в [docs/stm32_architecture.md](docs/stm32_architecture.md).
+Опциональная прошивка для STM32F103 ("Blue Pill") add-on, который умеет работать либо самостоятельно, либо SPI-slave-ом к Pi, живёт в [`firmware/`](firmware/). Архитектура описана в [docs/stm32_architecture.md](docs/stm32_architecture.md).
 
 Текущий двухмоторный runtime на Pi Zero 2W должен быть запущен с `BTS7960_PWM_MODE=SOFTWARE`, потому что распиновка `12/18` и `19/13` делит общие hardware-PWM каналы. Это уже совпадает и с кодовым default в `config.py`, и с compose-default для развёрнутого робота.
 
@@ -46,7 +46,7 @@ BiBa — это колесная робот-платформа на базе Ras
 
 - `biba-controller/` — Python-контроллер для CRSF, моторов, моторного audio/voice runtime и телеметрии BMS
 - `biba-controller/stm32_link/` — опциональный SPI-клиент к STM32F103 add-on (`STM32_LINK_ENABLED=1`)
-- `firmware/stm32f103/` — PlatformIO-проект прошивки STM32F103C8T6 (env'ы `standalone` / `companion` / `combined` / `native_test`)
+- `firmware/` — PlatformIO-проект прошивки STM32F103C8T6 (env'ы `standalone` / `companion` / `combined` / `native_test`)
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
 - `.github/workflows/` — global builder workflows для Ruff, pytest, shellcheck и сборки arm64 Docker-образа в GHCR
 - `scripts/setup/` — bringup-скрипты для Raspberry Pi (Docker, Compose, systemd-автозапуск)

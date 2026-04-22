@@ -5,11 +5,11 @@ on:
     branches:
       - main
     paths:
-      - "firmware/stm32f103/**"
+      - "firmware/**"
       - ".github/workflows/G-Build-STM32F103.yml"
   pull_request:
     paths:
-      - "firmware/stm32f103/**"
+      - "firmware/**"
       - ".github/workflows/G-Build-STM32F103.yml"
   workflow_dispatch:
 
@@ -36,7 +36,7 @@ jobs:
             ~/.platformio/.cache
             ~/.platformio/packages
             ~/.platformio/platforms
-          key: pio-native-${{ runner.os }}-${{ hashFiles('firmware/stm32f103/platformio.ini') }}
+          key: pio-native-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
           restore-keys: |
             pio-native-${{ runner.os }}-
 
@@ -46,7 +46,7 @@ jobs:
           pip install platformio
 
       - name: Run native test env
-        working-directory: firmware/stm32f103
+        working-directory: firmware
         run: pio test -e native_test
 
   firmware-build:
@@ -73,7 +73,7 @@ jobs:
             ~/.platformio/.cache
             ~/.platformio/packages
             ~/.platformio/platforms
-          key: pio-fw-${{ matrix.target }}-${{ matrix.mode }}-${{ runner.os }}-${{ hashFiles('firmware/stm32f103/platformio.ini') }}
+          key: pio-fw-${{ matrix.target }}-${{ matrix.mode }}-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
           restore-keys: |
             pio-fw-${{ matrix.target }}-${{ matrix.mode }}-${{ runner.os }}-
             pio-fw-${{ runner.os }}-
@@ -84,7 +84,7 @@ jobs:
           pip install platformio
 
       - name: Build ${{ matrix.target }}_${{ matrix.mode }}
-        working-directory: firmware/stm32f103
+        working-directory: firmware
         run: pio run -e ${{ matrix.target }}_${{ matrix.mode }}
 
       - name: Upload firmware artefact
@@ -92,7 +92,7 @@ jobs:
         with:
           name: biba-stm32f103-${{ matrix.target }}-${{ matrix.mode }}
           path: |
-            firmware/stm32f103/.pio/build/${{ matrix.target }}_${{ matrix.mode }}/firmware.bin
-            firmware/stm32f103/.pio/build/${{ matrix.target }}_${{ matrix.mode }}/firmware.elf
+            firmware/.pio/build/${{ matrix.target }}_${{ matrix.mode }}/firmware.bin
+            firmware/.pio/build/${{ matrix.target }}_${{ matrix.mode }}/firmware.elf
           if-no-files-found: warn
           retention-days: 14

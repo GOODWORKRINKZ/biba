@@ -21,5 +21,5 @@ target without touching any portable code.
 
 Copy this directory, rename it to `<YOUR_TARGET>` (`SCREAMING_SNAKE`),
 edit `target.h` and `target_config.h`, then register the target with a
-single stanza in `firmware/stm32f103/platformio.ini` — see
+single stanza in `firmware/platformio.ini` — see
 `targets/README.md` for the template.

@@ -30,7 +30,7 @@ Current targets:
 ## Build & flash
 
 ```bash
-cd firmware/stm32f103
+cd firmware
 
 # build (target × mode)
 pio run -e bluepill_f103c8_standalone
@@ -54,7 +54,7 @@ artefacts named `biba-stm32f103-<target>-<mode>`.
 ## Layout
 
 ```
-firmware/stm32f103/
+firmware/
 ├── platformio.ini             # target × mode env matrix
 ├── include/                   # thin shims -> targets/<TARGET>/target*.h
 ├── src/
