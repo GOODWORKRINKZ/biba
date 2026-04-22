@@ -339,7 +339,13 @@ static void tim1_pwm_init(void)
     bd.OffStateRunMode = TIM_OSSR_DISABLE;
     bd.OffStateIDLEMode = TIM_OSSI_DISABLE;
     bd.LockLevel = TIM_LOCKLEVEL_OFF;
-    bd.DeadTime = 36;  /* ~500 ns at 72 MHz */
+    /* Dead-time generator: for DTG < 128 the delay is DTG * (1 / f_DTS).
+     * With TIM1 on 72 MHz and CKD = DIV1, each LSB = ~13.9 ns, so
+     * BIBA_PWM_DEADTIME_NS = 500 ns -> DTG = 36. Clamp to the 7-bit
+     * range the fast DTG encoding supports. */
+    uint32_t dtg = (uint32_t)((BIBA_PWM_DEADTIME_NS * 72ULL + 999ULL) / 1000ULL);
+    if (dtg > 127u) dtg = 127u;
+    bd.DeadTime = (uint8_t)dtg;
     bd.BreakState = TIM_BREAK_DISABLE;
     bd.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
     HAL_TIMEx_ConfigBreakDeadTime(&htim1, &bd);

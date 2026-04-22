@@ -34,6 +34,10 @@ static uint32_t s_last_tick_ms;
 static uint8_t  s_telemetry_seq;
 
 static biba_pid_state_t s_heading_pid;
+/* Heading-hold PID. ki is intentionally 0 while the IMU integration is a
+ * stub: without a reliable yaw measurement the integral term would wind
+ * up against operator steering and make the robot feel sluggish. Once
+ * `biba_imu_read()` returns real gyro data the ki can be re-tuned. */
 static const biba_pid_config_t s_heading_cfg = {
     .kp = 0.6f, .ki = 0.0f, .kd = 0.02f,
     .output_limit = 0.5f, .integral_limit = 0.5f

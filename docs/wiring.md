@@ -245,7 +245,7 @@ SPI-slave к Raspberry Pi. Подробности — в
 | TIM1_CH3 — Right RPWM                         | PA10       |
 | TIM1_CH4 — Right LPWM                         | PA11       |
 | Left BTS7960 R_EN / L_EN                      | PB0 / PB1  |
-| Right BTS7960 R_EN / L_EN                     | PB10 / PB11 (GPIO, см. ниже про USART3) |
+| Right BTS7960 R_EN / L_EN                     | PB5 / PB8  |
 | ADC1 IN0..IN3 — 4× BTS7960 `IS` (L+R, L+R)    | PA0..PA3   |
 | ADC1 IN4 — VBAT через делитель 1:11           | PA4        |
 | ADC1 IN5 — опционально 12V rail (1:11)        | PA5        |
@@ -264,15 +264,13 @@ current-sense калибровка и таймауты failsafe.
 
 ### Нюансы, которые легко пропустить
 
-- В `combined` прошивке пины `PB10`/`PB11` работают в двух ролях:
-  USART3 для CRSF и `Right_R_EN`/`Right_L_EN`. Если в вашей сборке
-  CRSF не нужен, `Right_R_EN` остаётся как обычный GPIO; иначе
-  перенесите enable-пины на `PB0/PB1`/`PB2/PB3` (для этого отредактируйте
-  `biba_board.h`).
 - `USART1` на стандартных пинах `PA9/PA10` конфликтует с TIM1_CH2/CH3
-  и не используется.
+  и не используется. CRSF едет через `USART3` (PB10/PB11).
 - Перед тем как PB3/PB4/PA15 заработают как GPIO, прошивка отключает
   JTAG в `biba_hal_init()` (SWD остаётся доступен для прошивки).
+  Поэтому `Left R_EN`=PB3 и `Left L_EN`=PB4 — это освобождённые
+  JTAG-пины; если вы не отпускаете JTAG, перенесите enable-пины в
+  `biba_board.h`.
 - BTS7960 питаются отдельным силовым 5V/6V, а земля должна быть общей с
   STM32. VCC BOARD на STM32 — с 3.3V линии USB-UART программатора или
   с BEC.
