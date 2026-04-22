@@ -148,6 +148,13 @@ PWM_FREQUENCY_HZ = _get_env_int("PWM_FREQUENCY_HZ", 20000)
 SERIAL_TIMEOUT_S = _get_env_float("SERIAL_TIMEOUT_S", 0.02)
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# STM32F103 SPI companion link (optional; disabled by default so the existing
+# GPIO-based runtime stays untouched until the add-on board is wired up).
+STM32_LINK_ENABLED = bool(_get_env_int("STM32_LINK_ENABLED", 0))
+STM32_LINK_SPI_BUS = _get_env_int("STM32_LINK_SPI_BUS", 0)
+STM32_LINK_SPI_DEVICE = _get_env_int("STM32_LINK_SPI_DEVICE", 0)
+STM32_LINK_SPI_SPEED_HZ = _get_env_int("STM32_LINK_SPI_SPEED_HZ", 8_000_000)
+
 # Motor ramping / slew rate
 RAMP_ACCEL_RATE = _get_env_float("RAMP_ACCEL_RATE", 2.0)
 RAMP_DECEL_RATE = _get_env_float("RAMP_DECEL_RATE", 2.0)
