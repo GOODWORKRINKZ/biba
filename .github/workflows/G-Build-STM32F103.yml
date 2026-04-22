@@ -50,12 +50,13 @@ jobs:
         run: pio test -e native_test
 
   firmware-build:
-    name: Firmware build (${{ matrix.env }})
+    name: ${{ matrix.target }} / ${{ matrix.mode }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        env: [standalone, companion, combined]
+        target: [bluepill_f103c8, biba_f103_rev_a]
+        mode: [standalone, companion, combined]
     steps:
       - uses: actions/checkout@v4
 
@@ -72,9 +73,9 @@ jobs:
             ~/.platformio/.cache
             ~/.platformio/packages
             ~/.platformio/platforms
-          key: pio-fw-${{ matrix.env }}-${{ runner.os }}-${{ hashFiles('firmware/stm32f103/platformio.ini') }}
+          key: pio-fw-${{ matrix.target }}-${{ matrix.mode }}-${{ runner.os }}-${{ hashFiles('firmware/stm32f103/platformio.ini') }}
           restore-keys: |
-            pio-fw-${{ matrix.env }}-${{ runner.os }}-
+            pio-fw-${{ matrix.target }}-${{ matrix.mode }}-${{ runner.os }}-
             pio-fw-${{ runner.os }}-
 
       - name: Install PlatformIO
@@ -82,16 +83,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install platformio
 
-      - name: Build ${{ matrix.env }}
+      - name: Build ${{ matrix.target }}_${{ matrix.mode }}
         working-directory: firmware/stm32f103
-        run: pio run -e ${{ matrix.env }}
+        run: pio run -e ${{ matrix.target }}_${{ matrix.mode }}
 
       - name: Upload firmware artefact
         uses: actions/upload-artifact@v4
         with:
-          name: biba-stm32f103-${{ matrix.env }}
+          name: biba-stm32f103-${{ matrix.target }}-${{ matrix.mode }}
           path: |
-            firmware/stm32f103/.pio/build/${{ matrix.env }}/firmware.bin
-            firmware/stm32f103/.pio/build/${{ matrix.env }}/firmware.elf
+            firmware/stm32f103/.pio/build/${{ matrix.target }}_${{ matrix.mode }}/firmware.bin
+            firmware/stm32f103/.pio/build/${{ matrix.target }}_${{ matrix.mode }}/firmware.elf
           if-no-files-found: warn
           retention-days: 14

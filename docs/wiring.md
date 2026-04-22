@@ -236,7 +236,13 @@ SPI-slave к Raspberry Pi. Подробности — в
 Выбор режима жёстко определяется сборочным env (`standalone` /
 `companion`) или пином `MODE_SEL` (только в env `combined`).
 
-### Распиновка STM32F103C8T6
+### Распиновка STM32F103C8T6 (target `BLUEPILL_F103C8`)
+
+Это эталонная распиновка target'а `BLUEPILL_F103C8`
+(см. [`firmware/stm32f103/targets/BLUEPILL_F103C8/target.md`](../firmware/stm32f103/targets/BLUEPILL_F103C8/target.md)).
+Другие target'ы (например, `BIBA_F103_REV_A`) могут назначать эти
+функции на другие пины — всегда сверяйтесь с `target.md` конкретной
+платы, которую собираете.
 
 | Назначение                                    | Пин STM32  |
 | --------------------------------------------- | ---------- |

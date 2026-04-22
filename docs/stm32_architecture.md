@@ -47,6 +47,37 @@ CRSF опционально активен как локальный override / 
 pull-up; замыкание на GND = companion). Это позволяет одной прошивкой
 закрывать обе сборки робота.
 
+## Targets (Betaflight/ELRS-style)
+
+Конкретная привязка пинов и per-board калибровка отделены от портируемой
+логики — ровно как в Betaflight и ExpressLRS. Каждая аппаратная
+конфигурация живёт в `firmware/stm32f103/targets/<TARGET>/`:
+
+```
+targets/<TARGET>/
+├── target.h            # pin map + BIBA_TARGET_HAS_* feature flags
+├── target_config.h     # per-board калибровка / лимиты
+└── target.md           # документация борды
+```
+
+Портируемый код включает только `biba_board.h` и `biba_config.h` —
+это тонкие shim'ы, которые через путь `-Itargets/<TARGET>` (инжектится
+PlatformIO per-env) подтягивают `target.h` и `target_config.h` выбранной
+борды. Никаких `#ifdef TARGET == …` в `src/`.
+
+Каждая hardware-конфигурация собирается в комбинации с каждым режимом
+(`<target>_<mode>`), давая матрицу сборки `T × M`. Сейчас
+поставляются:
+
+| Target            | Плата                                      |
+| ----------------- | ------------------------------------------ |
+| `BLUEPILL_F103C8` | Стоковая "Blue Pill" (reference)           |
+| `BIBA_F103_REV_A` | Пример кастомного PCB (прототип Rev A)     |
+
+Добавление нового target'а = одна новая директория + один `[target_*]`
+блок в `platformio.ini`, без правок портируемого кода. Подробнее — в
+[`firmware/stm32f103/targets/README.md`](../firmware/stm32f103/targets/README.md).
+
 ## Слои прошивки
 
 ```
@@ -163,8 +194,8 @@ Python-клиент живёт в [`biba-controller/stm32_link/`](../biba-contro
 
 ```
 firmware/stm32f103/
-├── platformio.ini           # envs: standalone, companion, combined, native_test
-├── include/                 # публичные заголовки (pins, config, version)
+├── platformio.ini           # matrix: <target>_<mode>, плюс native_test
+├── include/                 # thin shims -> targets/<TARGET>/target*.h
 ├── src/
 │   ├── main.c
 │   ├── proto/biba_proto.*   # общий SPI wire format
@@ -172,6 +203,10 @@ firmware/stm32f103/
 │   ├── drivers/             # bts7960, current/voltage_sense, crsf, imu, buzzer_motor
 │   ├── hal/biba_hal.*       # STM32Cube wrapper
 │   └── modes/               # диспетчер + standalone / companion
+├── targets/
+│   ├── README.md            # how to add a new target
+│   ├── BLUEPILL_F103C8/     # reference Blue Pill pinout
+│   └── BIBA_F103_REV_A/     # пример кастомной PCB
 └── test/
     ├── test_biba_proto/     # CRC16 + frame round-trip
     ├── test_control_loop/   # PID, лимитер, mixer, failsafe
@@ -183,8 +218,11 @@ firmware/stm32f103/
 
 - **Host-side**: `pio test -e native_test` — 31 тест на CRC, парсер CRSF,
   парсер SPI-кадров, лимитер по току/мощности, PID anti-windup.
-- **Сборочные env**: `pio run -e standalone / companion / combined`
-  собираются в CI (`.github/workflows/G-Build-STM32F103.yml`), артефакт
-  `firmware.bin` прикрепляется к workflow run.
-- **На железе**: ST-Link + `pio run -t upload`, далее сверка с Pi-реф
-  behaviour (CRSF RSSI, PWM на осциллографе, current-sense против ADS1115).
+- **Сборочные env**: `pio run -e <target>_<mode>` для каждой пары
+  `target × mode`. Все пары собираются в CI
+  (`.github/workflows/G-Build-STM32F103.yml`), артефакт
+  `biba-stm32f103-<target>-<mode>` (`firmware.bin` + `.elf`) прикрепляется
+  к workflow run.
+- **На железе**: ST-Link + `pio run -e <target>_<mode> -t upload`, далее
+  сверка с Pi-реф behaviour (CRSF RSSI, PWM на осциллографе, current-sense
+  против ADS1115).
