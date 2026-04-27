@@ -24,6 +24,13 @@
 /* ARM semihosting operation codes (IHI0048B). */
 #define SHF_SYS_WRITE  0x05u
 
+/* Last HardFault PC — stored in .noinit so GDB firmware reload does NOT
+ * zero it.  Read this value in Watch panel after the debugger halts. */
+__attribute__((section(".noinit")))
+volatile uint32_t g_last_hardfault_pc;
+__attribute__((section(".noinit")))
+volatile uint32_t g_last_hardfault_lr;
+
 static int semihost_write(int fd, const char *buf, int len)
 {
     /* Argument block expected by the SYS_WRITE semihosting call. */
@@ -77,13 +84,19 @@ void semihosting_hardfault_recover(uint32_t *sp)
     uint32_t pc    = sp[6];          /* stacked PC */
     uint16_t instr = *(uint16_t *)pc;
 
+    g_last_hardfault_pc = pc;
+    g_last_hardfault_lr = sp[5];     /* stacked LR */
+
     if (instr == 0xBEABu) {          /* BKPT 0xAB — semihosting trap */
         sp[0] = (uint32_t)-1;        /* R0: return -1 (SYS_WRITE failure) */
         sp[6] = pc + 2u;             /* skip the 16-bit BKPT instruction  */
         return;                      /* return from exception — safe now   */
     }
 
-    /* Real fault: halt so the debugger (if attached) can inspect the frame. */
+    /* Real fault: trigger BKPT so an attached debugger halts here with
+     * the full register context visible.  Without a debugger this will
+     * escalate to another HardFault and loop — that is intentional. */
+    __BKPT(0);
     while (1) { __NOP(); }
 }
 

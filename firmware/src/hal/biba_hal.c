@@ -50,6 +50,11 @@ static void i2c1_init(void);
 
 void biba_hal_init(void)
 {
+    /* Disable write buffer so imprecise BusFaults become precise:
+     * makes fault address recoverable in the debugger (debug only).
+     * On Cortex-M3 this bit lives in the ACTLR register. */
+    SCnSCB->ACTLR |= SCnSCB_ACTLR_DISDEFWBUF_Msk;
+
     HAL_Init();
     clock_config();
 
