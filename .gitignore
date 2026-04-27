@@ -4,6 +4,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 .worktrees/
+.vscode/
 firmware/.pio/
 firmware/.vscode/
 firmware/.pioenvs/

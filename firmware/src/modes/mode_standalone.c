@@ -7,6 +7,7 @@
  * attached debugger / SBC can piggy-back if wired in. */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "mode_dispatcher.h"
 
@@ -156,5 +157,17 @@ void biba_mode_standalone_tick(void)
         (void)tlm; /* CRSF telemetry uplink is a follow-up patch */
         biba_hal_data_ready_pulse();
         biba_hal_status_led_set(!failsafe);
+
+        /* Log at ~1 Hz to avoid flooding semihosting.
+         * Use integer-scaled values to avoid %f / soft-float stack bloat. */
+        static uint32_t s_last_log_ms;
+        uint32_t now = biba_hal_now_ms();
+        if (now - s_last_log_ms >= 1000u) {
+            s_last_log_ms = now;
+            printf("[biba] t=%lu fs=%d L=%d R=%d rssi=%d lq=%d\r\n",
+                   now, failsafe,
+                   (int)(out.left * 100), (int)(out.right * 100),
+                   s_link.uplink_rssi_1, s_link.uplink_link_quality);
+        }
     }
 }
