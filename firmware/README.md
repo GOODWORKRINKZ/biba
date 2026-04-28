@@ -103,7 +103,7 @@ firmware/
 
 ## Протокол SPI
 
-Описан в [`docs/stm32_architecture.md`](../../docs/stm32_architecture.md).
+Описан в [`docs/stm32_architecture.md`](../docs/stm32_architecture.md).
 Тот же формат реализован на стороне SBC в
 `biba-controller/stm32_link/protocol.py`; константа версии в
 `include/biba_version.h` обязана совпадать с `PROTOCOL_VERSION` там.
