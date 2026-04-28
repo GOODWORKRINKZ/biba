@@ -9,6 +9,7 @@ Minimal-профиль docker-compose, поднимаемый на Pi Zero 2W (�
 | `zenoh-router`         | `ros2 run rmw_zenoh_cpp rmw_zenohd`                              | Bootstrap discovery для всех ROS2-нод этого Pi            |
 | `biba-stm32-bridge`    | `ros2 run biba_stm32_bridge biba_stm32_bridge_node`              | SPI ↔ ROS2: `/cmd_vel` → STM32, telemetry → ROS2-топики   |
 | `robot-state-publisher`| `ros2 launch biba_description robot_state_publisher.launch.py`   | Публикует TF из `biba_description/urdf/biba.urdf.xacro`   |
+| `twist-mux`            | `ros2 launch biba_bringup twist_mux.launch.py`                   | Арбитраж `cmd_vel_*` источников → `/cmd_vel` (см. [config](../../ros2_ws/src/biba_bringup/config/twist_mux.yaml)) |
 
 Все сервисы используют один и тот же образ `ghcr.io/goodworkrinkz/biba/biba-ros2:<tag>` ([Dockerfile](Dockerfile)), который собирается поверх `biba-ros2-control` ([../base/](../base/)) и содержит сборку `ros2_ws/` через `colcon`.
 
@@ -30,7 +31,9 @@ docker compose logs -f biba-stm32-bridge
 
 ## Топики и сервисы
 
-- `/cmd_vel` (sub, `geometry_msgs/Twist`) — вход управления
+- `/cmd_vel` (sub, `geometry_msgs/Twist`) — вход управления (выход `twist-mux`)
+- `cmd_vel_teleop`, `cmd_vel_uwb`, `cmd_vel_nav` — приоритезированные входы `twist-mux` (см. [biba_bringup/config/twist_mux.yaml](../../ros2_ws/src/biba_bringup/config/twist_mux.yaml))
+- `/biba/estop` (sub, `std_msgs/Bool`) — `twist-mux` lock; `true` блокирует все twist-входы
 - `/biba/stm32/telemetry` (pub, `biba_msgs/Stm32Telemetry`)
 - `/biba/crsf/status` (pub, `biba_msgs/CrsfStatus`)
 - `/biba/arm` (srv, `std_srvs/SetBool`)

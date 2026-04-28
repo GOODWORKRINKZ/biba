@@ -111,3 +111,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  twist-mux:
+    <<: *biba_ros2_image
+    pull_policy: always
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      <<: *biba_ros2_env
+    command:
+      - bash
+      - -lc
+      - >-
+        source /opt/ros/humble/setup.bash &&
+        source /opt/biba/ros2_ws/install/setup.bash &&
+        ros2 launch biba_bringup twist_mux.launch.py
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'twist_mux' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
