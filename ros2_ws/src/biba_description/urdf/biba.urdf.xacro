@@ -150,4 +150,43 @@
     <origin xyz="0 0 ${base_height/2.0 + 0.020}" rpy="0 0 0"/>
   </joint>
 
+  <!-- =================================================================
+       ros2_control hardware interface (composition C).
+
+       The plugin (biba_hardware_stm32::BibaStm32SystemHardware) owns
+       /dev/spidev0.0 and is the sole user of the STM32 wire protocol.
+       It exposes velocity command + position/velocity state interfaces
+       on the two wheel joints, which diff_drive_controller drives.
+
+       Hardware parameters:
+         spi_device       — Linux spidev path
+         spi_speed_hz     — SPI clock (1 MHz default; Pi Zero 2W jitter
+                            above ~2 MHz is significant)
+         max_wheel_speed  — wheel angular velocity (rad/s) corresponding
+                            to a normalised setpoint of 1.0; used to
+                            convert diff_drive_controller's rad/s output
+                            into the STM32's normalised wire format
+         wheel_radius     — informational; the controller reads this
+                            from its own yaml, kept here for symmetry
+       ================================================================= -->
+  <ros2_control name="BibaSystem" type="system">
+    <hardware>
+      <plugin>biba_hardware_stm32/BibaStm32SystemHardware</plugin>
+      <param name="spi_device">/dev/spidev0.0</param>
+      <param name="spi_speed_hz">1000000</param>
+      <param name="wheel_radius">${wheel_radius}</param>
+      <param name="max_wheel_speed">20.0</param>
+    </hardware>
+    <joint name="left_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
 </robot>

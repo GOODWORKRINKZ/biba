@@ -135,11 +135,8 @@ BIBA_BASE_IMAGE=ghcr.io/goodworkrinkz/biba/biba-ros2-control
 BIBA_BASE_TAG=latest
 ROS_DOMAIN_ID=42
 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
-BIBA_WHEEL_SEPARATION=0.30
-BIBA_MAX_WHEEL_SPEED=1.0
-BIBA_SETPOINT_RATE_HZ=50.0
-BIBA_TELEMETRY_RATE_HZ=20.0
-BIBA_CMD_VEL_TIMEOUT_SEC=0.5
+# Diff-drive geometry / limits live in biba_description URDF and
+# biba_bringup/config/diff_drive_controller.yaml — calibrate there, not here.
 EOF
     log_success "Environment file at $ENV_FILE"
 }

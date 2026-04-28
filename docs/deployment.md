@@ -423,8 +423,8 @@ docker pull ghcr.io/goodworkrinkz/biba/biba-controller:latest
 | Сервис | Образ | Назначение |
 |--------|-------|-----------|
 | `zenoh-router` | `ghcr.io/goodworkrinkz/biba/biba-ros2:${BIBA_ROS2_IMAGE_TAG}` (entrypoint `rmw_zenohd`) | Локальный zenoh router для `rmw_zenoh_cpp` |
-| `biba-stm32-bridge` | тот же | rclpy-нода: `cmd_vel` ↔ SPI ↔ телеметрия от STM32 |
-| `robot-state-publisher` | тот же | URDF из `biba_description` |
+| `biba-control` | тот же | `controller_manager` + `diff_drive_controller` поверх `biba_hardware_stm32` SystemInterface (C++): `/cmd_vel` → SPI → STM32. Единственный владелец `/dev/spidev0.0`. Запускает и `robot_state_publisher`. |
+| `twist-mux` | тот же | Арбитраж `cmd_vel_*` → `/cmd_vel` |
 
 Все сервисы используют `network_mode: host` и общий шаблон env-переменных (см. [docker/ros2/.env.example](../docker/ros2/.env.example)).
 
@@ -462,7 +462,7 @@ sudo systemctl start biba-ros2.service
 cd ~/biba/docker/ros2 && docker compose pull && docker compose up -d
 
 # Логи моста
-cd ~/biba/docker/ros2 && docker compose logs -f biba-stm32-bridge
+cd ~/biba/docker/ros2 && docker compose logs -f biba-control
 ```
 
 ### Несовместимости с композицией A

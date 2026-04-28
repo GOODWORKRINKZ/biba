@@ -19,7 +19,6 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <!-- TODO: подключить плагин hardware_interface, когда появится класс. -->
-    <!-- <hardware_interface plugin="${prefix}/biba_hardware_stm32_plugin.xml"/> -->
+    <hardware_interface plugin="${prefix}/biba_hardware_stm32_plugin.xml"/>
   </export>
 </package>

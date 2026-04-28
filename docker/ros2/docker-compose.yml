@@ -2,8 +2,11 @@
 #
 # Запускает:
 #   - zenoh-router        : бутстрап discovery для всех ROS2-узлов
-#   - biba-stm32-bridge   : SPI ↔ ROS2 (cmd_vel / telemetry / arm)
-#   - robot-state-publisher : публикует TF из biba_description URDF
+#   - biba-control        : ros2_control + diff_drive_controller через
+#                           biba_hardware_stm32 SystemInterface
+#                           (единственный владелец /dev/spidev0.0).
+#                           Также поднимает robot_state_publisher.
+#   - twist-mux           : арбитраж /cmd_vel_* источников → /cmd_vel
 #
 # Использование:
 #   cd docker/ros2
@@ -51,7 +54,7 @@ services:
       retries: 3
       start_period: 10s
 
-  biba-stm32-bridge:
+  biba-control:
     <<: *biba_ros2_image
     pull_policy: always
     restart: unless-stopped
@@ -63,54 +66,19 @@ services:
       - /dev/spidev0.0:/dev/spidev0.0
     environment:
       <<: *biba_ros2_env
-      BIBA_WHEEL_SEPARATION: ${BIBA_WHEEL_SEPARATION:-0.30}
-      BIBA_MAX_WHEEL_SPEED: ${BIBA_MAX_WHEEL_SPEED:-1.0}
-      BIBA_SETPOINT_RATE_HZ: ${BIBA_SETPOINT_RATE_HZ:-50.0}
-      BIBA_TELEMETRY_RATE_HZ: ${BIBA_TELEMETRY_RATE_HZ:-20.0}
-      BIBA_CMD_VEL_TIMEOUT_SEC: ${BIBA_CMD_VEL_TIMEOUT_SEC:-0.5}
     command:
       - bash
       - -lc
       - >-
         source /opt/ros/humble/setup.bash &&
         source /opt/biba/ros2_ws/install/setup.bash &&
-        ros2 run biba_stm32_bridge biba_stm32_bridge_node
-        --ros-args
-        -p wheel_separation:=${BIBA_WHEEL_SEPARATION:-0.30}
-        -p max_wheel_speed:=${BIBA_MAX_WHEEL_SPEED:-1.0}
-        -p setpoint_rate_hz:=${BIBA_SETPOINT_RATE_HZ:-50.0}
-        -p telemetry_rate_hz:=${BIBA_TELEMETRY_RATE_HZ:-20.0}
-        -p cmd_vel_timeout_sec:=${BIBA_CMD_VEL_TIMEOUT_SEC:-0.5}
+        ros2 launch biba_bringup control.launch.py
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'biba_stm32_bridge_node' || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f 'ros2_control_node' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
-
-  robot-state-publisher:
-    <<: *biba_ros2_image
-    pull_policy: always
-    restart: unless-stopped
-    network_mode: host
-    depends_on:
-      zenoh-router:
-        condition: service_healthy
-    environment:
-      <<: *biba_ros2_env
-    command:
-      - bash
-      - -lc
-      - >-
-        source /opt/ros/humble/setup.bash &&
-        source /opt/biba/ros2_ws/install/setup.bash &&
-        ros2 launch biba_description robot_state_publisher.launch.py
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'robot_state_publisher' || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+      start_period: 20s
 
   twist-mux:
     <<: *biba_ros2_image
