@@ -8,7 +8,8 @@
 
 - `G-Build-Controller-Image.yml` — lint, pytest, build and optional push of the arm64 controller image to GHCR (композиции A и C)
 - `G-Build-STM32F103.yml` — `pio test -e native_test` + матрица `pio run` по `target × mode` для прошивки STM32F103 (композиции B и C)
-- `G-Build-All.yml` — top-level workflow, который параллельно запускает controller-image и STM32-firmware и сводит финальный статус
+- `G-Build-ROS2-Bases.yml` — сборка и push в GHCR базовых ROS2-образов `biba-ros2-zenoh` и `biba-ros2-control` (используются в композиции C поверх ros2_ws/)
+- `G-Build-All.yml` — top-level workflow, который параллельно запускает controller-image, STM32-firmware и ROS2-base-images, и сводит финальный статус
 
 Соответствие композициям робота:
 
