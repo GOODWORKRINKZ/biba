@@ -42,8 +42,11 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  ZENOH_IMAGE: ghcr.io/${{ github.repository }}/biba-ros2-zenoh
-  CONTROL_IMAGE: ghcr.io/${{ github.repository }}/biba-ros2-control
+  # GHCR requires lowercase repository names. ${{ github.repository }}
+  # preserves the original org casing (e.g. GOODWORKRINKZ/biba), which
+  # buildx then rejects at FROM/--tag time. We lowercase below.
+  ZENOH_IMAGE: ghcr.io/goodworkrinkz/biba/biba-ros2-zenoh
+  CONTROL_IMAGE: ghcr.io/goodworkrinkz/biba/biba-ros2-control
 
 permissions:
   contents: read

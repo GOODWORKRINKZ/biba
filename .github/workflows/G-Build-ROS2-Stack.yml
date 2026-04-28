@@ -46,8 +46,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository }}/biba-ros2
-  BASE_IMAGE: ghcr.io/${{ github.repository }}/biba-ros2-control
+  IMAGE_NAME: ghcr.io/goodworkrinkz/biba/biba-ros2
+  BASE_IMAGE: ghcr.io/goodworkrinkz/biba/biba-ros2-control
 
 permissions:
   contents: read

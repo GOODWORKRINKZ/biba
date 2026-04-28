@@ -49,6 +49,9 @@ run() {
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo -e "${YELLOW}[dry-run]${NC} $*"
     else
+        # We accept a single shell-string argument (with pipes/redirections),
+        # so eval is intentional here.
+        # shellcheck disable=SC2294
         eval "$@"
     fi
 }
@@ -167,7 +170,7 @@ EOF
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo -e "${YELLOW}[dry-run]${NC} would write $SERVICE_FILE:"
-        echo "$unit_body" | sed 's/^/    /'
+        echo "    ${unit_body//$'\n'/$'\n    '}"
         return
     fi
 
