@@ -42,3 +42,19 @@ def test_diagnostics_script_loads_robot_env_file_when_present() -> None:
     assert '--env-file "$BIBA_ENV_FILE"' in script
     assert "_biba_compose ps" in script
     assert "_biba_compose logs --tail 30" in script
+
+
+def test_update_script_uses_docker_legacy_pi_compose_path() -> None:
+    script = Path("scripts/update.sh").read_text(encoding="utf-8")
+
+    assert 'BIBA_COMPOSE_FILE="${BIBA_COMPOSE_FILE:-$BIBA_DIR/docker/legacy-pi/docker-compose.yml}"' in script
+    assert '"$BIBA_DIR/docker-compose.yml"' not in script
+    assert '-f "$BIBA_COMPOSE_FILE"' in script
+
+
+def test_diagnostics_script_uses_docker_legacy_pi_compose_path() -> None:
+    script = Path("scripts/diagnostics.sh").read_text(encoding="utf-8")
+
+    assert 'BIBA_COMPOSE_FILE="${BIBA_COMPOSE_FILE:-$BIBA_DIR/docker/legacy-pi/docker-compose.yml}"' in script
+    assert '"$BIBA_DIR/docker-compose.yml"' not in script
+    assert '-f "$BIBA_COMPOSE_FILE"' in script
