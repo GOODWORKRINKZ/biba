@@ -46,6 +46,23 @@ static void usart3_init(uint32_t baud);
 static void spi2_slave_init(void);
 static void i2c1_init(void);
 
+/* Last-resort error trap. Lights the status LED solid and busy-loops.
+ * Called from any HAL init that returns != HAL_OK so a hardware misconfig
+ * never silently degrades into junk telemetry. The status LED is the
+ * only side-channel we have on every board variant, so it doubles as
+ * the panic indicator. */
+static void biba_hal_panic(void)
+{
+    /* Make sure both motor enables are LOW first: a clock or PWM init
+     * failure must not leave the BTS7960 driving with stale duty. */
+    HAL_GPIO_WritePin(BIBA_PIN_LEFT_REN_PORT,  BIBA_PIN_LEFT_REN_PIN,  GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(BIBA_PIN_LEFT_LEN_PORT,  BIBA_PIN_LEFT_LEN_PIN,  GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(BIBA_PIN_RIGHT_REN_PORT, BIBA_PIN_RIGHT_REN_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(BIBA_PIN_RIGHT_LEN_PORT, BIBA_PIN_RIGHT_LEN_PIN, GPIO_PIN_RESET);
+    biba_hal_status_led_set(true);
+    for (;;) { __NOP(); }
+}
+
 /* --- Public API --------------------------------------------------------- */
 
 void biba_hal_init(void)
@@ -178,8 +195,16 @@ void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx)
     if (hspi2.Instance == NULL) {
         spi2_slave_init();
     }
+    /* Set busy *before* arming the DMA so the TX-complete interrupt that
+     * may fire on the very next clock edge sees the flag. If the call
+     * fails we must clear it so the next tick can retry; otherwise the
+     * companion-mode service loop deadlocks on a stale `busy` flag. */
     s_spi_busy = true;
-    HAL_SPI_TransmitReceive_DMA(&hspi2, (uint8_t *)tx, rx, BIBA_PROTO_FRAME_SIZE);
+    HAL_StatusTypeDef st =
+        HAL_SPI_TransmitReceive_DMA(&hspi2, (uint8_t *)tx, rx, BIBA_PROTO_FRAME_SIZE);
+    if (st != HAL_OK) {
+        s_spi_busy = false;
+    }
 }
 
 bool biba_hal_spi_slave_poll(void)
@@ -231,7 +256,9 @@ static void clock_config(void)
     osc.PLL.PLLState = RCC_PLL_ON;
     osc.PLL.PLLSource = RCC_PLLSOURCE_HSE;
     osc.PLL.PLLMUL = RCC_PLL_MUL9;   /* 8 MHz * 9 = 72 MHz */
-    HAL_RCC_OscConfig(&osc);
+    if (HAL_RCC_OscConfig(&osc) != HAL_OK) {
+        biba_hal_panic();
+    }
 
     clk.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
                   | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
@@ -239,7 +266,9 @@ static void clock_config(void)
     clk.AHBCLKDivider = RCC_SYSCLK_DIV1;
     clk.APB1CLKDivider = RCC_HCLK_DIV2;   /* 36 MHz */
     clk.APB2CLKDivider = RCC_HCLK_DIV1;   /* 72 MHz */
-    HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_2);
+    if (HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_2) != HAL_OK) {
+        biba_hal_panic();
+    }
 }
 
 static void gpio_init(void)
@@ -274,7 +303,10 @@ static void gpio_init(void)
 
     /* TIM channel AF pin init and timer setup live in biba_hal_motor.c. */
 
-    /* ADC analog inputs PA0..PA6. */
+    /* ADC analog inputs. PA7 is intentionally NOT in the bitmask on the
+     * REV_A target because it is repurposed as MODE_SEL (digital input,
+     * configured separately above). On BLUEPILL the pin is unused so
+     * leaving it floating is fine. */
     g.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3
           | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6;
     g.Mode = GPIO_MODE_ANALOG;
@@ -293,7 +325,9 @@ static void adc1_init(void)
     hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
     hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
     hadc1.Init.NbrOfConversion = BIBA_ADC_SCAN_LEN;
-    HAL_ADC_Init(&hadc1);
+    if (HAL_ADC_Init(&hadc1) != HAL_OK) {
+        biba_hal_panic();
+    }
 
     static const uint32_t chans[BIBA_ADC_SCAN_LEN] = {
         ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3,
@@ -304,7 +338,9 @@ static void adc1_init(void)
         s.Channel = chans[i];
         s.Rank = (uint32_t)(ADC_REGULAR_RANK_1 + i);
         s.SamplingTime = ADC_SAMPLETIME_55CYCLES_5;
-        HAL_ADC_ConfigChannel(&hadc1, &s);
+        if (HAL_ADC_ConfigChannel(&hadc1, &s) != HAL_OK) {
+            biba_hal_panic();
+        }
     }
 
     hdma_adc1.Instance = DMA1_Channel1;
@@ -315,13 +351,19 @@ static void adc1_init(void)
     hdma_adc1.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
     hdma_adc1.Init.Mode = DMA_CIRCULAR;
     hdma_adc1.Init.Priority = DMA_PRIORITY_HIGH;
-    HAL_DMA_Init(&hdma_adc1);
+    if (HAL_DMA_Init(&hdma_adc1) != HAL_OK) {
+        biba_hal_panic();
+    }
     __HAL_LINKDMA(&hadc1, DMA_Handle, hdma_adc1);
     HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 1, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
-    HAL_ADCEx_Calibration_Start(&hadc1);
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)s_adc_scan, BIBA_ADC_SCAN_LEN);
+    if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK) {
+        biba_hal_panic();
+    }
+    if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)s_adc_scan, BIBA_ADC_SCAN_LEN) != HAL_OK) {
+        biba_hal_panic();
+    }
 }
 
 static void usart3_init(uint32_t baud)
@@ -347,7 +389,9 @@ static void usart3_init(uint32_t baud)
     huart3.Init.Mode = UART_MODE_TX_RX;
     huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
     huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-    HAL_UART_Init(&huart3);
+    if (HAL_UART_Init(&huart3) != HAL_OK) {
+        biba_hal_panic();
+    }
 
     hdma_uart3_rx.Instance = DMA1_Channel3;
     hdma_uart3_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
@@ -357,7 +401,9 @@ static void usart3_init(uint32_t baud)
     hdma_uart3_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_uart3_rx.Init.Mode = DMA_CIRCULAR;
     hdma_uart3_rx.Init.Priority = DMA_PRIORITY_MEDIUM;
-    HAL_DMA_Init(&hdma_uart3_rx);
+    if (HAL_DMA_Init(&hdma_uart3_rx) != HAL_OK) {
+        biba_hal_panic();
+    }
     __HAL_LINKDMA(&huart3, hdmarx, hdma_uart3_rx);
     HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
@@ -390,7 +436,9 @@ static void spi2_slave_init(void)
     hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
     hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
     hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-    HAL_SPI_Init(&hspi2);
+    if (HAL_SPI_Init(&hspi2) != HAL_OK) {
+        biba_hal_panic();
+    }
 
     hdma_spi2_tx.Instance = DMA1_Channel5;
     hdma_spi2_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
@@ -400,7 +448,9 @@ static void spi2_slave_init(void)
     hdma_spi2_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_spi2_tx.Init.Mode = DMA_NORMAL;
     hdma_spi2_tx.Init.Priority = DMA_PRIORITY_HIGH;
-    HAL_DMA_Init(&hdma_spi2_tx);
+    if (HAL_DMA_Init(&hdma_spi2_tx) != HAL_OK) {
+        biba_hal_panic();
+    }
     __HAL_LINKDMA(&hspi2, hdmatx, hdma_spi2_tx);
 
     hdma_spi2_rx.Instance = DMA1_Channel4;
@@ -411,7 +461,9 @@ static void spi2_slave_init(void)
     hdma_spi2_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_spi2_rx.Init.Mode = DMA_NORMAL;
     hdma_spi2_rx.Init.Priority = DMA_PRIORITY_HIGH;
-    HAL_DMA_Init(&hdma_spi2_rx);
+    if (HAL_DMA_Init(&hdma_spi2_rx) != HAL_OK) {
+        biba_hal_panic();
+    }
     __HAL_LINKDMA(&hspi2, hdmarx, hdma_spi2_rx);
 
     HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 1, 0);
@@ -442,7 +494,9 @@ static void i2c1_init(void)
     hi2c1.Init.OwnAddress2 = 0;
     hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
     hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-    HAL_I2C_Init(&hi2c1);
+    if (HAL_I2C_Init(&hi2c1) != HAL_OK) {
+        biba_hal_panic();
+    }
 }
 
 /* --- IRQ handlers (declared in startup_stm32f103xb.s) ------------------- */

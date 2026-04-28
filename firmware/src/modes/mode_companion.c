@@ -116,14 +116,21 @@ void biba_mode_companion_tick(void)
 {
     uint32_t now = biba_hal_now_ms();
 
-    /* Harvest completed transactions. */
-    if (biba_hal_spi_slave_poll()) {
+    /* Harvest completed transactions and re-arm the slave *immediately*
+     * with whatever telemetry we have so far. Re-arming after the
+     * heavy build_telemetry_frame() block below would leave a window in
+     * which the SBC could clock the bus, get nothing, and time out. The
+     * tx buffer is then refreshed in place by build_telemetry_frame()
+     * before the next clock edge fires (the SBC stays idle for several
+     * milliseconds between transactions). */
+    bool transaction_done = biba_hal_spi_slave_poll();
+    if (transaction_done) {
         biba_proto_frame_t cmd;
         if (biba_proto_decode(s_rx_frame, sizeof(s_rx_frame), &cmd) == BIBA_PROTO_OK) {
             biba_failsafe_mark_fresh(&s_spi_failsafe, now);
             handle_command(&cmd);
         }
-        /* Re-arm regardless: next shift will reuse the latest tx buffer. */
+        biba_hal_spi_slave_arm(s_tx_frame, s_rx_frame);
     }
 
     bool failsafe = biba_failsafe_tick(&s_spi_failsafe, now) || !s_armed;
@@ -151,11 +158,11 @@ void biba_mode_companion_tick(void)
     uint8_t flags = (s_armed ? BIBA_PROTO_FLAG_ARMED : 0)
                   | (failsafe ? BIBA_PROTO_FLAG_FAILSAFE : 0)
                   | (out.left_limited || out.right_limited ? BIBA_PROTO_FLAG_CURRENT_LIMIT : 0);
+    /* Refreshes s_tx_frame in place. The DMA is reading from this same
+     * buffer if a transaction is mid-flight; the SBC only sees the new
+     * contents on the *next* transaction it initiates, which is the
+     * intended semantics. */
     build_telemetry_frame(flags, out.left, out.right, il, ir);
-
-    if (biba_hal_spi_slave_poll()) {
-        biba_hal_spi_slave_arm(s_tx_frame, s_rx_frame);
-    }
 
     static uint32_t s_last_scan_count;
     uint32_t scan_count = biba_hal_adc_scan_count();

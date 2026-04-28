@@ -82,6 +82,12 @@
 #  define BIBA_ADC_MAX_COUNTS          4095    /* 12-bit ADC1 */
 #endif
 
+/* --- System clock ------------------------------------------------------- */
+
+#ifndef BIBA_SYS_CLOCK_HZ
+#  define BIBA_SYS_CLOCK_HZ            72000000u
+#endif
+
 /* --- CRSF link ---------------------------------------------------------- */
 
 #ifndef BIBA_CRSF_BAUD

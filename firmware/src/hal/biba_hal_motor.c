@@ -30,6 +30,27 @@
 
 /* --- Traction-mode helpers shared by both variants --------------------- */
 
+/* TIM1 break/dead-time configuration shared by both PWM topologies.
+ * BTS7960 needs a guaranteed dead-time between RPWM/LPWM transitions to
+ * prevent shoot-through, so we always program the DTG bits — even on the
+ * per-channel topology where the comment used to claim the HAL would
+ * "force one side to 0". */
+static void tim1_apply_break_dead_time(TIM_HandleTypeDef *h)
+{
+    TIM_BreakDeadTimeConfigTypeDef bd = {0};
+    bd.OffStateRunMode  = TIM_OSSR_DISABLE;
+    bd.OffStateIDLEMode = TIM_OSSI_DISABLE;
+    bd.LockLevel        = TIM_LOCKLEVEL_OFF;
+    uint32_t dtg = (uint32_t)(((uint64_t)BIBA_PWM_DEADTIME_NS *
+                               (BIBA_SYS_CLOCK_HZ / 1000000ULL) +
+                               999ULL) / 1000ULL);
+    if (dtg > 127u) dtg = 127u;
+    bd.DeadTime        = (uint8_t)dtg;
+    bd.BreakState      = TIM_BREAK_DISABLE;
+    bd.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
+    HAL_TIMEx_ConfigBreakDeadTime(h, &bd);
+}
+
 static uint32_t duty_to_compare(uint32_t arr, float duty_abs)
 {
     if (duty_abs < 0.0f) duty_abs = 0.0f;
@@ -106,16 +127,13 @@ static void init_binding(motor_pwm_binding_t *b, uint32_t arr)
     HAL_TIM_PWM_ConfigChannel(b->h, &oc, b->channel);
 
     /* TIM1 is the only advanced-control timer in the bunch; it needs
-     * MOE (main output enable) turned on. TIM2/3/4 do not. */
+     * MOE (main output enable) turned on AND a non-zero dead-time so the
+     * BTS7960 cannot see overlapping RPWM/LPWM commands. TIM2/3/4 are
+     * general-purpose and have no break/MOE block — software guarantees
+     * dead-time on those by always zeroing the inactive side first in
+     * set_channel_pair() below. */
     if (b->instance == TIM1) {
-        TIM_BreakDeadTimeConfigTypeDef bd = {0};
-        bd.OffStateRunMode  = TIM_OSSR_DISABLE;
-        bd.OffStateIDLEMode = TIM_OSSI_DISABLE;
-        bd.LockLevel        = TIM_LOCKLEVEL_OFF;
-        bd.DeadTime         = 0;  /* no dead-time: the HAL forces one side to 0 */
-        bd.BreakState       = TIM_BREAK_DISABLE;
-        bd.AutomaticOutput  = TIM_AUTOMATICOUTPUT_ENABLE;
-        HAL_TIMEx_ConfigBreakDeadTime(b->h, &bd);
+        tim1_apply_break_dead_time(b->h);
     }
 
     HAL_TIM_PWM_Start(b->h, b->channel);
@@ -123,7 +141,7 @@ static void init_binding(motor_pwm_binding_t *b, uint32_t arr)
 
 void biba_hal_motor_pwm_init(void)
 {
-    uint32_t arr = (72000000u / BIBA_PWM_FREQUENCY_HZ) - 1u;
+    uint32_t arr = (BIBA_SYS_CLOCK_HZ / BIBA_PWM_FREQUENCY_HZ) - 1u;
     for (unsigned i = 0; i < 4; ++i) {
         init_binding(&s_bindings[i], arr);
     }
@@ -158,19 +176,21 @@ void biba_hal_motor_pwm_right(float duty)
     set_channel_pair(&s_bindings[2], &s_bindings[3], duty);
 }
 
-/* Pick PSC so that (72 MHz / (PSC+1)) / freq_hz fits in 16 bits. */
+/* Pick PSC so that (SYSCLK / (PSC+1)) / freq_hz fits in the 16-bit ARR.
+ * Both PSC and ARR are 16-bit on STM32F1, so we cap PSC at 0xFFFF. */
 static void compute_psc_arr(uint32_t freq_hz, uint32_t *out_psc, uint32_t *out_arr)
 {
-    uint32_t top = 72000000u / freq_hz;
+    uint32_t top = BIBA_SYS_CLOCK_HZ / freq_hz;
     if (top == 0) top = 1;
     uint32_t psc = 0;
-    while ((top / (psc + 1u)) > 0xFFFFu) {
+    while ((top / (psc + 1u)) > 0xFFFFu && psc < 0xFFFFu) {
         psc++;
     }
-    uint32_t arr = (top / (psc + 1u)) - 1u;
+    uint32_t arr = (top / (psc + 1u));
     if (arr == 0) arr = 1;
+    if (arr > 0xFFFFu) arr = 0xFFFFu;
     *out_psc = psc;
-    *out_arr = arr;
+    *out_arr = arr - 1u;
 }
 
 bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
@@ -207,7 +227,7 @@ bool biba_hal_motor_audio_begin(void)
 
 bool biba_hal_motor_audio_end(void)
 {
-    uint32_t arr = (72000000u / BIBA_PWM_FREQUENCY_HZ) - 1u;
+    uint32_t arr = (BIBA_SYS_CLOCK_HZ / BIBA_PWM_FREQUENCY_HZ) - 1u;
     for (unsigned i = 0; i < 4; ++i) {
         motor_pwm_binding_t *b = &s_bindings[i];
         __HAL_TIM_SET_PRESCALER(b->h, 0);
@@ -229,7 +249,7 @@ static void tim1_init_shared(void)
 {
     __HAL_RCC_TIM1_CLK_ENABLE();
 
-    uint32_t arr = (72000000u / BIBA_PWM_FREQUENCY_HZ) - 1u;
+    uint32_t arr = (BIBA_SYS_CLOCK_HZ / BIBA_PWM_FREQUENCY_HZ) - 1u;
 
     s_htim1.Instance               = TIM1;
     s_htim1.Init.Prescaler         = 0;
@@ -250,16 +270,7 @@ static void tim1_init_shared(void)
     HAL_TIM_PWM_ConfigChannel(&s_htim1, &oc, TIM_CHANNEL_3);
     HAL_TIM_PWM_ConfigChannel(&s_htim1, &oc, TIM_CHANNEL_4);
 
-    TIM_BreakDeadTimeConfigTypeDef bd = {0};
-    bd.OffStateRunMode  = TIM_OSSR_DISABLE;
-    bd.OffStateIDLEMode = TIM_OSSI_DISABLE;
-    bd.LockLevel        = TIM_LOCKLEVEL_OFF;
-    uint32_t dtg = (uint32_t)((BIBA_PWM_DEADTIME_NS * 72ULL + 999ULL) / 1000ULL);
-    if (dtg > 127u) dtg = 127u;
-    bd.DeadTime        = (uint8_t)dtg;
-    bd.BreakState      = TIM_BREAK_DISABLE;
-    bd.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
-    HAL_TIMEx_ConfigBreakDeadTime(&s_htim1, &bd);
+    tim1_apply_break_dead_time(&s_htim1);
 
     HAL_TIM_PWM_Start(&s_htim1, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&s_htim1, TIM_CHANNEL_2);
