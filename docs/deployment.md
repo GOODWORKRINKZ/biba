@@ -469,4 +469,13 @@ cd ~/biba/docker/ros2 && docker compose logs -f biba-control
 
 `biba-controller.service` (композиция A) и `biba-ros2.service` (композиция C) **нельзя запускать одновременно** на одной плате: оба претендуют на CRSF UART/SPI и на одни и те же `/dev/spidev*`/`/dev/ttyS*`. Перед стартом C остановите A: `sudo systemctl stop biba-controller.service && sudo systemctl disable biba-controller.service`.
 
-Текущие `bb*`-алиасы из [`scripts/biba_aliases.sh`](../scripts/biba_aliases.sh) указывают на `docker/legacy-pi/`. Для управления стеком C временно используйте `docker compose` напрямую из `~/biba/docker/ros2/` либо переопределите `BIBA_COMPOSE_FILE=$HOME/biba/docker/ros2/docker-compose.yml` и `BIBA_ENV_FILE=/etc/default/biba-ros2` в shell-окружении.
+Текущие `bb*`-алиасы из [`scripts/biba_aliases.sh`](../scripts/biba_aliases.sh) по умолчанию указывают на `docker/legacy-pi/` (композиция A). Для управления стеком C задайте `BIBA_STACK=ros2` в shell-окружении (например, в `~/.bashrc` на Pi с композицией C):
+
+```bash
+export BIBA_STACK=ros2   # переключает bb* на docker/ros2/ + /etc/default/biba-ros2
+bbstart   # docker compose up -d для ros2-стека
+bblogs    # docker compose logs -f
+bbstack   # подсмотреть, какой стек активен
+```
+
+Прямые переменные `BIBA_COMPOSE_FILE` / `BIBA_ENV_FILE` тоже работают и переопределяют выбор `BIBA_STACK`.
