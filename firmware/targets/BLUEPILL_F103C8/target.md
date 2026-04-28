@@ -1,50 +1,80 @@
-# Target: BLUEPILL_F103C8
+# Таргет: BLUEPILL_F103C8
 
-Reference BiBa target on the stock STM32F103C8T6 "Blue Pill" dev board.
-This is what you get if you wire a Blue Pill straight to two BTS7960
-drivers, an ELRS receiver, an optional IMU on I²C, and (optionally) a
-Raspberry Pi over SPI2. It is the default target of every CI build.
+Эталонный таргет BiBa на серийной плате STM32F103C8T6 «Blue Pill».
+Это то, что получится, если соединить Blue Pill напрямую с двумя
+драйверами BTS7960, ELRS-приёмником, опциональным IMU по I²C и (по
+желанию) Raspberry Pi через SPI2. Это таргет по умолчанию для каждой
+сборки в CI.
 
-## Board
+## Плата
 
-| Field        | Value                         |
-| ------------ | ----------------------------- |
-| MCU          | STM32F103C8T6                 |
-| Flash        | 64 KB (often 128 KB on C6T6)  |
-| RAM          | 20 KB                         |
-| External XO  | 8 MHz (`HSE_VALUE=8000000`)   |
-| PIO `board`  | `bluepill_f103c8`             |
+| Параметр       | Значение                       |
+| -------------- | ------------------------------ |
+| MCU            | STM32F103C8T6                  |
+| Flash          | 64 КБ (часто 128 КБ на C6T6)   |
+| ОЗУ            | 20 КБ                          |
+| Внешний кварц  | 8 МГц (`HSE_VALUE=8000000`)    |
+| `board` в PIO  | `bluepill_f103c8`              |
 
-## Pin map
+## Распиновка
 
-| Function                                  | Pin         |
-| ----------------------------------------- | ----------- |
-| TIM1_CH1 — Left RPWM                      | PA8         |
-| TIM1_CH2 — Left LPWM                      | PA9         |
-| TIM1_CH3 — Right RPWM                     | PA10        |
-| TIM1_CH4 — Right LPWM                     | PA11        |
-| Left BTS7960 R_EN / L_EN                  | PB3 / PB4   |
-| Right BTS7960 R_EN / L_EN                 | PB5 / PB8   |
-| ADC1 IN0..IN3 — 4× BTS7960 `IS`           | PA0..PA3    |
-| ADC1 IN4 — VBAT (1:11 divider)            | PA4         |
-| ADC1 IN5 — 12 V rail (optional)           | PA5         |
-| ADC1 IN6 — aux / spare                    | PA6         |
-| USART3 TX / RX — CRSF                     | PB10 / PB11 |
-| SPI2 NSS / SCK / MISO / MOSI              | PB12..PB15  |
-| DATA_READY → SBC                          | PA12        |
-| MODE_SEL (pull-up; GND = companion)       | PB9         |
-| I2C1 SCL / SDA — IMU                      | PB6 / PB7   |
-| IMU INT1                                  | PB2         |
-| Status LED (active low)                   | PC13        |
+| Назначение                                 | Пин         |
+| ------------------------------------------ | ----------- |
+| TIM1_CH1 — Left RPWM                       | PA8         |
+| TIM1_CH2 — Left LPWM                       | PA9         |
+| TIM1_CH3 — Right RPWM                      | PA10        |
+| TIM1_CH4 — Right LPWM                      | PA11        |
+| Левый BTS7960 R_EN / L_EN                  | PB3 / PB4   |
+| Правый BTS7960 R_EN / L_EN                 | PB5 / PB8   |
+| ADC1 IN0..IN3 — 4× `IS` BTS7960            | PA0..PA3    |
+| ADC1 IN4 — VBAT (делитель 1:11)            | PA4         |
+| ADC1 IN5 — шина 12 В (опционально)         | PA5         |
+| ADC1 IN6 — резерв / aux                    | PA6         |
+| USART3 TX / RX — CRSF                      | PB10 / PB11 |
+| SPI2 NSS / SCK / MISO / MOSI               | PB12..PB15  |
+| DATA_READY → SBC                           | PA12        |
+| MODE_SEL (pull-up; GND = companion)        | PB9         |
+| I2C1 SCL / SDA — IMU                       | PB6 / PB7   |
+| IMU INT1                                   | PB2         |
+| Status LED (active-low)                    | PC13        |
 
-## Caveats
+## Особенности
 
-- JTAG is released at boot so PB3 / PB4 / PA15 are usable as GPIOs —
-  SWD stays available on PA13 / PA14 for programming and debug.
-- USART1 on PA9 / PA10 is unavailable because those pins carry
-  TIM1_CH2 / TIM1_CH3. CRSF therefore rides on USART3.
-- BTS7960 drivers need an independent 5 V / 6 V power supply; ground
-  must be shared with the MCU.
-- **No motor-audio on this target.** All four PWM lines share TIM1, so
-  they share a single carrier frequency. Use `BIBA_F103_REV_A` for
-  sound-via-wheels playback.
+- JTAG отключается на старте, поэтому PB3 / PB4 / PA15 доступны как
+  обычные GPIO; SWD на PA13 / PA14 продолжает работать для
+  программирования и отладки.
+- USART1 на PA9 / PA10 недоступен, потому что эти пины заняты
+  TIM1_CH2 / TIM1_CH3. Поэтому CRSF висит на USART3.
+- Драйверам BTS7960 нужно своё питание 5 / 6 В; земля у драйвера и
+  MCU должна быть общей.
+- **На этом таргете нет motor-audio.** Все четыре PWM-линии делят
+  один TIM1 и, соответственно, одну несущую частоту. Для
+  воспроизведения звука «через колёса» используйте `BIBA_F103_REV_A`.
+
+## Вариант для клона (`BLUEPILL_F103C8_CLONE`)
+
+Большинство модулей Blue Pill, продающихся сегодня, несут не
+оригинальный кристалл ST, а клон, который представляется как F103C8,
+но имеет всего **8 КБ ОЗУ** (у настоящего ST-чипа 20 КБ). Со
+стандартным CMSIS-линкером `_estack` оказывается на `0x20005000` —
+это уже за пределами реального ОЗУ, и первый же push при входе в ISR
+кладёт MCU в HardFault. Подтверждено пробами по памяти: запись по
+`0x20002000` проходит, по `0x20003000` — фолтит.
+
+Вариант `BLUEPILL_F103C8_CLONE` обходит проблему без форка
+распиновки:
+
+- Кастомный линкер `firmware/ldscripts/stm32f103_8k_ram.ld` с
+  `LENGTH(RAM) = 8K` и `_estack = 0x20002000`.
+- `board_upload.maximum_ram_size = 8192`, чтобы проверка переполнения
+  RAM в PlatformIO соответствовала реальности.
+- Команды поднятия семихостинга в `debug_extra_cmds`, чтобы вывод
+  `printf()` из `biba_hal_debug.c` доходил до Debug Console в VS Code.
+
+Всё остальное (распиновка, периферия, топология PWM) идентично
+серийному Blue Pill, и оба варианта расширяют одну и ту же секцию
+`[target_bluepill_f103c8]` в `platformio.ini`.
+
+Если у тебя настоящий чип на 20 КБ — собирай любой из env'ов
+`bluepill_f103c8_<mode>` (без `_clone_`); они используют стандартный
+линкер из `stm32cube`.

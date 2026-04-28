@@ -1,93 +1,109 @@
-# BiBa STM32F103 firmware
+# Прошивка BiBa для STM32F103
 
-PlatformIO project for the STM32F103C8T6-class add-on that runs BiBa
-either standalone or as an SPI slave to a Raspberry Pi.
+Проект PlatformIO для платы класса STM32F103C8T6, на которой работает
+BiBa либо в standalone-режиме, либо в роли SPI-slave при Raspberry Pi.
 
-The project uses a **Betaflight/ELRS-style target layout**: each
-supported hardware configuration is one directory under
-[`targets/`](targets), and the build matrix is `<target> × <mode>`. See
-[`targets/README.md`](targets/README.md) for the full "how to add a new
-target" guide.
+Проект использует **раскладку таргетов в стиле Betaflight/ELRS**: каждая
+поддерживаемая аппаратная конфигурация — это отдельная директория в
+[`targets/`](targets), а матрица сборки строится как `<target> × <режим>`.
+Полное руководство «как добавить новый target» см. в
+[`targets/README.md`](targets/README.md).
 
-## Build matrix
+## Матрица сборки
 
-Envs are named `<target_lowercase>_<mode>`. There are three modes:
+Имя env собирается как `<target_lowercase>_<mode>`. Поддерживается четыре режима:
 
-| Mode          | What it builds                                                   |
-| ------------- | ---------------------------------------------------------------- |
-| `standalone`  | STM32 owns CRSF + BTS7960 + limiter + heading-hold.              |
-| `companion`   | STM32 acts as SPI slave; the SBC drives setpoints.               |
-| `combined`    | Both modes in one binary, selected at boot via the MODE_SEL pin. |
-| `native_test` | Host-side unit tests over the portable modules (no target).      |
+| Режим         | Что собирается                                                       |
+| ------------- | -------------------------------------------------------------------- |
+| `standalone`  | STM32 сам управляет CRSF + BTS7960 + лимитером + heading-hold.       |
+| `companion`   | STM32 работает как SPI-slave, уставки приходят с SBC.                |
+| `combined`    | Оба режима в одном бинарнике, выбор при старте по пину MODE_SEL.     |
+| `native_test` | Хостовые юнит-тесты переносимых модулей (без таргета).               |
 
-Current targets:
+Текущие таргеты:
 
-| Target            | Board                                         |
-| ----------------- | --------------------------------------------- |
-| `BLUEPILL_F103C8` | Reference: stock STM32F103C8T6 "Blue Pill"    |
-| `BIBA_F103_REV_A` | Example custom PCB (prototype revision A)     |
+| Target                  | Плата                                                       |
+| ----------------------- | ----------------------------------------------------------- |
+| `BLUEPILL_F103C8`       | Эталон: серийный STM32F103C8T6 «Blue Pill» (20 КБ ОЗУ)      |
+| `BLUEPILL_F103C8_CLONE` | Тот же распиновка, но клон-чип с реальными 8 КБ ОЗУ         |
+| `BIBA_F103_REV_A`       | Пример кастомной платы (прототип ревизии A)                 |
 
-## Build & flash
+Вариант `_CLONE` — это **не** отдельная директория в `targets/`. Он
+переиспользует распиновку обычного Blue Pill и отличается только
+скриптом линкера и лимитом RAM в PlatformIO, чтобы бинарник помещался в
+урезанный кристалл. Сейчас на стенде стоит именно клон, поэтому
+`bluepill_f103c8_clone_standalone` — это `default_envs` проекта.
+
+## Сборка и прошивка
 
 ```bash
 cd firmware
 
-# build (target × mode)
+# дефолтный стендовый env (клон-чип, линкер на 8 КБ ОЗУ)
+pio run
+
+# явный target × режим
 pio run -e bluepill_f103c8_standalone
 pio run -e bluepill_f103c8_companion
 pio run -e bluepill_f103c8_combined
 
-# or the custom PCB
+# варианты для клон-чипа (8 КБ ОЗУ)
+pio run -e bluepill_f103c8_clone_standalone
+pio run -e bluepill_f103c8_clone_companion
+pio run -e bluepill_f103c8_clone_combined
+
+# кастомная плата
 pio run -e biba_f103_rev_a_standalone
 
-# flash through ST-Link
-pio run -e bluepill_f103c8_standalone -t upload
+# прошивка через ST-Link
+pio run -e bluepill_f103c8_clone_standalone -t upload
 
-# run host-side unit tests (target-independent)
+# хостовые юнит-тесты (не зависят от таргета)
 pio test -e native_test
 ```
 
-CI (`.github/workflows/G-Build-STM32F103.yml`) builds every
-`(target, mode)` pair and attaches `firmware.bin` / `firmware.elf`
-artefacts named `biba-stm32f103-<target>-<mode>`.
+CI (`.github/workflows/G-Build-STM32F103.yml`) собирает каждую пару
+`(target, mode)` и публикует артефакты `firmware.bin` / `firmware.elf`
+с именем `biba-stm32f103-<target>-<mode>`.
 
-## Layout
+## Раскладка проекта
 
 ```
 firmware/
-├── platformio.ini             # target × mode env matrix
-├── include/                   # thin shims -> targets/<TARGET>/target*.h
+├── platformio.ini             # матрица env'ов target × режим
+├── ldscripts/                 # кастомные линкер-скрипты (например, 8 КБ ОЗУ для клона)
+├── include/                   # тонкие шимы -> targets/<TARGET>/target*.h
 ├── src/
-│   ├── main.c                 # tiny entrypoint, calls the mode dispatcher
-│   ├── app/                   # portable control-loop code (PID, limiter, telemetry)
-│   ├── drivers/               # BTS7960, ADC-based current/voltage sense, CRSF, IMU
-│   ├── hal/                   # STM32Cube wrapper (clocks, DMA, peripherals)
-│   ├── modes/                 # standalone / companion / dispatcher
-│   └── proto/                 # shared SPI wire format with the SBC
+│   ├── main.c                 # минимальная точка входа, вызывает диспетчер режимов
+│   ├── app/                   # переносимая логика контроля (PID, лимитер, телеметрия)
+│   ├── drivers/               # BTS7960, токовый/вольтовый ADC, CRSF, IMU
+│   ├── hal/                   # обёртка над STM32Cube (тактирование, DMA, периферия)
+│   ├── modes/                 # standalone / companion / диспетчер
+│   └── proto/                 # общий с SBC формат SPI-кадров
 ├── targets/
-│   ├── README.md              # how to add a new target
+│   ├── README.md              # как добавить новый таргет
 │   ├── BLUEPILL_F103C8/       # {target.h, target_config.h, target.md}
-│   └── BIBA_F103_REV_A/       # example custom PCB
-└── test/                      # Unity-based host tests for the portable modules
+│   └── BIBA_F103_REV_A/       # пример кастомной платы
+└── test/                      # хостовые тесты на Unity для переносимых модулей
 ```
 
-## Portable vs. STM32 code split
+## Разделение переносимого и STM32-кода
 
-Everything under `src/app/` (minus `telemetry.c`), `src/drivers/crsf.*`,
-and `src/proto/` is strict portable C with no HAL includes and no
-dependency on `target.h`. Those modules are unit-tested on the host
-under `pio test -e native_test`. The rest (anything that pokes hardware
-or `stm32f1xx_hal.h`) is excluded from the native env via
-`build_src_filter` in `platformio.ini`.
+Всё в `src/app/` (кроме `telemetry.c`), `src/drivers/crsf.*` и
+`src/proto/` — это строго переносимый C без include'ов HAL и без
+зависимости от `target.h`. Эти модули покрыты юнит-тестами на хосте
+через `pio test -e native_test`. Остальное (всё, что лезет в железо
+или включает `stm32f1xx_hal.h`) исключается из native env через
+`build_src_filter` в `platformio.ini`.
 
-Hardware-facing code includes `biba_board.h` (pin shim) and
-`biba_config.h` (policy + target overrides); both headers resolve the
-per-target `target.h` / `target_config.h` via the `-I targets/<TARGET>`
-path PlatformIO injects per env.
+Аппаратный код подключает `biba_board.h` (шим распиновки) и
+`biba_config.h` (политика + переопределения таргета); оба заголовка
+резолвят `target.h` / `target_config.h` через путь `-I targets/<TARGET>`,
+который PlatformIO добавляет в каждом env.
 
-## SPI wire protocol
+## Протокол SPI
 
-Documented in [`docs/stm32_architecture.md`](../../docs/stm32_architecture.md).
-The same format is implemented on the SBC side in
-`biba-controller/stm32_link/protocol.py`; the version constant in
-`include/biba_version.h` must match `PROTOCOL_VERSION` there.
+Описан в [`docs/stm32_architecture.md`](../../docs/stm32_architecture.md).
+Тот же формат реализован на стороне SBC в
+`biba-controller/stm32_link/protocol.py`; константа версии в
+`include/biba_version.h` обязана совпадать с `PROTOCOL_VERSION` там.
