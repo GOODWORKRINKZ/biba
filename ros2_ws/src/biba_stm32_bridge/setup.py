@@ -19,7 +19,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            # TODO: "biba_stm32_bridge_node = biba_stm32_bridge.bridge_node:main",
+            "biba_stm32_bridge_node = biba_stm32_bridge.bridge_node:main",
         ],
     },
 )
