@@ -4,17 +4,17 @@
 
 ## Пакеты `ros2_ws/src/`
 
-Целевые пакеты (создаются в момент реализации, в репозитории пока отсутствуют):
+Skeleton-каркас ([ros2_ws/](../ros2_ws/)) уже в репозитории; package.xml и build-файлы созданы, рабочая логика добавляется отдельными планами:
 
 | Пакет                  | Язык     | Роль                                                                  |
 | ---------------------- | -------- | --------------------------------------------------------------------- |
 | `biba_description`     | xacro    | URDF/xacro дифф-привода BiBa (геометрия, joints, TF-tree)             |
-| `biba_msgs`            | msg      | кастомные сообщения: `CrsfStatus`, `Stm32Telemetry`, `MotorAudio`, … |
+| `biba_msgs`            | msg      | кастомные сообщения: `CrsfStatus`, `Stm32Telemetry`, `MotorAudio`     |
 | `biba_stm32_bridge`    | Python   | SPI ↔ ROS2 bridge поверх `biba-controller/stm32_link/`                |
 | `biba_hardware_stm32`  | C++      | `ros2_control` `SystemInterface`, использует bridge как backend       |
 | `biba_bringup`         | launch   | launch-файлы и конфиги controller_manager / twist_mux / TF            |
 
-Hook-points (пустые директории-плейсхолдеры под будущие пакеты):
+Hook-points (директории-плейсхолдеры с `COLCON_IGNORE`):
 
 - `biba_manipulator` — пакет манипулятора (ros2_control hardware).
 - `biba_uwb_follow` — follow-the-tag через BU4.

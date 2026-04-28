@@ -1,0 +1,2 @@
+# URDF / xacro описание дифф-привода BiBa.
+# TODO: добавить biba.urdf.xacro с двумя ведущими колёсами, base_link, IMU frame.

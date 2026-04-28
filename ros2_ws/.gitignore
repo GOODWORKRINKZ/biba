@@ -1,0 +1,9 @@
+# colcon build artefacts
+build/
+install/
+log/
+
+# editor
+.vscode/
+*.pyc
+__pycache__/
