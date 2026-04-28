@@ -12,6 +12,7 @@ on:
       - "firmware/**"
       - ".github/workflows/G-Build-STM32F103.yml"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
