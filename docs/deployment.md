@@ -1,4 +1,16 @@
-# Развёртывание BiBa на Raspberry Pi
+# Развёртывание BiBa
+
+## Обзор композиций
+
+BiBa разворачивается в одной из трёх композиций железа. Каноническое описание — в [system_architecture.md](system_architecture.md). Кратко:
+
+- **Композиция A: Pi-only** — текущий продакшен-путь. Raspberry Pi Zero 2W сам читает CRSF и крутит PWM. Развёртывание полностью описано ниже.
+- **Композиция B: STM32-only** — без SBC. Развёртывание сводится к сборке и прошивке прошивки STM32F103.
+- **Композиция C: Pi + STM32** — в разработке. ROS2-стек на SBC + companion-прошивка на STM32.
+
+## Композиция A (Pi-only)
+
+Рабочая компоновка стека — [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml). На роботе все стандартные действия проходят через `bb*`-aliases (`scripts/biba_aliases.sh`); путь к compose-файлу можно переопределить переменной `BIBA_COMPOSE_FILE`.
 
 ## Предварительные требования
 
@@ -52,11 +64,11 @@ sudo systemctl start biba-controller.service
 
 # Или вручную
 cd ~/biba
-docker compose pull
-docker compose up -d
+docker compose -f docker/legacy-pi/docker-compose.yml pull
+docker compose -f docker/legacy-pi/docker-compose.yml up -d
 ```
 
-`biba-controller.service` на старте системы выполняет только `docker compose up -d`.
+`biba-controller.service` на старте системы из `WorkingDirectory=$REPO_DIR/docker/legacy-pi` выполняет только `docker compose up -d`.
 Pull новых образов остается в ручном обновлении и в `bbupdate`, чтобы не дергать сеть и GHCR во время boot.
 
 ## Управление стеком
@@ -99,7 +111,7 @@ bash ~/biba/scripts/diagnostics.sh
 
 ## Конфигурация
 
-Переменные окружения задаются в `docker-compose.yml`:
+Переменные окружения задаются в [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml):
 
 | Переменная | По умолчанию | Описание |
 |------------|-------------|---------|
@@ -339,7 +351,7 @@ ls -la /dev/ttyUSB*             # проверить порт
 dmesg | tail -20                # лог ядра
 ```
 
-Убедитесь, что USB-UART адаптер подключен. Если порт отличается от `/dev/ttyUSB0`, обновите `BMS_PORT` в `docker-compose.yml`.
+Убедитесь, что USB-UART адаптер подключен. Если порт отличается от `/dev/ttyUSB0`, обновите `BMS_PORT` в [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml).
 
 ### Нет BLE-соединения с BMS
 
@@ -380,7 +392,7 @@ sudo usermod -aG docker $USER
 
 ```bash
 bblogs                          # посмотреть причину
-docker compose -f ~/biba/docker-compose.yml logs --tail 50
+docker compose -f ~/biba/docker/legacy-pi/docker-compose.yml logs --tail 50
 ```
 
 Частая причина — pigpiod не может подключиться к GPIO. Убедитесь, что `/dev/gpiomem` существует и контейнер запускается с `privileged: true`.
@@ -393,3 +405,15 @@ docker pull ghcr.io/goodworkrinkz/biba/biba-controller:latest
 ```
 
 Убедитесь, что токен имеет право `read:packages`.
+
+## Композиция B (STM32-only)
+
+Без SBC. Развёртывание сводится к сборке и заливке прошивки `standalone` на STM32F103. Полная инструкция — в [`firmware/README.md`](../firmware/README.md). Подключение CRSF, питания и силовой части — в [wiring.md](wiring.md). Архитектура и SPI-протокол — в [stm32_architecture.md](stm32_architecture.md).
+
+## Композиция C (Pi + STM32)
+
+> Статус: **в разработке**. ROS2-стек на SBC и контракт с STM32 спроектированы, реализация ведётся отдельными планами.
+
+В композиции C STM32 принимает CRSF и держит низкоуровневую часть (PWM, current limit, failsafe), а SBC запускает ROS2-стек поверх SPI-bridge'а к STM32. Целевая структура контейнеров и пакетов — в [ros2_stack.md](ros2_stack.md). Общая картина и failsafe-уровни — в [system_architecture.md](system_architecture.md). Исходный design-doc — в [plans/2026-04-28-sbc-architecture-redesign-design.md](plans/2026-04-28-sbc-architecture-redesign-design.md).
+
+Когда композиция станет доступной для развёртывания, эта секция будет дополнена quick-start'ом по аналогии с композицией A (compose-стек в `docker/ros2/`, профили minimal/full, инструкции для Pi Zero 2W vs Pi 4/5+).
