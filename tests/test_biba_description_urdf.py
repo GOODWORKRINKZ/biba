@@ -53,6 +53,18 @@ def _expand_xacro(src: Path) -> ET.Element:
     return ET.parse(src).getroot()
 
 
+# Names produced by xacro:macro expansion (the ``wheel`` macro). The
+# fallback XML-only parser cannot resolve these — skip those parametrize
+# cases when xacro is unavailable (e.g. minimal CI runners).
+_MACRO_LINKS = {"left_wheel_link", "right_wheel_link"}
+_MACRO_JOINTS = {"left_wheel_joint", "right_wheel_joint"}
+
+
+def _skip_if_no_xacro_for(name: str, macro_set: set[str]) -> None:
+    if name in macro_set and not shutil.which("xacro"):
+        pytest.skip(f"{name!r} comes from xacro:macro; xacro not on PATH")
+
+
 def test_urdf_xacro_file_exists() -> None:
     assert URDF_XACRO.is_file(), f"missing {URDF_XACRO}"
 
@@ -70,6 +82,7 @@ def test_urdf_parses_successfully() -> None:
 
 @pytest.mark.parametrize("link_name", sorted(REQUIRED_LINKS))
 def test_urdf_contains_required_link(link_name: str) -> None:
+    _skip_if_no_xacro_for(link_name, _MACRO_LINKS)
     root = _expand_xacro(URDF_XACRO)
     names = {link.attrib.get("name") for link in root.iter() if link.tag.endswith("link")}
     assert link_name in names, f"link {link_name!r} missing; have {sorted(n for n in names if n)}"
@@ -77,6 +90,7 @@ def test_urdf_contains_required_link(link_name: str) -> None:
 
 @pytest.mark.parametrize("joint_name,joint_type", sorted(REQUIRED_JOINTS))
 def test_urdf_contains_required_joint(joint_name: str, joint_type: str) -> None:
+    _skip_if_no_xacro_for(joint_name, _MACRO_JOINTS)
     root = _expand_xacro(URDF_XACRO)
     joints = {
         j.attrib.get("name"): j.attrib.get("type")
