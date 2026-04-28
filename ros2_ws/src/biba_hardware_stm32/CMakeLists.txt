@@ -49,7 +49,7 @@ if(hardware_interface_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND rclcpp_life
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
   )
-  target_link_libraries(${PROJECT_NAME} PUBLIC biba_stm32_link)
+  target_link_libraries(${PROJECT_NAME} biba_stm32_link)
   ament_target_dependencies(${PROJECT_NAME}
     hardware_interface
     pluginlib
