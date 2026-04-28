@@ -11,6 +11,14 @@ def test_biba_compose_loads_robot_env_file_when_present() -> None:
     assert "docker compose" in aliases
 
 
+def test_biba_aliases_use_docker_legacy_pi_compose_path() -> None:
+    aliases = Path("scripts/biba_aliases.sh").read_text(encoding="utf-8")
+
+    assert 'BIBA_COMPOSE_FILE="${BIBA_COMPOSE_FILE:-$BIBA_DIR/docker/legacy-pi/docker-compose.yml}"' in aliases
+    assert '"$BIBA_DIR/docker-compose.yml"' not in aliases
+    assert '-f "$BIBA_COMPOSE_FILE"' in aliases
+
+
 def test_bbupdate_force_recreates_container() -> None:
     aliases = Path("scripts/biba_aliases.sh").read_text(encoding="utf-8")
 

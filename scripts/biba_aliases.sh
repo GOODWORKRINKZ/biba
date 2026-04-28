@@ -2,6 +2,7 @@
 
 BIBA_DIR="${BIBA_DIR:-$HOME/biba}"
 BIBA_ENV_FILE="${BIBA_ENV_FILE:-/etc/default/biba-controller}"
+BIBA_COMPOSE_FILE="${BIBA_COMPOSE_FILE:-$BIBA_DIR/docker/legacy-pi/docker-compose.yml}"
 
 _biba_compose() {
     local env_args=()
@@ -12,7 +13,7 @@ _biba_compose() {
         env_args+=(--env-file "$BIBA_DIR/.env")
     fi
 
-    docker compose "${env_args[@]}" -f "$BIBA_DIR/docker-compose.yml" "$@"
+    docker compose "${env_args[@]}" -f "$BIBA_COMPOSE_FILE" "$@"
 }
 
 alias bbcd='cd "$BIBA_DIR"'
