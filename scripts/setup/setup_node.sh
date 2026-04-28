@@ -129,7 +129,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=$REPO_DIR
+WorkingDirectory=$REPO_DIR/docker/legacy-pi
 EnvironmentFile=-$ENV_FILE
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
