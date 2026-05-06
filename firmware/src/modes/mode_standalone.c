@@ -21,6 +21,9 @@
 #include "drivers/current_sense.h"
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
+#define CRSF_ADDR_BROADCAST         0x00u
+#define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
+#define CRSF_FRAMETYPE_DEVICE_PING  0x28u
 
 #define CRSF_BUFFER_SIZE 192
 
@@ -33,6 +36,36 @@ static uint16_t s_channels[CRSF_RC_CHANNEL_COUNT];
 static uint32_t s_last_scan_count;
 static uint32_t s_last_tick_ms;
 static uint8_t  s_telemetry_seq;
+
+static uint32_t s_dbg_bytes_total;
+static uint32_t s_dbg_frames_ok;
+static uint32_t s_dbg_frames_bad;
+static uint32_t s_dbg_ch_frames;
+static uint32_t s_dbg_tx_ok;
+static uint32_t s_dbg_tx_fail;
+
+static void send_crsf_ping(void)
+{
+    /* Minimal CRSF device ping so ELRS EP01 knows a host is present and
+     * starts outputting RC_CHANNELS_PACKED frames on its TX pin. */
+    uint8_t body[3] = {
+        CRSF_FRAMETYPE_DEVICE_PING,
+        CRSF_ADDR_BROADCAST,
+        CRSF_ADDR_FLIGHT_CONTROLLER,
+    };
+    uint8_t crc = biba_crsf_crc8_dvb_s2(body, sizeof(body));
+    uint8_t frame[6] = {
+        CRSF_SYNC_BYTE,
+        (uint8_t)(sizeof(body) + 1u), /* length = body + crc */
+        body[0], body[1], body[2],
+        crc,
+    };
+    if (biba_hal_crsf_write(frame, sizeof(frame)) == 0) {
+        s_dbg_tx_ok++;
+    } else {
+        s_dbg_tx_fail++;
+    }
+}
 
 static biba_pid_state_t s_heading_pid;
 /* Heading-hold PID. ki is intentionally 0 while the IMU integration is a
@@ -58,13 +91,27 @@ void biba_mode_standalone_init(void)
     biba_pid_reset(&s_heading_pid);
     s_last_tick_ms = biba_hal_now_ms();
     biba_bts7960_set_enabled(true);
+
+    /* --- UART loopback self-test (requires PB10 → PB11 jumper) ----------
+     * Short PB10 to PB11, reset, check the log line below.
+     * If loopback_ok=1 — UART/DMA hardware is fine, problem is EP01/wiring.
+     * If loopback_ok=0 — UART or DMA init failed on this board. */
+    biba_hal_delay_ms(1);               /* let DMA arm */
+    uint8_t lb_byte = 0xA5u;
+    biba_hal_crsf_write(&lb_byte, 1);
+    biba_hal_delay_ms(1);               /* ~20 µs at 420 kbaud, 1 ms is plenty */
+    uint8_t lb_buf[1];
+    int loopback_ok = (biba_hal_crsf_read(lb_buf, 1) == 1 && lb_buf[0] == 0xA5u);
+    printf("[biba] UART loopback: loopback_ok=%d (need PB10->PB11 jumper)\r\n", loopback_ok);
 }
 
 static void ingest_crsf(void)
 {
     size_t free_space = CRSF_BUFFER_SIZE - s_crsf_fill;
     if (free_space > 0) {
-        s_crsf_fill += biba_hal_crsf_read(&s_crsf_buffer[s_crsf_fill], free_space);
+        size_t got = biba_hal_crsf_read(&s_crsf_buffer[s_crsf_fill], free_space);
+        s_crsf_fill += got;
+        s_dbg_bytes_total += (uint32_t)got;
     }
 
     uint8_t frame[CRSF_MAX_FRAME_SIZE];
@@ -77,10 +124,13 @@ static void ingest_crsf(void)
         const uint8_t *payload = NULL;
         size_t payload_len = 0;
         if (biba_crsf_parse_frame(frame, frame_len, &payload, &payload_len) == 0) {
+            s_dbg_frames_bad++;
             continue;
         }
+        s_dbg_frames_ok++;
         if (type == CRSF_FRAMETYPE_RC_CHANNELS) {
             if (biba_crsf_unpack_channels(payload, payload_len, s_channels)) {
+                s_dbg_ch_frames++;
                 biba_failsafe_mark_fresh(&s_crsf_failsafe, biba_hal_now_ms());
             }
         } else if (type == CRSF_FRAMETYPE_LINK_STATS) {
@@ -93,6 +143,14 @@ void biba_mode_standalone_tick(void)
 {
     ingest_crsf();
     uint32_t now = biba_hal_now_ms();
+
+    /* Send CRSF ping at 5 Hz so ELRS EP01 knows a host is present. */
+    static uint32_t s_last_ping_ms;
+    if (now - s_last_ping_ms >= 200u) {
+        s_last_ping_ms = now;
+        send_crsf_ping();
+    }
+
     float dt = (float)(now - s_last_tick_ms) / 1000.0f;
     s_last_tick_ms = now;
 
@@ -164,10 +222,25 @@ void biba_mode_standalone_tick(void)
         uint32_t now = biba_hal_now_ms();
         if (now - s_last_log_ms >= 1000u) {
             s_last_log_ms = now;
-            printf("[biba] t=%lu fs=%d L=%d R=%d rssi=%d lq=%d\r\n",
+            printf("[biba] t=%lu fs=%d L=%d R=%d rssi=%d lq=%d"
+                   " | rx_b=%lu frm=%lu bad=%lu ch=%lu ch0=%u ch1=%u\r\n",
                    now, failsafe,
                    (int)(out.left * 100), (int)(out.right * 100),
-                   s_link.uplink_rssi_1, s_link.uplink_link_quality);
+                   s_link.uplink_rssi_1, s_link.uplink_link_quality,
+                   s_dbg_bytes_total, s_dbg_frames_ok, s_dbg_frames_bad, s_dbg_ch_frames,
+                   s_channels[0], s_channels[1]);
+
+            /* Extra UART/DMA health line every 5 s to diagnose rx_b=0 */
+            static uint32_t s_last_diag_ms;
+            if (now - s_last_diag_ms >= 5000u) {
+                s_last_diag_ms = now;
+                biba_hal_crsf_diag_t d = biba_hal_crsf_diag();
+                printf("[biba] CRSF diag: dma_init=%lu ndtr=%lu err=0x%lx rx_st=0x%lx tx_st=0x%lx SR=0x%lx CR1=0x%lx RCC_APB1=%lx tx_ok=%lu tx_fail=%lu\r\n",
+                       d.dma_init_status, d.dma_ndtr,
+                       d.uart_error_code, d.uart_rx_state, d.uart_tx_state,
+                       d.uart_sr, d.uart_cr1, d.rcc_apb1enr,
+                       s_dbg_tx_ok, s_dbg_tx_fail);
+            }
         }
     }
 }

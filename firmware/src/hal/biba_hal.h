@@ -100,6 +100,25 @@ void biba_hal_crsf_begin(uint32_t baud);
  * of bytes copied. */
 size_t biba_hal_crsf_read(uint8_t *dst, size_t cap);
 
+/* Blocking transmit of `len` bytes on USART3 TX (PB10). Used to send
+ * CRSF ping/telemetry frames back to the receiver.
+ * Returns 0 on success, non-zero HAL status on failure. */
+uint32_t biba_hal_crsf_write(const uint8_t *data, size_t len);
+
+/* Diagnostic snapshot: DMA NDTR, UART error code, UART Rx state, and
+ * the HAL status returned by the last HAL_UART_Receive_DMA call. */
+typedef struct {
+    uint32_t dma_ndtr;        /* raw DMA counter — changes while data flows  */
+    uint32_t uart_error_code; /* huart3.ErrorCode (HAL_UART_ERROR_*)         */
+    uint32_t uart_rx_state;   /* huart3.RxState   (HAL_UART_STATE_*)         */
+    uint32_t uart_tx_state;   /* huart3.gState    (HAL_UART_STATE_*)         */
+    uint32_t uart_sr;         /* raw USART3->SR register                     */
+    uint32_t uart_cr1;        /* raw USART3->CR1 register (TE/RE/UE bits)    */
+    uint32_t rcc_apb1enr;     /* RCC->APB1ENR: bit18=USART3EN must be set   */
+    uint32_t dma_init_status; /* HAL_OK=0 from HAL_UART_Receive_DMA          */
+} biba_hal_crsf_diag_t;
+biba_hal_crsf_diag_t biba_hal_crsf_diag(void);
+
 /* --- SPI2 slave --------------------------------------------------------- */
 
 /* Prepare for the next SPI transaction. `tx` is the telemetry frame that

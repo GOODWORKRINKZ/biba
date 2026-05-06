@@ -18,8 +18,8 @@
 
 static ADC_HandleTypeDef hadc1;     /* current/voltage scan */
 static DMA_HandleTypeDef hdma_adc1;
-static UART_HandleTypeDef huart3;   /* CRSF */
-static DMA_HandleTypeDef hdma_uart3_rx;
+static UART_HandleTypeDef huart_crsf;  /* CRSF — instance set by target macros */
+static DMA_HandleTypeDef hdma_crsf_rx;
 static SPI_HandleTypeDef hspi2;     /* SBC slave link */
 static DMA_HandleTypeDef hdma_spi2_tx;
 static DMA_HandleTypeDef hdma_spi2_rx;
@@ -42,7 +42,7 @@ static bool s_mode_sel_latched_companion;
 static void clock_config(void);
 static void gpio_init(void);
 static void adc1_init(void);
-static void usart3_init(uint32_t baud);
+static void crsf_uart_init(uint32_t baud);
 static void spi2_slave_init(void);
 static void i2c1_init(void);
 
@@ -165,17 +165,8 @@ float biba_hal_adc_volts(uint16_t raw)
 static uint16_t crsf_write_idx(void)
 {
     /* NDTR counts remaining transfers; convert to absolute write position. */
-    uint32_t ndtr = __HAL_DMA_GET_COUNTER(&hdma_uart3_rx);
+    uint32_t ndtr = __HAL_DMA_GET_COUNTER(&hdma_crsf_rx);
     return (uint16_t)(CRSF_RING_SIZE - ndtr);
-}
-
-void biba_hal_crsf_begin(uint32_t baud)
-{
-    if (huart3.Instance == NULL) {
-        usart3_init(baud);
-    }
-    HAL_UART_Receive_DMA(&huart3, s_crsf_ring, CRSF_RING_SIZE);
-    s_crsf_read_idx = 0;
 }
 
 size_t biba_hal_crsf_read(uint8_t *dst, size_t cap)
@@ -188,6 +179,52 @@ size_t biba_hal_crsf_read(uint8_t *dst, size_t cap)
         s_crsf_read_idx = (uint16_t)((s_crsf_read_idx + 1u) % CRSF_RING_SIZE);
     }
     return copied;
+}
+
+uint32_t biba_hal_crsf_write(const uint8_t *data, size_t len)
+{
+    if (data == NULL || len == 0) return 0;
+    /* Bypass HAL state machine: DMA RX marks gState as BUSY_RX which
+     * causes HAL_UART_Transmit to return HAL_BUSY even though the TX
+     * path is completely independent on a full-duplex UART. Write
+     * directly to the peripheral registers instead. */
+    for (size_t i = 0; i < len; i++) {
+        uint32_t t = 10000u;
+        while (!(BIBA_CRSF_UART_INSTANCE->SR & USART_SR_TXE) && --t) {}
+        if (!t) return 1u;
+        BIBA_CRSF_UART_INSTANCE->DR = data[i];
+    }
+    /* Wait for transmission complete so the last byte is fully shifted
+     * out before the caller returns (important for half-duplex timing). */
+    uint32_t t = 10000u;
+    while (!(BIBA_CRSF_UART_INSTANCE->SR & USART_SR_TC) && --t) {}
+    return t ? 0u : 1u;
+}
+
+static uint32_t s_crsf_dma_init_status = 0xFFFFFFFFu; /* sentinel = not called */
+
+void biba_hal_crsf_begin(uint32_t baud)
+{
+    if (huart_crsf.Instance == NULL) {
+        crsf_uart_init(baud);
+    }
+    HAL_StatusTypeDef st = HAL_UART_Receive_DMA(&huart_crsf, s_crsf_ring, CRSF_RING_SIZE);
+    s_crsf_dma_init_status = (uint32_t)st;
+    s_crsf_read_idx = 0;
+}
+
+biba_hal_crsf_diag_t biba_hal_crsf_diag(void)
+{
+    biba_hal_crsf_diag_t d;
+    d.dma_ndtr        = __HAL_DMA_GET_COUNTER(&hdma_crsf_rx);
+    d.uart_error_code = huart_crsf.ErrorCode;
+    d.uart_rx_state   = huart_crsf.RxState;
+    d.uart_tx_state   = huart_crsf.gState;
+    d.uart_sr         = BIBA_CRSF_UART_INSTANCE->SR;
+    d.uart_cr1        = BIBA_CRSF_UART_INSTANCE->CR1;
+    d.rcc_apb1enr     = RCC->APB1ENR;
+    d.dma_init_status = s_crsf_dma_init_status;
+    return d;
 }
 
 void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx)
@@ -329,10 +366,7 @@ static void adc1_init(void)
         biba_hal_panic();
     }
 
-    static const uint32_t chans[BIBA_ADC_SCAN_LEN] = {
-        ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3,
-        ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6
-    };
+    static const uint32_t chans[BIBA_ADC_SCAN_LEN] = BIBA_ADC_CHANNEL_SEQ;
     for (unsigned i = 0; i < BIBA_ADC_SCAN_LEN; ++i) {
         ADC_ChannelConfTypeDef s = {0};
         s.Channel = chans[i];
@@ -366,9 +400,10 @@ static void adc1_init(void)
     }
 }
 
-static void usart3_init(uint32_t baud)
+static void crsf_uart_init(uint32_t baud)
 {
-    __HAL_RCC_USART3_CLK_ENABLE();
+    BIBA_CRSF_CLK_ENABLE();
+    BIBA_CRSF_AF_REMAP();
 
     GPIO_InitTypeDef g = {0};
     g.Pin = BIBA_PIN_CRSF_TX_PIN;
@@ -381,34 +416,34 @@ static void usart3_init(uint32_t baud)
     g.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(BIBA_PIN_CRSF_RX_PORT, &g);
 
-    huart3.Instance = USART3;
-    huart3.Init.BaudRate = baud;
-    huart3.Init.WordLength = UART_WORDLENGTH_8B;
-    huart3.Init.StopBits = UART_STOPBITS_1;
-    huart3.Init.Parity = UART_PARITY_NONE;
-    huart3.Init.Mode = UART_MODE_TX_RX;
-    huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-    if (HAL_UART_Init(&huart3) != HAL_OK) {
+    huart_crsf.Instance = BIBA_CRSF_UART_INSTANCE;
+    huart_crsf.Init.BaudRate = baud;
+    huart_crsf.Init.WordLength = UART_WORDLENGTH_8B;
+    huart_crsf.Init.StopBits = UART_STOPBITS_1;
+    huart_crsf.Init.Parity = UART_PARITY_NONE;
+    huart_crsf.Init.Mode = UART_MODE_TX_RX;
+    huart_crsf.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart_crsf.Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(&huart_crsf) != HAL_OK) {
         biba_hal_panic();
     }
 
-    hdma_uart3_rx.Instance = DMA1_Channel3;
-    hdma_uart3_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
-    hdma_uart3_rx.Init.PeriphInc = DMA_PINC_DISABLE;
-    hdma_uart3_rx.Init.MemInc = DMA_MINC_ENABLE;
-    hdma_uart3_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    hdma_uart3_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
-    hdma_uart3_rx.Init.Mode = DMA_CIRCULAR;
-    hdma_uart3_rx.Init.Priority = DMA_PRIORITY_MEDIUM;
-    if (HAL_DMA_Init(&hdma_uart3_rx) != HAL_OK) {
+    hdma_crsf_rx.Instance = BIBA_CRSF_DMA_CHANNEL_RX;
+    hdma_crsf_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_crsf_rx.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_crsf_rx.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_crsf_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_crsf_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+    hdma_crsf_rx.Init.Mode = DMA_CIRCULAR;
+    hdma_crsf_rx.Init.Priority = DMA_PRIORITY_MEDIUM;
+    if (HAL_DMA_Init(&hdma_crsf_rx) != HAL_OK) {
         biba_hal_panic();
     }
-    __HAL_LINKDMA(&huart3, hdmarx, hdma_uart3_rx);
-    HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
-    HAL_NVIC_SetPriority(USART3_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(USART3_IRQn);
+    __HAL_LINKDMA(&huart_crsf, hdmarx, hdma_crsf_rx);
+    HAL_NVIC_SetPriority(BIBA_CRSF_DMA_IRQn_RX, 2, 0);
+    HAL_NVIC_EnableIRQ(BIBA_CRSF_DMA_IRQn_RX);
+    HAL_NVIC_SetPriority(BIBA_CRSF_UART_IRQn, 2, 0);
+    HAL_NVIC_EnableIRQ(BIBA_CRSF_UART_IRQn);
 }
 
 static void spi2_slave_init(void)
@@ -502,10 +537,10 @@ static void i2c1_init(void)
 /* --- IRQ handlers (declared in startup_stm32f103xb.s) ------------------- */
 
 void DMA1_Channel1_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_adc1); }
-void DMA1_Channel3_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_uart3_rx); }
+void BIBA_CRSF_DMA_IRQ_HANDLER(void) { HAL_DMA_IRQHandler(&hdma_crsf_rx); }
 void DMA1_Channel4_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_spi2_rx); }
 void DMA1_Channel5_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_spi2_tx); }
-void USART3_IRQHandler(void)        { HAL_UART_IRQHandler(&huart3); }
+void BIBA_CRSF_UART_IRQ_HANDLER(void) { HAL_UART_IRQHandler(&huart_crsf); }
 void SPI2_IRQHandler(void)          { HAL_SPI_IRQHandler(&hspi2); }
 
 void SysTick_Handler(void) { HAL_IncTick(); }

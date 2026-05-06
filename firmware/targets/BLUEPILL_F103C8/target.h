@@ -75,12 +75,28 @@
 
 #define BIBA_ADC_SCAN_LEN            7U
 
-/* --- CRSF (USART3) ------------------------------------------------------ */
+/* --- CRSF (USART3, PB10=TX / PB11=RX, default AF, no remap) ------------ */
 
 #define BIBA_PIN_CRSF_TX_PORT        GPIOB
 #define BIBA_PIN_CRSF_TX_PIN         GPIO_PIN_10
 #define BIBA_PIN_CRSF_RX_PORT        GPIOB
 #define BIBA_PIN_CRSF_RX_PIN         GPIO_PIN_11
+
+/* CRSF UART peripheral abstraction — biba_hal.c uses these so the
+ * concrete UART / DMA assignment stays in the target directory. */
+#define BIBA_CRSF_UART_INSTANCE      USART3
+#define BIBA_CRSF_CLK_ENABLE()       __HAL_RCC_USART3_CLK_ENABLE()
+#define BIBA_CRSF_AF_REMAP()         ((void)0)
+#define BIBA_CRSF_DMA_CHANNEL_RX     DMA1_Channel3
+#define BIBA_CRSF_DMA_IRQn_RX        DMA1_Channel3_IRQn
+#define BIBA_CRSF_UART_IRQn          USART3_IRQn
+#define BIBA_CRSF_DMA_IRQ_HANDLER    DMA1_Channel3_IRQHandler
+#define BIBA_CRSF_UART_IRQ_HANDLER   USART3_IRQHandler
+
+/* ADC1 scan channel sequence (ranks 1-7, PA0..PA6). */
+#define BIBA_ADC_CHANNEL_SEQ \
+    { ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, \
+      ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6 }
 
 /* --- SPI slave (SPI2) --------------------------------------------------- */
 
