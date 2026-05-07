@@ -15,11 +15,25 @@
 
 extern "C" {
 #include "modes/mode_dispatcher.h"
+
+/* Route printf() / puts() from all C translation units to USB CDC.
+ * The arduino-pico newlib stub calls _write() for every printf; we
+ * forward it to Serial so that C code needs no changes. */
+int _write(int fd, const char *buf, int count)
+{
+    (void)fd;
+    return (int)Serial.write((const uint8_t *)buf, (size_t)count);
 }
+} /* extern "C" */
 
 void setup()
 {
     Serial.begin(115200);
+
+    /* Do not block writes waiting for DTR — output is discarded if no
+     * host is connected, but the firmware never stalls. */
+    Serial.ignoreFlowControl(true);
+
     biba_mode_dispatcher_boot();
     biba_mode_dispatcher_run_forever();
 }
