@@ -1,10 +1,10 @@
-# Target: RPICO_RP2040
+# Таргет: RPICO_RP2040
 
-Compact RP2040 board (USB-C, dual Cortex-M0+ @ 125 MHz, 264 KB SRAM, 2 MB Flash).
-Compatible with the standard Raspberry Pi Pico pin numbering.
-PlatformIO board ID: **`rpipico`**.
+Компактная плата на RP2040 (USB-C, два ядра Cortex-M0+ @ 125 МГц, 264 КБ SRAM, 2 МБ Flash).
+Совместима со стандартной распиновкой Raspberry Pi Pico.
+ID платы в PlatformIO: **`rpipico`**.
 
-Board pinout reference (save the image next to this file as `board_pinout.png`):
+Справочная схема распиновки (сохранить изображение рядом с этим файлом как `board_pinout.png`):
 
 ```
                          ┌─────USB-C─────┐
@@ -34,87 +34,87 @@ Board pinout reference (save the image next to this file as `board_pinout.png`):
                         SWDIO       SWCLK
 ```
 
-## Pin groups
+## Группы выводов
 
-### Left BTS7960 driver connector — GP2…GP5 (consecutive)
+### Драйвер левого мотора BTS7960 — GP2…GP5 (4 пина подряд)
 
-| Pin | Signal  | Direction | Note               |
-|-----|---------|-----------|--------------------|
-| GP2 | L_RPWM  | OUT PWM   | PWM slice 1, ch A  |
-| GP3 | L_LPWM  | OUT PWM   | PWM slice 1, ch B  |
-| GP4 | L_REN   | OUT GPIO  | Enable right half  |
-| GP5 | L_LEN   | OUT GPIO  | Enable left half   |
+| Пин | Сигнал  | Направление | Примечание              |
+|-----|---------|-------------|-------------------------|
+| GP2 | L_RPWM  | ВЫХ ШИМ    | ШИМ слайс 1, канал A    |
+| GP3 | L_LPWM  | ВЫХ ШИМ    | ШИМ слайс 1, канал B    |
+| GP4 | L_REN   | ВЫХ GPIO   | Разрешение правой полумост |
+| GP5 | L_LEN   | ВЫХ GPIO   | Разрешение левой полумост  |
 
-### Right BTS7960 driver connector — GP6…GP9 (consecutive)
+### Драйвер правого мотора BTS7960 — GP6…GP9 (4 пина подряд)
 
-| Pin | Signal  | Direction | Note               |
-|-----|---------|-----------|--------------------|
-| GP6 | R_RPWM  | OUT PWM   | PWM slice 3, ch A  |
-| GP7 | R_LPWM  | OUT PWM   | PWM slice 3, ch B  |
-| GP8 | R_REN   | OUT GPIO  | Enable right half  |
-| GP9 | R_LEN   | OUT GPIO  | Enable left half   |
+| Пин | Сигнал  | Направление | Примечание              |
+|-----|---------|-------------|-------------------------|
+| GP6 | R_RPWM  | ВЫХ ШИМ    | ШИМ слайс 3, канал A    |
+| GP7 | R_LPWM  | ВЫХ ШИМ    | ШИМ слайс 3, канал B    |
+| GP8 | R_REN   | ВЫХ GPIO   | Разрешение правой полумост |
+| GP9 | R_LEN   | ВЫХ GPIO   | Разрешение левой полумост  |
 
-### CRSF receiver — GP0…GP1
+### CRSF/ELRS приёмник — GP0…GP1
 
-| Pin | Signal   | Direction | Note              |
-|-----|----------|-----------|-------------------|
-| GP0 | CRSF_TX  | OUT UART0 | To receiver RX    |
-| GP1 | CRSF_RX  | IN  UART0 | From receiver TX  |
+| Пин | Сигнал   | Направление | Примечание                    |
+|-----|----------|-------------|-------------------------------|
+| GP0 | CRSF_TX  | ВЫХ UART0  | К пину RX приёмника           |
+| GP1 | CRSF_RX  | ВХ  UART0  | От пина TX приёмника          |
 
-### SBC SPI slave — GP10…GP13
+### SPI-слейв для SBC — GP10…GP13
 
-| Pin  | Signal      | Direction | Note                   |
-|------|-------------|-----------|------------------------|
-| GP10 | SPI1_SCK    | IN        | SPI1 clock             |
-| GP11 | SPI1_TX     | OUT       | MISO (RP2040 → SBC)    |
-| GP12 | SPI1_RX     | IN        | MOSI (SBC → RP2040)    |
-| GP13 | SPI1_CSn    | IN        | Chip select            |
-| GP14 | DATA_READY  | OUT GPIO  | Rising edge = new data |
-| GP15 | MODE_SEL    | IN  GPIO  | Pull-up; low=companion |
+| Пин  | Сигнал      | Направление | Примечание                        |
+|------|-------------|-------------|-----------------------------------|
+| GP10 | SPI1_SCK    | ВХ          | Тактовый сигнал SPI1              |
+| GP11 | SPI1_TX     | ВЫХ         | MISO (RP2040 → SBC)               |
+| GP12 | SPI1_RX     | ВХ          | MOSI (SBC → RP2040)               |
+| GP13 | SPI1_CSn    | ВХ          | Выбор кристалла                   |
+| GP14 | DATA_READY  | ВЫХ GPIO   | Нарастающий фронт = новые данные  |
+| GP15 | MODE_SEL    | ВХ  GPIO   | Pull-up; замкнуть на GND = companion |
 
-### IMU — GP20…GP22 (right side, consecutive)
+### IMU — GP20…GP22 (правая сторона, 3 пина подряд)
 
-| Pin  | Signal    | Direction | Note                   |
-|------|-----------|-----------|------------------------|
-| GP20 | I2C0_SDA  | I/O       | I2C0 data              |
-| GP21 | I2C0_SCL  | OUT       | I2C0 clock             |
-| GP22 | IMU_INT1  | IN  GPIO  | Interrupt from IMU     |
+| Пин  | Сигнал    | Направление | Примечание                  |
+|------|-----------|-------------|-----------------------------|
+| GP20 | I2C0_SDA  | I/O         | Данные I2C0                 |
+| GP21 | I2C0_SCL  | ВЫХ         | Тактовый I2C0               |
+| GP22 | IMU_INT1  | ВХ  GPIO   | Прерывание от IMU           |
 
-### ADC — GP26…GP28
+### АЦП — GP26…GP28
 
-| Pin  | ADC ch | Signal      | Note                              |
-|------|--------|-------------|-----------------------------------|
-| GP26 | CH0    | VBAT        | Voltage divider (see target_config.h) |
-| GP27 | CH1    | Left IS     | BTS7960 left driver IS output     |
-| GP28 | CH2    | Right IS    | BTS7960 right driver IS output    |
+| Пин  | Канал АЦП | Сигнал       | Примечание                              |
+|------|-----------|--------------|-----------------------------------------|
+| GP26 | CH0       | VBAT         | Делитель напряжения (см. target_config.h) |
+| GP27 | CH1       | IS левого    | Выход IS левого драйвера BTS7960        |
+| GP28 | CH2       | IS правого   | Выход IS правого драйвера BTS7960       |
 
-### Misc
+### Прочее
 
-| Pin  | Signal      | Note                      |
-|------|-------------|---------------------------|
-| GP25 | STATUS_LED  | Onboard LED, active high  |
+| Пин  | Сигнал      | Примечание                    |
+|------|-------------|-------------------------------|
+| GP25 | STATUS_LED  | Встроенный светодиод, акт. H  |
 
-## PWM carrier frequency
+## Частота несущей ШИМ
 
-Both PWM slices are configured at **20 kHz** (wrap = 6249 at 125 MHz sys-clock,
-integer divider = 1). Both channels of a slice share the same carrier — this
-is sufficient for the BTS7960 which only needs one PWM per half-bridge.
+Оба ШИМ-слайса настроены на **20 кГц** (wrap = 6249 при тактовой 125 МГц,
+делитель = 1). Оба канала одного слайса работают на одной несущей — этого
+достаточно для BTS7960, которому нужен один ШИМ на полумост.
 
-## Current sense
+## Датчик тока (Current sense)
 
-Each BTS7960 exposes one IS (current sense) pin for its half-bridge. The
-firmware reads CH1 for the left motor and CH2 for the right motor. The R and L
-sub-channel aliases in `target.h` both point to the same ADC channel since
-there is a single IS pin per chip.
+Каждый BTS7960 выдаёт один сигнал IS для своего полумоста. Прошивка
+читает CH1 для левого мотора и CH2 для правого. Псевдонимы R и L в
+`target.h` оба указывают на один и тот же канал АЦП, так как IS-пин
+на каждом чипе один.
 
-## Build
+## Сборка прошивки
 
 ```
 pio run -e rpico_rp2040_standalone
 pio run -e rpico_rp2040_companion
 ```
 
-Flash via USB (hold BOOTSEL, connect USB, release):
+Прошивка через USB (зажать BOOTSEL, подключить USB, отпустить BOOTSEL):
 ```
 pio run -e rpico_rp2040_standalone --target upload
 ```
