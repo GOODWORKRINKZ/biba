@@ -77,6 +77,8 @@ static const biba_pid_config_t s_heading_cfg = {
     .output_limit = 0.5f, .integral_limit = 0.5f
 };
 
+static bool s_armed;   /* tracks arm state across ticks for edge logging */
+
 static float rc_to_unit(uint16_t v)
 {
     /* Standard CRSF channel: 172..1811 maps to -1..+1. */
@@ -156,90 +158,186 @@ void biba_mode_standalone_tick(void)
 
     bool failsafe = biba_failsafe_tick(&s_crsf_failsafe, now);
 
-    float throttle = 0.0f;
-    float steer = 0.0f;
-    if (!failsafe) {
-        throttle = rc_to_unit(s_channels[1]);   /* CH2 */
-        steer    = rc_to_unit(s_channels[0]);   /* CH1 */
+    /* ------------------------------------------------------------------ *
+     * Channel reads (normalised -1..+1, mirroring biba-controller/config.py)
+     * ------------------------------------------------------------------ */
+    float raw_throttle = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_THROTTLE]);
+    float raw_steering = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_STEERING]);
+    float arm_ch       = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_ARM]);
+    float speed_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_SPEED_MODE]);
+    float drive_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_DRIVE_MODE]);
+    float trim_ch      = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_TRIM]);
+
+    /* ------------------------------------------------------------------ *
+     * Arm / disarm
+     * ------------------------------------------------------------------ */
+    bool armed = (!failsafe) && (arm_ch > BIBA_ARM_THRESHOLD);
+    if (armed && !s_armed) {
+        printf("[biba] ARMED\r\n");
+    } else if (!armed && s_armed) {
+        printf("[biba] DISARMED\r\n");
+        biba_pid_reset(&s_heading_pid);
+    }
+    s_armed = armed;
+
+    /* ------------------------------------------------------------------ *
+     * Speed mode  (3-position switch → 1/3 / 2/3 / full scale)
+     * ------------------------------------------------------------------ */
+    float speed_scale;
+    if (speed_sel < BIBA_SPEED_MODE_LOW_THRESHOLD) {
+        speed_scale = BIBA_SPEED_MODE_SLOW_SCALE;
+    } else if (speed_sel > BIBA_SPEED_MODE_HIGH_THRESHOLD) {
+        speed_scale = BIBA_SPEED_MODE_FAST_SCALE;
     } else {
+        speed_scale = BIBA_SPEED_MODE_MEDIUM_SCALE;
+    }
+
+    /* Scale drive inputs: tank-mix → scale → un-mix  (≡ Python
+     * _scale_drive_inputs_for_speed_mode).  Without clamping this
+     * simplifies to throttle *= s, steering *= s, but the full form
+     * handles corner cases at the unit-circle boundary correctly. */
+    float throttle, steering;
+    {
+        float ml = biba_clamp_unit(raw_throttle + raw_steering);
+        float mr = biba_clamp_unit(raw_throttle - raw_steering);
+        float sl = ml * speed_scale;
+        float sr = mr * speed_scale;
+        throttle = (sl + sr) * 0.5f;
+        steering = (sl - sr) * 0.5f;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Drive mode  (low position = MANUAL, else = STABILIZED)
+     * In STABILIZED the heading-hold PID adds a small yaw correction.
+     * The PID error is 0 until a real IMU feeds gyro data; when it does,
+     * re-tune kp/kd in s_heading_cfg.
+     * ------------------------------------------------------------------ */
+    bool stabilized = (drive_sel > BIBA_DRIVE_MODE_LOW_THRESHOLD);
+    if (stabilized && armed) {
+        float correction = biba_pid_step(&s_heading_pid, &s_heading_cfg,
+                                         0.0f, dt);
+        steering = biba_clamp_unit(steering + correction);
+    } else if (!armed) {
         biba_pid_reset(&s_heading_pid);
     }
 
-    /* Heading-hold correction: fold in a small PID drive on steer error.
-     * Without IMU the PID just becomes a no-op (error = 0). */
-    float heading_correction = biba_pid_step(&s_heading_pid, &s_heading_cfg,
-                                             0.0f, dt);
-    steer = biba_clamp_unit(steer + heading_correction);
-
-    biba_mix_output_t mix = biba_mix_differential(throttle, steer);
-
-    biba_motor_current_t il = biba_current_sense_left();
-    biba_motor_current_t ir = biba_current_sense_right();
-    biba_motor_limit_t lim = {
-        .current_limit_a  = BIBA_LEFT_MAX_CURRENT_A,
-        .power_limit_w    = BIBA_LEFT_MAX_POWER_W,
-        .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
-    };
-    biba_motor_limit_t rim = {
-        .current_limit_a  = BIBA_RIGHT_MAX_CURRENT_A,
-        .power_limit_w    = BIBA_RIGHT_MAX_POWER_W,
-        .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
-    };
-    biba_limit_result_t out = biba_apply_motor_limits(mix.left, mix.right,
-                                                       il, ir, lim, rim);
-    if (failsafe) {
-        out.left = 0.0f;
-        out.right = 0.0f;
+    /* Limit throttle + steering to the speed-mode envelope (≡ Python
+     * _limit_drive_output_for_speed_mode). */
+    {
+        float lim_thr = throttle;
+        if (lim_thr >  speed_scale) lim_thr =  speed_scale;
+        if (lim_thr < -speed_scale) lim_thr = -speed_scale;
+        float steer_lim = speed_scale - (lim_thr < 0.0f ? -lim_thr : lim_thr);
+        if (steer_lim < 0.0f) steer_lim = 0.0f;
+        float lim_str = steering;
+        if (lim_str >  steer_lim) lim_str =  steer_lim;
+        if (lim_str < -steer_lim) lim_str = -steer_lim;
+        throttle = lim_thr;
+        steering = lim_str;
     }
-    biba_bts7960_drive(out.left, out.right);
 
-    /* Publish telemetry / pulse DATA_READY on each fresh ADC scan. */
+    /* ------------------------------------------------------------------ *
+     * Motor trim  (live from CH_TRIM — no persistence in standalone mode)
+     * Positive trim → attenuate right motor.
+     * Negative trim → attenuate left motor.
+     * ------------------------------------------------------------------ */
+    float trim = trim_ch * BIBA_MOTOR_TRIM_MAX_EFFECT;
+    if (trim >  BIBA_MOTOR_TRIM_MAX_EFFECT) trim =  BIBA_MOTOR_TRIM_MAX_EFFECT;
+    if (trim < -BIBA_MOTOR_TRIM_MAX_EFFECT) trim = -BIBA_MOTOR_TRIM_MAX_EFFECT;
+
+    /* ------------------------------------------------------------------ *
+     * Mix → current limiter → trim → drive
+     * ------------------------------------------------------------------ */
+    float left_out = 0.0f, right_out = 0.0f;
+    bool left_limited = false, right_limited = false;
+
+    if (armed) {
+        biba_mix_output_t mix = biba_mix_differential(throttle, steering);
+
+        biba_motor_current_t il = biba_current_sense_left();
+        biba_motor_current_t ir = biba_current_sense_right();
+        biba_motor_limit_t lim = {
+            .current_limit_a  = BIBA_LEFT_MAX_CURRENT_A,
+            .power_limit_w    = BIBA_LEFT_MAX_POWER_W,
+            .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
+        };
+        biba_motor_limit_t rim = {
+            .current_limit_a  = BIBA_RIGHT_MAX_CURRENT_A,
+            .power_limit_w    = BIBA_RIGHT_MAX_POWER_W,
+            .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
+        };
+        biba_limit_result_t out = biba_apply_motor_limits(mix.left, mix.right,
+                                                           il, ir, lim, rim);
+        left_limited  = out.left_limited;
+        right_limited = out.right_limited;
+        left_out  = out.left;
+        right_out = out.right;
+
+        /* Apply trim */
+        if (trim > 0.0f) {
+            right_out *= (1.0f - trim);
+        } else if (trim < 0.0f) {
+            left_out *= (1.0f + trim);   /* trim is negative → reduces left */
+        }
+    }
+
+    biba_bts7960_drive(left_out, right_out);
+
+    /* ------------------------------------------------------------------ *
+     * Telemetry / DATA_READY / status LED
+     * ------------------------------------------------------------------ */
     uint32_t scan_count = biba_hal_adc_scan_count();
     if (scan_count != s_last_scan_count) {
         s_last_scan_count = scan_count;
+        biba_motor_current_t il = biba_current_sense_left();
+        biba_motor_current_t ir = biba_current_sense_right();
         biba_telemetry_input_t inputs = {
-            .setpoint_left = out.left,
-            .setpoint_right = out.right,
-            .current_left_a = il.current_a,
-            .current_right_a = ir.current_a,
-            .crsf_rssi = s_link.uplink_rssi_1,
+            .setpoint_left    = left_out,
+            .setpoint_right   = right_out,
+            .current_left_a   = il.current_a,
+            .current_right_a  = ir.current_a,
+            .crsf_rssi        = s_link.uplink_rssi_1,
             .crsf_link_quality = s_link.uplink_link_quality,
-            .crsf_snr_db = s_link.uplink_snr,
-            .error_flags = (failsafe ? BIBA_PROTO_FLAG_FAILSAFE : 0)
-                         | (failsafe ? 0 : BIBA_PROTO_FLAG_CRSF_ALIVE)
-                         | (out.left_limited || out.right_limited ? BIBA_PROTO_FLAG_CURRENT_LIMIT : 0),
+            .crsf_snr_db      = s_link.uplink_snr,
+            .error_flags      = (failsafe      ? BIBA_PROTO_FLAG_FAILSAFE      : 0u)
+                              | (failsafe      ? 0u : BIBA_PROTO_FLAG_CRSF_ALIVE)
+                              | (!armed        ? BIBA_PROTO_FLAG_FAILSAFE       : 0u)
+                              | (left_limited || right_limited
+                                               ? BIBA_PROTO_FLAG_CURRENT_LIMIT  : 0u),
             .seq = s_telemetry_seq++,
         };
         biba_proto_telemetry_t tlm;
         biba_telemetry_collect(&inputs, &tlm);
         (void)tlm; /* CRSF telemetry uplink is a follow-up patch */
         biba_hal_data_ready_pulse();
-        biba_hal_status_led_set(!failsafe);
+        biba_hal_status_led_set(armed);   /* LED on = armed (not just "not failsafe") */
 
-        /* Log at ~1 Hz to avoid flooding semihosting.
-         * Use integer-scaled values to avoid %f / soft-float stack bloat. */
+        /* Log at ~1 Hz */
         static uint32_t s_last_log_ms;
-        uint32_t now = biba_hal_now_ms();
         if (now - s_last_log_ms >= 1000u) {
             s_last_log_ms = now;
-            printf("[biba] t=%lu fs=%d L=%d R=%d rssi=%d lq=%d"
-                   " | rx_b=%lu frm=%lu bad=%lu ch=%lu ch0=%u ch1=%u\r\n",
-                   now, failsafe,
-                   (int)(out.left * 100), (int)(out.right * 100),
-                   s_link.uplink_rssi_1, s_link.uplink_link_quality,
-                   s_dbg_bytes_total, s_dbg_frames_ok, s_dbg_frames_bad, s_dbg_ch_frames,
-                   s_channels[0], s_channels[1]);
+            int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
+            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d rssi=%d lq=%d\r\n",
+                   now, (int)failsafe, (int)armed, spd, (int)stabilized,
+                   (int)(raw_throttle * 100), (int)(raw_steering * 100),
+                   (int)(left_out * 100), (int)(right_out * 100),
+                   s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
-            /* Extra UART/DMA health line every 5 s to diagnose rx_b=0 */
+            /* CRSF/DMA health line every 5 s */
             static uint32_t s_last_diag_ms;
             if (now - s_last_diag_ms >= 5000u) {
                 s_last_diag_ms = now;
                 biba_hal_crsf_diag_t d = biba_hal_crsf_diag();
-                printf("[biba] CRSF diag: dma_init=%lu ndtr=%lu err=0x%lx rx_st=0x%lx tx_st=0x%lx SR=0x%lx CR1=0x%lx RCC_APB1=%lx tx_ok=%lu tx_fail=%lu\r\n",
+                printf("[biba] CRSF diag: dma_init=%lu ndtr=%lu err=0x%lx"
+                       " rx_st=0x%lx tx_st=0x%lx SR=0x%lx CR1=0x%lx"
+                       " RCC_APB1=%lx tx_ok=%lu tx_fail=%lu"
+                       " | rx_b=%lu frm=%lu bad=%lu ch=%lu\r\n",
                        d.dma_init_status, d.dma_ndtr,
                        d.uart_error_code, d.uart_rx_state, d.uart_tx_state,
                        d.uart_sr, d.uart_cr1, d.rcc_apb1enr,
-                       s_dbg_tx_ok, s_dbg_tx_fail);
+                       s_dbg_tx_ok, s_dbg_tx_fail,
+                       s_dbg_bytes_total, s_dbg_frames_ok,
+                       s_dbg_frames_bad, s_dbg_ch_frames);
             }
         }
     }

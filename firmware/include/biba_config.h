@@ -103,4 +103,72 @@
 #  define BIBA_SPI_LINK_TIMEOUT_MS     200
 #endif
 
+/* --- RC channel assignments (0-based index, match biba-controller/config.py) */
+
+#ifndef BIBA_CH_THROTTLE
+#  define BIBA_CH_THROTTLE          1   /* CH2 */
+#endif
+#ifndef BIBA_CH_STEERING
+#  define BIBA_CH_STEERING          3   /* CH4 */
+#endif
+#ifndef BIBA_CH_ARM
+#  define BIBA_CH_ARM               4   /* CH5 */
+#endif
+#ifndef BIBA_CH_SPEED_MODE
+#  define BIBA_CH_SPEED_MODE        5   /* CH6 */
+#endif
+#ifndef BIBA_CH_DRIVE_MODE
+#  define BIBA_CH_DRIVE_MODE        6   /* CH7 */
+#endif
+#ifndef BIBA_CH_TRIM
+#  define BIBA_CH_TRIM              8   /* CH9 */
+#endif
+
+/* Arm threshold: channel normalised value must exceed this to arm. */
+#ifndef BIBA_ARM_THRESHOLD
+#  define BIBA_ARM_THRESHOLD        0.3f
+#endif
+
+/* Speed mode 3-position switch thresholds (normalised -1..+1). */
+#ifndef BIBA_SPEED_MODE_LOW_THRESHOLD
+#  define BIBA_SPEED_MODE_LOW_THRESHOLD   (-0.3f)
+#endif
+#ifndef BIBA_SPEED_MODE_HIGH_THRESHOLD
+#  define BIBA_SPEED_MODE_HIGH_THRESHOLD    0.3f
+#endif
+#ifndef BIBA_SPEED_MODE_SLOW_SCALE
+#  define BIBA_SPEED_MODE_SLOW_SCALE       (1.0f / 3.0f)
+#endif
+#ifndef BIBA_SPEED_MODE_MEDIUM_SCALE
+#  define BIBA_SPEED_MODE_MEDIUM_SCALE     (2.0f / 3.0f)
+#endif
+#ifndef BIBA_SPEED_MODE_FAST_SCALE
+#  define BIBA_SPEED_MODE_FAST_SCALE        1.0f
+#endif
+
+/* Drive mode switch: low position → MANUAL, else → STABILIZED. */
+#ifndef BIBA_DRIVE_MODE_LOW_THRESHOLD
+#  define BIBA_DRIVE_MODE_LOW_THRESHOLD   (-0.3f)
+#endif
+
+/* Motor trim channel: trim_ch * MAX_EFFECT applied post-mix.
+ * Positive trim → attenuate right motor, negative → attenuate left. */
+#ifndef BIBA_MOTOR_TRIM_MAX_EFFECT
+#  define BIBA_MOTOR_TRIM_MAX_EFFECT        0.30f
+#endif
+
+/* Deadband below which throttle/steering are not considered active. */
+#ifndef BIBA_MOTOR_DEADBAND
+#  define BIBA_MOTOR_DEADBAND               0.05f
+#endif
+
+/* Motor direction inversion (1 = normal, -1 = inverted).
+ * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py. */
+#ifndef BIBA_LEFT_MOTOR_DIR
+#  define BIBA_LEFT_MOTOR_DIR    1
+#endif
+#ifndef BIBA_RIGHT_MOTOR_DIR
+#  define BIBA_RIGHT_MOTOR_DIR  (-1)
+#endif
+
 #endif /* BIBA_CONFIG_H */
