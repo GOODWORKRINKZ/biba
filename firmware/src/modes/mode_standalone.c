@@ -21,6 +21,7 @@
 #include "drivers/current_sense.h"
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
+#include "app/melody.h"
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
 #define CRSF_FRAMETYPE_DEVICE_PING  0x28u
@@ -78,6 +79,8 @@ static const biba_pid_config_t s_heading_cfg = {
 };
 
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
+static bool s_last_failsafe;
+static biba_melody_player_t s_player;
 
 static float rc_to_unit(uint16_t v)
 {
@@ -94,17 +97,11 @@ void biba_mode_standalone_init(void)
     s_last_tick_ms = biba_hal_now_ms();
     biba_bts7960_set_enabled(true);
 
-    /* --- UART loopback self-test (requires PB10 → PB11 jumper) ----------
-     * Short PB10 to PB11, reset, check the log line below.
-     * If loopback_ok=1 — UART/DMA hardware is fine, problem is EP01/wiring.
-     * If loopback_ok=0 — UART or DMA init failed on this board. */
-    biba_hal_delay_ms(1);               /* let DMA arm */
-    uint8_t lb_byte = 0xA5u;
-    biba_hal_crsf_write(&lb_byte, 1);
-    biba_hal_delay_ms(1);               /* ~20 µs at 420 kbaud, 1 ms is plenty */
-    uint8_t lb_buf[1];
-    int loopback_ok = (biba_hal_crsf_read(lb_buf, 1) == 1 && lb_buf[0] == 0xA5u);
-    printf("[biba] UART loopback: loopback_ok=%d (need PB10->PB11 jumper)\r\n", loopback_ok);
+    /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
+    s_last_failsafe = true;
+
+    /* Play startup fanfare through motor coils. */
+    biba_melody_player_start(&s_player, &biba_melody_startup);
 }
 
 static void ingest_crsf(void)
@@ -172,11 +169,22 @@ void biba_mode_standalone_tick(void)
      * Arm / disarm
      * ------------------------------------------------------------------ */
     bool armed = (!failsafe) && (arm_ch > BIBA_ARM_THRESHOLD);
+
+    /* Failsafe rising edge: play warning (distinct from normal disarm). */
+    if (failsafe && !s_last_failsafe) {
+        biba_melody_player_start(&s_player, &biba_melody_failsafe);
+    }
+    s_last_failsafe = failsafe;
+
     if (armed && !s_armed) {
         printf("[biba] ARMED\r\n");
+        biba_melody_player_start(&s_player, &biba_melody_arm);
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
         biba_pid_reset(&s_heading_pid);
+        if (!failsafe) {   /* failsafe already started its own melody */
+            biba_melody_player_start(&s_player, &biba_melody_disarm);
+        }
     }
     s_armed = armed;
 
@@ -281,7 +289,21 @@ void biba_mode_standalone_tick(void)
         }
     }
 
-    biba_bts7960_drive(left_out, right_out);
+    /* If actively driving, motors are needed — interrupt any melody. */
+    bool control_active = armed &&
+        ((throttle > BIBA_MOTOR_DEADBAND  || throttle < -BIBA_MOTOR_DEADBAND) ||
+         (steering > BIBA_MOTOR_DEADBAND  || steering < -BIBA_MOTOR_DEADBAND));
+    if (control_active) {
+        biba_melody_player_stop(&s_player);
+    }
+
+    /* Advance melody state machine (no-op when idle). */
+    biba_melody_player_tick(&s_player, now);
+
+    /* Drive motors only when audio is not occupying the PWM hardware. */
+    if (!s_player.active) {
+        biba_bts7960_drive(left_out, right_out);
+    }
 
     /* ------------------------------------------------------------------ *
      * Telemetry / DATA_READY / status LED

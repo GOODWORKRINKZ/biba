@@ -1,10 +1,18 @@
 /* Motor PWM HAL for RP2040 (BiBa firmware).
  *
  * Uses pico-sdk hardware PWM.  Left pair (L_RPWM/L_LPWM) is on PWM
- * slice 1 (GP2/GP3); right pair (R_RPWM/R_LPWM) is on PWM slice 2
- * (GP4/GP5).  Both channels of a slice share the same wrap value
- * (i.e. the same carrier frequency), so per-channel independent
- * carriers are not supported — motor-audio functions return false.
+ * slice 1 (GP2/GP3); right pair (R_RPWM/R_LPWM) is on PWM slice 3
+ * (GP6/GP7).  Both channels of a slice share one counter, so they
+ * share the carrier frequency.
+ *
+ * AUDIO MODE (biba_hal_motor_audio_begin):
+ *   Channel B (LPWM) is inverted via pwm_set_output_polarity.
+ *   Setting both compare values to 50% produces true push-pull:
+ *     counter < 50%  → RPWM=1 LPWM=0 → H-bridge drives fwd
+ *     counter ≥ 50%  → RPWM=0 LPWM=1 → H-bridge drives rev
+ *   Result: pure AC through the motor coil at the audio frequency.
+ *   This is louder than the Python beat-frequency trick and requires
+ *   no per-channel timer — the inversion does all the work.
  *
  * 20 kHz carrier at 125 MHz system clock:
  *   wrap = 125 000 000 / 20 000 − 1 = 6249
@@ -25,7 +33,8 @@
 #define PWM_WRAP ((uint16_t)((BIBA_SYS_CLOCK_HZ / BIBA_PWM_FREQUENCY_HZ) - 1u))
 
 static uint s_slice_l;   /* slice for left  pair (GP2/GP3) */
-static uint s_slice_r;   /* slice for right pair (GP4/GP5) */
+static uint s_slice_r;   /* slice for right pair (GP6/GP7) */
+static bool s_audio_mode = false;
 
 /* Convert absolute duty [0.0, 1.0] to a 16-bit compare value. */
 static uint16_t duty_to_level(float duty_abs)
@@ -62,6 +71,7 @@ void biba_hal_motor_pwm_init(void)
 
 void biba_hal_motor_pwm_left(float duty)
 {
+    if (s_audio_mode) return;   /* audio owns the PWM hardware */
     if (duty > 0.0f) {
         pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO, duty_to_level(duty));
         pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, 0u);
@@ -76,6 +86,7 @@ void biba_hal_motor_pwm_left(float duty)
 
 void biba_hal_motor_pwm_right(float duty)
 {
+    if (s_audio_mode) return;   /* audio owns the PWM hardware */
     if (duty > 0.0f) {
         pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, duty_to_level(duty));
         pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
@@ -88,15 +99,80 @@ void biba_hal_motor_pwm_right(float duty)
     }
 }
 
-/* Motor audio: both channels of a slice share one wrap value so
- * independent frequencies are not possible without remapping pins to
- * separate slices.  Return false to indicate unsupported. */
+/* -----------------------------------------------------------------------
+ * Audio mode: hardware push-pull at the requested note frequency.
+ *
+ * Channel layout in audio mode (after motor_audio_begin):
+ *   freq_hz[0] / duty_unit[0]  →  left  motor (slice l)
+ *   freq_hz[2] / duty_unit[2]  →  right motor (slice r)
+ *   channels 1 and 3 are ignored (LPWM is driven by inversion)
+ * ----------------------------------------------------------------------- */
+
+bool biba_hal_motor_audio_begin(void)
+{
+    /* Silence traction outputs before switching mode. */
+    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+    /* Invert channel B (LPWM) on both slices so that setting RPWM and
+     * LPWM to the same duty produces complementary drive (push-pull). */
+    pwm_set_output_polarity(s_slice_l, false, true);
+    pwm_set_output_polarity(s_slice_r, false, true);
+    s_audio_mode = true;
+    return true;
+}
+
+bool biba_hal_motor_audio_end(void)
+{
+    /* Silence before restoring traction settings. */
+    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+    /* Restore traction carrier and normal (non-inverted) polarity. */
+    pwm_set_wrap(s_slice_l, PWM_WRAP);
+    pwm_set_wrap(s_slice_r, PWM_WRAP);
+    pwm_set_output_polarity(s_slice_l, false, false);
+    pwm_set_output_polarity(s_slice_r, false, false);
+    s_audio_mode = false;
+    return true;
+}
+
 bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
                                   const float    duty_unit[4])
 {
-    (void)freq_hz; (void)duty_unit;
-    return false;
-}
+    /* --- Left motor (slice l, channels 0/1) --- */
+    uint32_t lf = freq_hz[0];
+    if (lf > 0u) {
+        uint32_t wrap = (BIBA_SYS_CLOCK_HZ / lf);
+        if (wrap > 0u) wrap--; else wrap = 0u;
+        if (wrap > 65535u) wrap = 65535u;
+        pwm_set_wrap(s_slice_l, (uint16_t)wrap);
+        /* Both RPWM and LPWM set to the same level; LPWM is inverted
+         * (set in audio_begin) so the effective outputs are push-pull. */
+        uint16_t lvl = (uint16_t)(duty_unit[0] * (float)(wrap + 1u));
+        pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO, lvl);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, lvl);
+    } else {
+        pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO, 0u);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, 0u);
+    }
 
-bool biba_hal_motor_audio_begin(void) { return false; }
-bool biba_hal_motor_audio_end(void)   { return false; }
+    /* --- Right motor (slice r, channels 2/3) --- */
+    uint32_t rf = freq_hz[2];
+    if (rf > 0u) {
+        uint32_t wrap = (BIBA_SYS_CLOCK_HZ / rf);
+        if (wrap > 0u) wrap--; else wrap = 0u;
+        if (wrap > 65535u) wrap = 65535u;
+        pwm_set_wrap(s_slice_r, (uint16_t)wrap);
+        uint16_t lvl = (uint16_t)(duty_unit[2] * (float)(wrap + 1u));
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, lvl);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, lvl);
+    } else {
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+    }
+
+    return true;
+}
