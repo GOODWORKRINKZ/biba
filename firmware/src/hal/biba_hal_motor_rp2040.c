@@ -26,6 +26,7 @@
 
 #include "hardware/pwm.h"
 #include "hardware/gpio.h"
+#include "pico/time.h"
 
 #include <math.h>
 
@@ -35,6 +36,7 @@
 static uint s_slice_l;   /* slice for left  pair (GP2/GP3) */
 static uint s_slice_r;   /* slice for right pair (GP6/GP7) */
 static bool s_audio_mode = false;
+static volatile bool s_pcm_mode = false;
 
 /* Convert absolute duty [0.0, 1.0] to a 16-bit compare value. */
 static uint16_t duty_to_level(float duty_abs)
@@ -71,7 +73,7 @@ void biba_hal_motor_pwm_init(void)
 
 void biba_hal_motor_pwm_left(float duty)
 {
-    if (s_audio_mode) return;   /* audio owns the PWM hardware */
+    if (s_audio_mode || s_pcm_mode) return;   /* audio/PCM owns the PWM hardware */
     if (duty > 0.0f) {
         pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO, duty_to_level(duty));
         pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, 0u);
@@ -86,7 +88,7 @@ void biba_hal_motor_pwm_left(float duty)
 
 void biba_hal_motor_pwm_right(float duty)
 {
-    if (s_audio_mode) return;   /* audio owns the PWM hardware */
+    if (s_audio_mode || s_pcm_mode) return;   /* audio/PCM owns the PWM hardware */
     if (duty > 0.0f) {
         pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, duty_to_level(duty));
         pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
@@ -194,4 +196,98 @@ bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
     }
 
     return true;
+}
+
+/* -----------------------------------------------------------------------
+ * PCM-over-PWM playback — BIPOLAR mode (≡ Python play_bipolar_samples).
+ *
+ * sample > 128 → RPWM = (sample-128)/127 × wrap, LPWM = 0   (forward)
+ * sample < 128 → RPWM = 0,  LPWM = (128-sample)/128 × wrap  (reverse)
+ * sample = 128 → RPWM = 0,  LPWM = 0                        (silence)
+ *
+ * Full coil swing ±Vbat — twice the amplitude of the old DC-bias scheme.
+ * No polarity inversion; traction PWM is blocked while active.
+ * ----------------------------------------------------------------------- */
+
+static volatile bool          s_pcm_mode;   /* defined at top of file */
+static const uint8_t         *s_pcm_samples;
+static uint32_t               s_pcm_count;
+static volatile uint32_t      s_pcm_pos;
+static struct repeating_timer s_pcm_timer;
+
+static bool s_pcm_isr(struct repeating_timer *t)
+{
+    (void)t;
+    if (s_pcm_pos >= s_pcm_count) {
+        pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+        s_pcm_mode = false;
+        return false;   /* cancels the repeating timer */
+    }
+    uint8_t  s = s_pcm_samples[s_pcm_pos++];
+    uint16_t lvl;
+    if (s > 128u) {
+        lvl = (uint16_t)((uint32_t)(s - 128u) * PWM_WRAP / 127u);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  lvl);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, lvl);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+    } else if (s < 128u) {
+        lvl = (uint16_t)((uint32_t)(128u - s) * PWM_WRAP / 128u);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  lvl);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, lvl);
+    } else {
+        pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+    }
+    return true;
+}
+
+bool biba_hal_motor_pcm_play(const uint8_t *samples, uint32_t count,
+                              uint32_t rate_hz)
+{
+    if (s_audio_mode) return false;   /* melody player owns PWM */
+
+    if (s_pcm_mode) {
+        cancel_repeating_timer(&s_pcm_timer);
+        s_pcm_mode = false;
+    }
+
+    s_pcm_samples = samples;
+    s_pcm_count   = count;
+    s_pcm_pos     = 0;
+
+    /* Silence all channels before starting (bipolar: idle = all zero). */
+    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+
+    s_pcm_mode = true;
+    int32_t period_us = -(int32_t)(1000000u / rate_hz);
+    add_repeating_timer_us(period_us, s_pcm_isr, NULL, &s_pcm_timer);
+    return true;
+}
+
+bool biba_hal_motor_pcm_active(void)
+{
+    return s_pcm_mode;
+}
+
+void biba_hal_motor_pcm_stop(void)
+{
+    if (s_pcm_mode) {
+        cancel_repeating_timer(&s_pcm_timer);
+        s_pcm_mode = false;
+    }
+    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
 }

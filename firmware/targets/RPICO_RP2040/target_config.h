@@ -8,6 +8,7 @@
  * No per-motor current sense on this target; limits are unchanged. */
 
 #define BIBA_SYS_CLOCK_HZ            125000000u
+#define BIBA_PWM_FREQUENCY_HZ        20000   /* 20 kHz carrier, above audible */
 
 /* No dedicated IS op-amp; leave zero offset/gain defaults from
  * biba_config.h — callers that read aliased current channels will get

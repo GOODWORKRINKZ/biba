@@ -78,6 +78,20 @@ bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
 bool biba_hal_motor_audio_begin(void);
 bool biba_hal_motor_audio_end(void);
 
+/* --- PCM-over-PWM playback ---------------------------------------------- *
+ *
+ * RPWM is held at 50 % of the existing 20 kHz carrier (DC bias).
+ * LPWM duty = sample / 255 — the differential voltage across the coil
+ * follows the audio waveform at the carrier frequency.
+ * A hardware repeating timer fires at rate_hz to feed each sample.
+ *
+ * While PCM is active traction PWM is blocked (same as audio mode).
+ * Returns false if the audio melody mode is already active. */
+bool biba_hal_motor_pcm_play(const uint8_t *samples, uint32_t count,
+                              uint32_t rate_hz);
+bool biba_hal_motor_pcm_active(void);
+void biba_hal_motor_pcm_stop(void);
+
 /* --- ADC scan ----------------------------------------------------------- */
 
 /* Fetch the latest 12-bit sample from the circular DMA scan buffer for

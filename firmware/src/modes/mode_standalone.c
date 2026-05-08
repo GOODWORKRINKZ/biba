@@ -22,6 +22,7 @@
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
 #include "app/melody.h"
+#include "app/pcm_sounds.h"
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
 #define CRSF_FRAMETYPE_DEVICE_PING  0x28u
@@ -182,12 +183,14 @@ void biba_mode_standalone_tick(void)
 
     if (armed && !s_armed) {
         printf("[biba] ARMED\r\n");
-        biba_melody_player_start(&s_player, &biba_melody_arm);
+        biba_melody_player_stop(&s_player);
+        biba_hal_motor_pcm_play(pcm_arm_data, pcm_arm_count, pcm_arm_rate);
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
-            biba_melody_player_start(&s_player, &biba_melody_disarm);
+            biba_melody_player_stop(&s_player);
+            biba_hal_motor_pcm_play(pcm_disarm_data, pcm_disarm_count, pcm_disarm_rate);
         }
     }
     s_armed = armed;
@@ -293,12 +296,13 @@ void biba_mode_standalone_tick(void)
         }
     }
 
-    /* If actively driving, motors are needed — interrupt any melody. */
+    /* If actively driving, motors are needed — interrupt any melody or PCM. */
     bool control_active = armed &&
         ((throttle > BIBA_MOTOR_DEADBAND  || throttle < -BIBA_MOTOR_DEADBAND) ||
          (steering > BIBA_MOTOR_DEADBAND  || steering < -BIBA_MOTOR_DEADBAND));
     if (control_active) {
         biba_melody_player_stop(&s_player);
+        biba_hal_motor_pcm_stop();
     }
 
     /* Beacon: play SOS every 8 s while CH_BEACON is high and not driving.
@@ -322,8 +326,8 @@ void biba_mode_standalone_tick(void)
     /* Advance melody state machine (no-op when idle). */
     biba_melody_player_tick(&s_player, now);
 
-    /* Drive motors only when audio is not occupying the PWM hardware. */
-    if (!s_player.active) {
+    /* Drive motors only when audio/PCM is not occupying the PWM hardware. */
+    if (!s_player.active && !biba_hal_motor_pcm_active()) {
         biba_bts7960_drive(left_out, right_out);
     }
 
