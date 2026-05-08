@@ -81,6 +81,7 @@ static const biba_pid_config_t s_heading_cfg = {
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
 static bool s_last_failsafe;
 static bool s_beacon_active;
+static uint32_t s_sos_next_ms;   /* earliest time for next SOS repeat */
 static biba_melody_player_t s_player;
 
 static float rc_to_unit(uint16_t v)
@@ -300,16 +301,21 @@ void biba_mode_standalone_tick(void)
         biba_melody_player_stop(&s_player);
     }
 
-    /* Beacon: loop SOS while CH_BEACON is high and we are not driving.  A
-     * priority event (failsafe/arm/disarm) may have already started its own
-     * melody; let it finish, then the beacon re-arms on the next idle tick. */
+    /* Beacon: play SOS every 8 s while CH_BEACON is high and not driving.
+     * Priority melodies (failsafe/arm/disarm) may run first; the interval
+     * timer keeps firing so the beacon stays audible on schedule. */
     if (beacon && !control_active) {
-        if (!s_player.active) {
+        if (!s_player.active && now >= s_sos_next_ms) {
             biba_melody_player_start(&s_player, &biba_melody_sos);
+            s_sos_next_ms = now + 8000u;
         }
-    } else if (!beacon && s_beacon_active) {
-        /* Beacon switched off — stop SOS if it was the active melody. */
-        biba_melody_player_stop(&s_player);
+    } else if (!beacon) {
+        if (s_beacon_active) {
+            /* Beacon just switched off — stop SOS immediately. */
+            biba_melody_player_stop(&s_player);
+        }
+        /* Reset timer so next activation fires immediately. */
+        s_sos_next_ms = 0u;
     }
     s_beacon_active = beacon;
 
