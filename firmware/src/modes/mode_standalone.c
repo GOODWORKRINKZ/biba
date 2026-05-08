@@ -80,6 +80,7 @@ static const biba_pid_config_t s_heading_cfg = {
 
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
 static bool s_last_failsafe;
+static bool s_beacon_active;
 static biba_melody_player_t s_player;
 
 static float rc_to_unit(uint16_t v)
@@ -164,6 +165,8 @@ void biba_mode_standalone_tick(void)
     float speed_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_SPEED_MODE]);
     float drive_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_DRIVE_MODE]);
     float trim_ch      = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_TRIM]);
+    float beacon_ch    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_BEACON]);
+    bool  beacon       = (beacon_ch > BIBA_ARM_THRESHOLD);
 
     /* ------------------------------------------------------------------ *
      * Arm / disarm
@@ -296,6 +299,19 @@ void biba_mode_standalone_tick(void)
     if (control_active) {
         biba_melody_player_stop(&s_player);
     }
+
+    /* Beacon: loop SOS while CH_BEACON is high and we are not driving.  A
+     * priority event (failsafe/arm/disarm) may have already started its own
+     * melody; let it finish, then the beacon re-arms on the next idle tick. */
+    if (beacon && !control_active) {
+        if (!s_player.active) {
+            biba_melody_player_start(&s_player, &biba_melody_sos);
+        }
+    } else if (!beacon && s_beacon_active) {
+        /* Beacon switched off — stop SOS if it was the active melody. */
+        biba_melody_player_stop(&s_player);
+    }
+    s_beacon_active = beacon;
 
     /* Advance melody state machine (no-op when idle). */
     biba_melody_player_tick(&s_player, now);

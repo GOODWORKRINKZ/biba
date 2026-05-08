@@ -63,6 +63,9 @@ extern const biba_melody_t biba_melody_disarm;
 /* Failsafe warning (124 BPM, 3 notes, ~1 s) */
 extern const biba_melody_t biba_melody_failsafe;
 
+/* SOS beacon (132 BPM, 7 notes, ~1.1 s — loop while beacon channel active) */
+extern const biba_melody_t biba_melody_sos;
+
 /* ---- Player API ------------------------------------------------------- */
 
 /* Start playing a melody from the beginning.

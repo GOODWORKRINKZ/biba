@@ -76,6 +76,19 @@ const biba_melody_t biba_melody_failsafe = {
     sizeof(s_failsafe_l) / sizeof(s_failsafe_l[0]),
 };
 
+/* sos — "A4 F4 A4 P D#4 P A4" / "F4 D#4 F4 P G4 P F4"  @132 BPM
+ * quarter=455 ms  1/16=114 ms  1/8=227 ms */
+static const biba_note_t s_sos_l[] = {
+    {440, 114}, {349, 114}, {440, 114}, {0, 114}, {311, 227}, {0, 114}, {440, 114},
+};
+static const biba_note_t s_sos_r[] = {
+    {349, 114}, {311, 114}, {349, 114}, {0, 114}, {392, 227}, {0, 114}, {349, 114},
+};
+const biba_melody_t biba_melody_sos = {
+    s_sos_l, s_sos_r,
+    sizeof(s_sos_l) / sizeof(s_sos_l[0]),
+};
+
 /* ---- Player ----------------------------------------------------------- */
 
 void biba_melody_player_start(biba_melody_player_t *p, const biba_melody_t *m)

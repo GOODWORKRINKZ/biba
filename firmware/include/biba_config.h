@@ -120,6 +120,9 @@
 #ifndef BIBA_CH_DRIVE_MODE
 #  define BIBA_CH_DRIVE_MODE        6   /* CH7 */
 #endif
+#ifndef BIBA_CH_BEACON
+#  define BIBA_CH_BEACON            7   /* CH8 */
+#endif
 #ifndef BIBA_CH_TRIM
 #  define BIBA_CH_TRIM              8   /* CH9 */
 #endif
