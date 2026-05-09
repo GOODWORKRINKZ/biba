@@ -165,6 +165,21 @@
 #  define BIBA_MOTOR_DEADBAND               0.05f
 #endif
 
+/* Trim gesture: hold the first 4 RC channels above this threshold
+ * for BIBA_TRIM_CONFIRM_HOLD_MS (while disarmed) to enter/exit trim mode.
+ * Matches biba-controller/main.py _TRIM_GESTURE_HIGH_THRESHOLD / MOTOR_TRIM_CONFIRM_HOLD_S. */
+#ifndef BIBA_TRIM_GESTURE_THRESHOLD
+#  define BIBA_TRIM_GESTURE_THRESHOLD       0.9f
+#endif
+#ifndef BIBA_TRIM_CONFIRM_HOLD_MS
+#  define BIBA_TRIM_CONFIRM_HOLD_MS         5000u
+#endif
+
+/* Reverse backup beep: interval between pip starts (ms). */
+#ifndef BIBA_REVERSE_PIP_INTERVAL_MS
+#  define BIBA_REVERSE_PIP_INTERVAL_MS      600u
+#endif
+
 /* Motor direction inversion (1 = normal, -1 = inverted).
  * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py. */
 #ifndef BIBA_LEFT_MOTOR_DIR

@@ -66,6 +66,13 @@ extern const biba_melody_t biba_melody_failsafe;
 /* SOS beacon (132 BPM, 7 notes, ~1.1 s — loop while beacon channel active) */
 extern const biba_melody_t biba_melody_sos;
 
+/* Trim mode enter/exit (ascending / descending triads) */
+extern const biba_melody_t biba_melody_trim_enter;
+extern const biba_melody_t biba_melody_trim_exit;
+
+/* Reverse backup pip (single A5, 100 ms — scheduled every BIBA_REVERSE_PIP_INTERVAL_MS) */
+extern const biba_melody_t biba_melody_backup_pip;
+
 /* ---- Player API ------------------------------------------------------- */
 
 /* Start playing a melody from the beginning.

@@ -22,7 +22,6 @@
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
 #include "app/melody.h"
-#include "app/pcm_sounds.h"
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
 #define CRSF_FRAMETYPE_DEVICE_PING  0x28u
@@ -84,6 +83,17 @@ static bool s_last_failsafe;
 static bool s_beacon_active;
 static uint32_t s_sos_next_ms;   /* earliest time for next SOS repeat */
 static biba_melody_player_t s_player;
+
+/* Reverse backup pip */
+static bool     s_reversing;
+static bool     s_reverse_pip_active;
+static uint32_t s_reverse_pip_next_ms;
+
+/* Motor trim state (ported from biba-controller/main.py) */
+static bool     s_trim_mode_active;
+static float    s_saved_motor_trim;
+static uint32_t s_trim_gesture_start_ms;
+static bool     s_trim_gesture_consumed;
 
 static float rc_to_unit(uint16_t v)
 {
@@ -183,15 +193,15 @@ void biba_mode_standalone_tick(void)
 
     if (armed && !s_armed) {
         printf("[biba] ARMED\r\n");
-        biba_melody_player_stop(&s_player);
-        biba_hal_motor_pcm_play(pcm_arm_data, pcm_arm_count, pcm_arm_rate);
+        biba_melody_player_start(&s_player, &biba_melody_arm);
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
-            biba_melody_player_stop(&s_player);
-            biba_hal_motor_pcm_play(pcm_disarm_data, pcm_disarm_count, pcm_disarm_rate);
+            biba_melody_player_start(&s_player, &biba_melody_disarm);
         }
+        /* Exit trim mode on disarm edge (safety) */
+        s_trim_mode_active = false;
     }
     s_armed = armed;
 
@@ -252,11 +262,48 @@ void biba_mode_standalone_tick(void)
     }
 
     /* ------------------------------------------------------------------ *
-     * Motor trim  (live from CH_TRIM — no persistence in standalone mode)
-     * Positive trim → attenuate right motor.
-     * Negative trim → attenuate left motor.
+     * Motor trim  (ported from biba-controller/main.py)
+     *
+     * Gesture: hold channels 0-3 all above BIBA_TRIM_GESTURE_THRESHOLD
+     * for BIBA_TRIM_CONFIRM_HOLD_MS while disarmed.
+     *   1st confirm  → enters trim mode  (play trim_enter, live trim via CH_TRIM)
+     *   2nd confirm  → saves & exits      (play trim_exit, saved trim persists)
+     *
+     * Positive saved trim → attenuate right motor.
+     * Negative saved trim → attenuate left motor.
      * ------------------------------------------------------------------ */
-    float trim = trim_ch * BIBA_MOTOR_TRIM_MAX_EFFECT;
+    bool trim_gesture = !armed && !failsafe &&
+        (rc_to_unit(s_channels[0]) > BIBA_TRIM_GESTURE_THRESHOLD) &&
+        (rc_to_unit(s_channels[1]) > BIBA_TRIM_GESTURE_THRESHOLD) &&
+        (rc_to_unit(s_channels[2]) > BIBA_TRIM_GESTURE_THRESHOLD) &&
+        (rc_to_unit(s_channels[3]) > BIBA_TRIM_GESTURE_THRESHOLD);
+    if (trim_gesture) {
+        if (s_trim_gesture_start_ms == 0u) {
+            s_trim_gesture_start_ms = now;
+        } else if (!s_trim_gesture_consumed &&
+                   (now - s_trim_gesture_start_ms >= BIBA_TRIM_CONFIRM_HOLD_MS)) {
+            if (s_trim_mode_active) {
+                float live = trim_ch * BIBA_MOTOR_TRIM_MAX_EFFECT;
+                if (live >  BIBA_MOTOR_TRIM_MAX_EFFECT) live =  BIBA_MOTOR_TRIM_MAX_EFFECT;
+                if (live < -BIBA_MOTOR_TRIM_MAX_EFFECT) live = -BIBA_MOTOR_TRIM_MAX_EFFECT;
+                s_saved_motor_trim = live;
+                s_trim_mode_active = false;
+                biba_melody_player_start(&s_player, &biba_melody_trim_exit);
+                printf("[biba] Trim saved: %.3f\r\n", s_saved_motor_trim);
+            } else {
+                s_trim_mode_active = true;
+                biba_melody_player_start(&s_player, &biba_melody_trim_enter);
+                printf("[biba] Trim mode ON\r\n");
+            }
+            s_trim_gesture_consumed = true;
+        }
+    } else {
+        s_trim_gesture_start_ms = 0u;
+        s_trim_gesture_consumed = false;
+    }
+    float trim = s_trim_mode_active
+        ? trim_ch * BIBA_MOTOR_TRIM_MAX_EFFECT
+        : s_saved_motor_trim;
     if (trim >  BIBA_MOTOR_TRIM_MAX_EFFECT) trim =  BIBA_MOTOR_TRIM_MAX_EFFECT;
     if (trim < -BIBA_MOTOR_TRIM_MAX_EFFECT) trim = -BIBA_MOTOR_TRIM_MAX_EFFECT;
 
@@ -296,13 +343,36 @@ void biba_mode_standalone_tick(void)
         }
     }
 
-    /* If actively driving, motors are needed — interrupt any melody or PCM. */
+    /* If actively driving, motors are needed — interrupt melodies.
+     * Exception: the intentional reverse backup pip must not be self-cancelled. */
     bool control_active = armed &&
         ((throttle > BIBA_MOTOR_DEADBAND  || throttle < -BIBA_MOTOR_DEADBAND) ||
          (steering > BIBA_MOTOR_DEADBAND  || steering < -BIBA_MOTOR_DEADBAND));
-    if (control_active) {
+    if (control_active && !s_reverse_pip_active) {
         biba_melody_player_stop(&s_player);
-        biba_hal_motor_pcm_stop();
+    }
+
+    /* Detect reverse pip finishing */
+    if (s_reverse_pip_active && !s_player.active) {
+        s_reverse_pip_active = false;
+    }
+    /* Reverse: stop pip if no longer going backwards */
+    bool going_reverse = armed &&
+        (left_out  < -BIBA_MOTOR_DEADBAND) &&
+        (right_out < -BIBA_MOTOR_DEADBAND);
+    if (!going_reverse && s_reversing) {
+        if (s_reverse_pip_active) {
+            biba_melody_player_stop(&s_player);
+            s_reverse_pip_active = false;
+        }
+        s_reverse_pip_next_ms = 0u;
+    }
+    s_reversing = going_reverse;
+    /* Schedule next pip while reversing */
+    if (s_reversing && !s_player.active && now >= s_reverse_pip_next_ms) {
+        biba_melody_player_start(&s_player, &biba_melody_backup_pip);
+        s_reverse_pip_active = true;
+        s_reverse_pip_next_ms = now + BIBA_REVERSE_PIP_INTERVAL_MS;
     }
 
     /* Beacon: play SOS every 8 s while CH_BEACON is high and not driving.
@@ -326,8 +396,8 @@ void biba_mode_standalone_tick(void)
     /* Advance melody state machine (no-op when idle). */
     biba_melody_player_tick(&s_player, now);
 
-    /* Drive motors only when audio/PCM is not occupying the PWM hardware. */
-    if (!s_player.active && !biba_hal_motor_pcm_active()) {
+    /* Drive motors only when audio is not occupying the PWM hardware. */
+    if (!s_player.active) {
         biba_bts7960_drive(left_out, right_out);
     }
 

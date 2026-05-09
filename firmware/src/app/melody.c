@@ -89,6 +89,31 @@ const biba_melody_t biba_melody_sos = {
     sizeof(s_sos_l) / sizeof(s_sos_l[0]),
 };
 
+/* trim_enter — ascending "F4 G4 A4" / "D#4 F4 G4"  @172 BPM
+ * quarter≈349 ms  1/16≈87 ms  1/8≈175 ms */
+static const biba_note_t s_trim_enter_l[] = { {349, 87}, {392, 87}, {440, 175} };
+static const biba_note_t s_trim_enter_r[] = { {311, 87}, {349, 87}, {392, 175} };
+const biba_melody_t biba_melody_trim_enter = {
+    s_trim_enter_l, s_trim_enter_r,
+    sizeof(s_trim_enter_l) / sizeof(s_trim_enter_l[0]),
+};
+
+/* trim_exit — descending "A4 G4 F4" / "G4 F4 D#4"  @168 BPM
+ * quarter≈357 ms  1/16≈89 ms  1/8≈179 ms */
+static const biba_note_t s_trim_exit_l[] = { {440, 89}, {392, 89}, {349, 179} };
+static const biba_note_t s_trim_exit_r[] = { {392, 89}, {349, 89}, {311, 179} };
+const biba_melody_t biba_melody_trim_exit = {
+    s_trim_exit_l, s_trim_exit_r,
+    sizeof(s_trim_exit_l) / sizeof(s_trim_exit_l[0]),
+};
+
+/* backup_pip — single A5 beep (880 Hz, 100 ms) played periodically while reversing */
+static const biba_note_t s_pip_l[] = { {880, 100} };
+static const biba_note_t s_pip_r[] = { {880, 100} };
+const biba_melody_t biba_melody_backup_pip = {
+    s_pip_l, s_pip_r, 1,
+};
+
 /* ---- Player ----------------------------------------------------------- */
 
 void biba_melody_player_start(biba_melody_player_t *p, const biba_melody_t *m)
