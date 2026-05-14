@@ -15,6 +15,7 @@
 #include "biba_board.h"
 #include "app/control_loop.h"
 #include "app/failsafe.h"
+#include "app/ramp.h"
 #include "app/telemetry.h"
 #include "drivers/bts7960.h"
 #include "drivers/crsf.h"
@@ -80,6 +81,10 @@ static const biba_pid_config_t s_heading_cfg = {
 
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
 static bool s_last_failsafe;
+
+/* Per-motor slew-rate limiters (D-01, D-03). */
+static biba_ramp_t s_ramp_left;
+static biba_ramp_t s_ramp_right;
 static bool s_beacon_active;
 static uint32_t s_sos_next_ms;   /* earliest time for next SOS repeat */
 static biba_melody_player_t s_player;
@@ -160,6 +165,9 @@ void biba_mode_standalone_init(void)
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
     s_last_failsafe = true;
 
+    biba_ramp_init(&s_ramp_left);
+    biba_ramp_init(&s_ramp_right);
+
     /* Play startup fanfare through motor coils. */
     biba_melody_player_start(&s_player, &biba_melody_startup);
 }
@@ -235,6 +243,9 @@ void biba_mode_standalone_tick(void)
     /* Failsafe rising edge: play warning (distinct from normal disarm). */
     if (failsafe && !s_last_failsafe) {
         biba_melody_player_start(&s_player, &biba_melody_failsafe);
+        biba_ramp_reset(&s_ramp_left);    /* D-04: hard reset on failsafe edge */
+        biba_ramp_reset(&s_ramp_right);
+        biba_hal_ssr_set(false);          /* D-10: belt-and-suspenders SSR cut on failsafe */
     }
     s_last_failsafe = failsafe;
 
@@ -249,8 +260,11 @@ void biba_mode_standalone_tick(void)
         }
         /* Exit trim mode on disarm edge (safety) */
         s_trim_mode_active = false;
+        biba_ramp_reset(&s_ramp_left);    /* D-04: hard reset on disarm edge */
+        biba_ramp_reset(&s_ramp_right);
     }
     s_armed = armed;
+    biba_hal_ssr_set(armed);              /* D-10: SSR HIGH=armed, LOW=disarmed */
 
     /* ------------------------------------------------------------------ *
      * Speed mode  (3-position switch → 1/3 / 2/3 / full scale)
@@ -389,6 +403,11 @@ void biba_mode_standalone_tick(void)
             left_out *= (1.0f + trim);   /* trim is negative → reduces left */
         }
     }
+
+    /* D-03, D-05: Apply ramp post-mix. Always runs — never bypassed.
+     * MUST be before melody/going_reverse checks (Pitfalls 2 and 3). */
+    left_out  = biba_ramp_update(&s_ramp_left,  left_out,  dt);
+    right_out = biba_ramp_update(&s_ramp_right, right_out, dt);
 
     /* If actively driving, motors are needed — interrupt melodies.
      * Exception: the intentional reverse backup pip must not be self-cancelled. */
