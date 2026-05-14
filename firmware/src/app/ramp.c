@@ -1,5 +1,6 @@
 #include "ramp.h"
 #include "biba_config.h"
+#include <stddef.h>
 
 void biba_ramp_init(biba_ramp_t *r)
 {

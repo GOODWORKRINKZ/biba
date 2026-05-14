@@ -17,7 +17,20 @@
  * up with the Raspberry Pi runtime out of the box.
  */
 
+#ifndef BIBA_NATIVE_TEST
 #include "target_config.h"
+
+#else /* BIBA_NATIVE_TEST — no target_config.h available */
+
+/* Provide minimal defaults so portable modules compile under pio test -e native_test. */
+#ifndef BIBA_SYS_CLOCK_HZ
+#  define BIBA_SYS_CLOCK_HZ 125000000u
+#endif
+#ifndef BIBA_PWM_FREQUENCY_HZ
+#  define BIBA_PWM_FREQUENCY_HZ 20000
+#endif
+
+#endif /* BIBA_NATIVE_TEST */
 
 /* --- Control loop timing ------------------------------------------------ */
 
