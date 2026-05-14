@@ -137,4 +137,9 @@
 #define BIBA_PIN_STATUS_LED_GPIO     25
 #define BIBA_STATUS_LED_ACTIVE_LOW   0
 
+/* --- WS2812 RGB LED (GP23, YD-RP2040 onboard NeoPixel) ----------------- */
+
+#define BIBA_PIN_RGB_LED_GPIO        23
+#define BIBA_HAS_RGB_LED             1
+
 #endif /* BIBA_TARGET_H */

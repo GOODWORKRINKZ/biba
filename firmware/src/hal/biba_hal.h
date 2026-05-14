@@ -33,6 +33,9 @@ void biba_hal_delay_ms(uint32_t ms);
 
 void biba_hal_status_led_set(bool on);
 
+/* RGB NeoPixel LED (WS2812).  No-op on targets without BIBA_HAS_RGB_LED. */
+void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b);
+
 /* Raise/lower the DATA_READY line to the SBC. */
 void biba_hal_data_ready_set(bool on);
 void biba_hal_data_ready_pulse(void);

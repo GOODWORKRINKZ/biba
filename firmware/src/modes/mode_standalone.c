@@ -95,6 +95,53 @@ static float    s_saved_motor_trim;
 static uint32_t s_trim_gesture_start_ms;
 static bool     s_trim_gesture_consumed;
 
+/* RGB LED state machine -------------------------------------------------- */
+static uint32_t s_led_blink_ms;   /* last blink toggle timestamp */
+static bool     s_led_blink_on;
+
+/* Update the WS2812 RGB LED once per tick based on system state.
+ *
+ * Priority (highest first):
+ *  1. Failsafe                → red fast blink (200 ms)
+ *  2. Trim mode active        → yellow blink   (300 ms)
+ *  3. Armed + reversing       → red solid
+ *  4. Armed (forward/idle)    → green solid
+ *  5. Beacon active           → magenta blink  (500 ms)
+ *  6. Disarmed + RC OK        → blue dim solid
+ *  7. Boot / no RC            → white slow blink (1000 ms)
+ */
+static void update_rgb_led(bool failsafe, bool armed, bool trim_mode,
+                            bool reversing, bool beacon, uint32_t now)
+{
+    uint8_t r = 0, g = 0, b = 0;
+    uint32_t period = 0; /* 0 = solid */
+
+    if (failsafe) {
+        r = 255; period = 200u;
+    } else if (trim_mode) {
+        r = 200; g = 100; period = 300u;  /* orange */
+    } else if (armed && reversing) {
+        r = 255;
+    } else if (armed) {
+        g = 80;
+    } else if (beacon) {
+        r = 100; b = 180; period = 500u;  /* magenta */
+    } else {
+        /* Disarmed + RC OK */
+        b = 40; /* dim blue */
+    }
+
+    if (period > 0u) {
+        if (now - s_led_blink_ms >= period) {
+            s_led_blink_ms = now;
+            s_led_blink_on = !s_led_blink_on;
+        }
+        if (!s_led_blink_on) { r = 0; g = 0; b = 0; }
+    }
+
+    biba_hal_rgb_led_set(r, g, b);
+}
+
 static float rc_to_unit(uint16_t v)
 {
     /* Standard CRSF channel: 172..1811 maps to -1..+1. */
@@ -400,6 +447,10 @@ void biba_mode_standalone_tick(void)
     if (!s_player.active) {
         biba_bts7960_drive(left_out, right_out);
     }
+
+    /* Update RGB status LED. */
+    update_rgb_led(failsafe, armed, s_trim_mode_active,
+                   s_reversing, beacon, now);
 
     /* ------------------------------------------------------------------ *
      * Telemetry / DATA_READY / status LED

@@ -22,6 +22,8 @@
 #include "hardware/adc.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include "hardware/pio.h"
+#include "hardware/clocks.h"
 #include "pico/time.h"
 
 #include <string.h>
@@ -91,6 +93,10 @@ static void spi_slave_init(void)
 
 static bool s_mode_sel_latched_companion;
 
+/* --- WS2812 forward declaration ---------------------------------------- */
+
+static void ws2812_init(void);
+
 /* --- Public API --------------------------------------------------------- */
 
 void biba_hal_init(void)
@@ -143,6 +149,12 @@ void biba_hal_init(void)
     gpio_pull_up(BIBA_PIN_I2C_SCL_GPIO);
 
     /* CRSF and SPI slave are initialised lazily on first use. */
+
+    /* WS2812 RGB LED on GP23. */
+#if BIBA_HAS_RGB_LED
+    ws2812_init();
+    biba_hal_rgb_led_set(0, 0, 0); /* start off */
+#endif
 }
 
 uint32_t biba_hal_now_ms(void)
@@ -161,6 +173,58 @@ void biba_hal_status_led_set(bool on)
     gpio_put(BIBA_PIN_STATUS_LED_GPIO, on ? 0u : 1u);
 #else
     gpio_put(BIBA_PIN_STATUS_LED_GPIO, on ? 1u : 0u);
+#endif
+}
+
+/* --- WS2812 RGB LED (PIO-based, GP23) ----------------------------------- *
+ *
+ * Pre-assembled PIO program for WS2812 800 kHz GRB protocol:
+ *   T1=2, T2=5, T3=3 cycles; PIO clock = 8 MHz (divider = SYS_CLK / 8e6)
+ *
+ *   0: out  x, 1       side 0 [2]  ; shift 1 bit, drive low for T3 cycles
+ *   1: jmp  !x, 3      side 1 [1]  ; rising edge (T1 cycles high)
+ *   2: jmp  0          side 1 [4]  ; 1-bit: stay high T2 more, loop
+ *   3: nop             side 0 [4]  ; 0-bit: drop low for T2 cycles, loop
+ */
+static const uint16_t s_ws2812_insn[] = { 0x6221u, 0x1123u, 0x1400u, 0xa442u };
+static const struct pio_program s_ws2812_prog = {
+    .instructions = s_ws2812_insn, .length = 4, .origin = -1,
+};
+static PIO  s_ws2812_pio;
+static uint s_ws2812_sm;
+
+static void ws2812_init(void)
+{
+    s_ws2812_pio = pio0;
+    uint offset  = pio_add_program(s_ws2812_pio, &s_ws2812_prog);
+    s_ws2812_sm  = pio_claim_unused_sm(s_ws2812_pio, true);
+
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_wrap(&c, offset, offset + 3u);
+    sm_config_set_sideset(&c, 1u, false, false);
+    sm_config_set_sideset_pins(&c, BIBA_PIN_RGB_LED_GPIO);
+    /* Shift left (MSB first), autopull at 24 bits. */
+    sm_config_set_out_shift(&c, false, true, 24u);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    /* 8 MHz PIO clock → 800 kHz WS2812 × 10 cycles/bit. */
+    float div = (float)clock_get_hz(clk_sys) / (800000.0f * 10.0f);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_gpio_init(s_ws2812_pio, BIBA_PIN_RGB_LED_GPIO);
+    pio_sm_set_consecutive_pindirs(s_ws2812_pio, s_ws2812_sm,
+                                   BIBA_PIN_RGB_LED_GPIO, 1u, true);
+    pio_sm_init(s_ws2812_pio, s_ws2812_sm, offset, &c);
+    pio_sm_set_enabled(s_ws2812_pio, s_ws2812_sm, true);
+}
+
+void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
+{
+#if BIBA_HAS_RGB_LED
+    /* WS2812 expects GRB order, packed in the top 24 bits of a 32-bit word. */
+    uint32_t grb = ((uint32_t)g << 24u) | ((uint32_t)r << 16u) | ((uint32_t)b << 8u);
+    pio_sm_put_blocking(s_ws2812_pio, s_ws2812_sm, grb);
+#else
+    (void)r; (void)g; (void)b;
 #endif
 }
 
