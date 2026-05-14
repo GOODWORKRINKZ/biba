@@ -47,6 +47,12 @@ bool biba_hal_mode_sel_is_companion(void);
 void biba_hal_left_enable(bool enabled);
 void biba_hal_right_enable(bool enabled);
 
+/* SSR (Solid-State Relay) — BTS7960 power-rail control.
+ * Implemented in biba_hal_rp2040.c; no-op stubs in biba_hal.c (STM32/debug).
+ * D-13: init drives pin LOW at boot; set follows arm state in mode_standalone. */
+void biba_hal_ssr_init(void);
+void biba_hal_ssr_set(bool enabled);
+
 /* --- Motor PWM ---------------------------------------------------------- */
 
 /* Initialise the four BTS7960 motor-PWM lines. The exact topology is

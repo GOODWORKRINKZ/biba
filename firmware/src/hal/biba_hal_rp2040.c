@@ -134,6 +134,7 @@ void biba_hal_init(void)
 
     /* Motor PWM (topology: two slices, each pair shares a carrier). */
     biba_hal_motor_pwm_init();
+    biba_hal_ssr_init();   /* D-13: SSR LOW before any mode code runs */
 
     /* ADC --------------------------------------------------------------- */
     adc_init();
@@ -255,6 +256,18 @@ void biba_hal_right_enable(bool enabled)
 {
     gpio_put(BIBA_PIN_RIGHT_REN_GPIO, enabled ? 1u : 0u);
     gpio_put(BIBA_PIN_RIGHT_LEN_GPIO, enabled ? 1u : 0u);
+}
+
+void biba_hal_ssr_init(void)
+{
+    gpio_init(BIBA_PIN_SSR_GPIO);
+    gpio_set_dir(BIBA_PIN_SSR_GPIO, GPIO_OUT);
+    gpio_put(BIBA_PIN_SSR_GPIO, 0);   /* LOW = SSR off = BTS7960 power off */
+}
+
+void biba_hal_ssr_set(bool enabled)
+{
+    gpio_put(BIBA_PIN_SSR_GPIO, enabled ? 1u : 0u);
 }
 
 /* --- ADC ---------------------------------------------------------------- */

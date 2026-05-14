@@ -30,6 +30,7 @@
  *
  * Pin assignment — right side (GP16-GP29, bottom to top):
  *
+ *   GP16 GPIO OUT  SSR (BTS7960 power relay)
  *   GP20 I2C0_SDA  IMU  (SDA)
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
@@ -100,6 +101,12 @@
 
 #define BIBA_PIN_DATA_READY_GPIO     14
 #define BIBA_PIN_MODE_SEL_GPIO       15
+
+/* --- SSR (Solid-State Relay — BTS7960 power control) ------------------- */
+/* GP16: first free pin after SBC SPI interface (GP10-GP14) and MODE_SEL   */
+/* (GP15). HIGH = BTS7960 powered (armed); LOW = BTS7960 power off.        */
+/* D-09: SSR pin assignment.                                                */
+#define BIBA_PIN_SSR_GPIO            16
 
 /* --- IMU (I2C0, GP20=SDA / GP21=SCL) ----------------------------------- */
 /* GP20/GP21 are adjacent on the right side of the board. */

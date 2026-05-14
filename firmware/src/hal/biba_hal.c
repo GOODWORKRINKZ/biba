@@ -146,6 +146,9 @@ void biba_hal_right_enable(bool enabled)
     HAL_GPIO_WritePin(BIBA_PIN_RIGHT_LEN_PORT, BIBA_PIN_RIGHT_LEN_PIN, s);
 }
 
+void biba_hal_ssr_init(void)  {}
+void biba_hal_ssr_set(bool enabled) { (void)enabled; }
+
 /* Motor-PWM helpers moved to biba_hal_motor.c. */
 
 uint16_t biba_hal_adc_sample(unsigned channel_index)
