@@ -1,0 +1,58 @@
+# diff_drive_controller for BiBa composition C.
+#
+# Subscribes to /cmd_vel (output of twist_mux) and writes velocity
+# commands to wheel_left_joint / wheel_right_joint via the
+# biba_hardware_stm32 SystemInterface. Publishes /odom from the
+# integrated joint states (open-loop, since the wheels have no
+# encoders — see read() in biba_stm32_system.cpp).
+
+controller_manager:
+  ros__parameters:
+    update_rate: 50  # Hz; matches firmware control loop budget
+    use_sim_time: false
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    diff_drive_controller:
+      type: diff_drive_controller/DiffDriveController
+
+diff_drive_controller:
+  ros__parameters:
+    left_wheel_names: ["left_wheel_joint"]
+    right_wheel_names: ["right_wheel_joint"]
+
+    # Geometry — must match biba_description/urdf/biba.urdf.xacro.
+    wheel_separation: 0.30
+    wheel_radius: 0.0425
+
+    # Multipliers stay at 1.0 until field-calibrated.
+    wheel_separation_multiplier: 1.0
+    left_wheel_radius_multiplier: 1.0
+    right_wheel_radius_multiplier: 1.0
+
+    publish_rate: 50.0
+    odom_frame_id: odom
+    base_frame_id: base_link
+    pose_covariance_diagonal: [0.001, 0.001, 1e6, 1e6, 1e6, 0.03]
+    twist_covariance_diagonal: [0.001, 0.001, 1e6, 1e6, 1e6, 0.03]
+
+    open_loop: true             # no encoders; integrate commanded twist
+    enable_odom_tf: true
+    cmd_vel_timeout: 0.5        # seconds; halt if /cmd_vel goes silent
+    publish_limited_velocity: true
+    use_stamped_vel: false
+
+    # Linear / angular limits (rough field defaults; tighten on hardware).
+    linear:
+      x:
+        has_velocity_limits: true
+        has_acceleration_limits: true
+        max_velocity: 1.5         # m/s
+        max_acceleration: 2.0     # m/s^2
+    angular:
+      z:
+        has_velocity_limits: true
+        has_acceleration_limits: true
+        max_velocity: 3.0         # rad/s
+        max_acceleration: 4.0     # rad/s^2

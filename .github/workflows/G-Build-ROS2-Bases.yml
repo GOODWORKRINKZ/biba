@@ -1,0 +1,175 @@
+name: "G: Build ROS2 Base Images"
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+    paths:
+      - "docker/base/Dockerfile.ros2-zenoh"
+      - "docker/base/Dockerfile.ros2-control"
+      - ".github/workflows/G-Build-ROS2-Bases.yml"
+  pull_request:
+    paths:
+      - "docker/base/Dockerfile.ros2-zenoh"
+      - "docker/base/Dockerfile.ros2-control"
+      - ".github/workflows/G-Build-ROS2-Bases.yml"
+  workflow_dispatch:
+    inputs:
+      push_to_registry:
+        description: Push images to GHCR after successful build
+        required: false
+        default: true
+        type: boolean
+      image_tag:
+        description: Optional extra image tag for manual builds
+        required: false
+        default: ""
+        type: string
+  workflow_call:
+    inputs:
+      push_to_registry:
+        description: Push images to GHCR after successful build
+        required: false
+        default: true
+        type: boolean
+      image_tag:
+        description: Optional extra image tag for manual builds
+        required: false
+        default: ""
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  # GHCR requires lowercase repository names. ${{ github.repository }}
+  # preserves the original org casing (e.g. GOODWORKRINKZ/biba), which
+  # buildx then rejects at FROM/--tag time. We lowercase below.
+  ZENOH_IMAGE: ghcr.io/goodworkrinkz/biba/biba-ros2-zenoh
+  CONTROL_IMAGE: ghcr.io/goodworkrinkz/biba/biba-ros2-control
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  determine-tag:
+    name: Determine Docker Tag
+    runs-on: ubuntu-latest
+    outputs:
+      docker_tag: ${{ steps.set-tag.outputs.docker_tag }}
+    steps:
+      - name: Determine tag
+        id: set-tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            if [ "$BRANCH_NAME" = "main" ]; then
+              TAG="latest"
+            elif [ "$BRANCH_NAME" = "develop" ]; then
+              TAG="dev"
+            else
+              TAG="test"
+            fi
+          fi
+          echo "docker_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved Docker tag: ${TAG}"
+
+  build-ros2-zenoh:
+    name: Build biba-ros2-zenoh
+    needs: determine-tag
+    runs-on: ubuntu-latest
+    outputs:
+      pushed_tag: ${{ needs.determine-tag.outputs.docker_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_to_registry)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ZENOH_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.determine-tag.outputs.docker_tag }}
+            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.image_tag != '' }}
+            type=sha,prefix=
+            type=ref,event=tag
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/base
+          file: ./docker/base/Dockerfile.ros2-zenoh
+          platforms: linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_to_registry) }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=ros2-zenoh
+          cache-to: type=gha,mode=max,scope=ros2-zenoh
+
+  build-ros2-control:
+    name: Build biba-ros2-control
+    needs:
+      - determine-tag
+      - build-ros2-zenoh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_to_registry)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CONTROL_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.determine-tag.outputs.docker_tag }}
+            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.image_tag != '' }}
+            type=sha,prefix=
+            type=ref,event=tag
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/base
+          file: ./docker/base/Dockerfile.ros2-control
+          platforms: linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_to_registry) }}
+          build-args: |
+            ROS2_ZENOH_IMAGE=${{ env.ZENOH_IMAGE }}
+            ROS2_ZENOH_TAG=${{ needs.determine-tag.outputs.docker_tag }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=ros2-control
+          cache-to: type=gha,mode=max,scope=ros2-control

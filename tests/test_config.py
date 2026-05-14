@@ -4,6 +4,8 @@ import importlib
 
 import pytest
 
+LEGACY_PI_COMPOSE_PATH = "docker/legacy-pi/docker-compose.yml"
+
 
 @pytest.fixture
 def config_module():
@@ -436,7 +438,7 @@ def test_config_defaults_pid_tuning_settings(monkeypatch: pytest.MonkeyPatch, co
 
 
 def test_docker_compose_exposes_beacon_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "BEACON_ENABLED:" in compose
@@ -503,7 +505,7 @@ def test_env_example_exposes_pid_tuning_settings_path() -> None:
 
 
 def test_docker_compose_exposes_trim_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "CH_TRIM:" in compose
@@ -517,7 +519,7 @@ def test_docker_compose_exposes_trim_environment_variables() -> None:
 
 
 def test_docker_compose_exposes_speed_mode_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "CH_SPEED_MODE:" in compose
@@ -535,7 +537,7 @@ def test_docker_compose_exposes_speed_mode_environment_variables() -> None:
 
 
 def test_docker_compose_exposes_drive_mode_and_imu_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "CH_DRIVE_MODE:" in compose
@@ -566,7 +568,7 @@ def test_docker_compose_exposes_drive_mode_and_imu_environment_variables() -> No
 
 
 def test_docker_compose_exposes_pid_tuning_settings_path() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "PID_TUNING_SETTINGS_PATH:" in compose
@@ -574,7 +576,7 @@ def test_docker_compose_exposes_pid_tuning_settings_path() -> None:
 
 
 def test_docker_compose_exposes_bts7960_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "${MOTOR_DRIVER_TYPE:-BTS7960}" in compose
@@ -598,7 +600,7 @@ def test_docker_compose_exposes_bts7960_environment_variables() -> None:
 
 
 def test_docker_compose_exposes_motor_inversion_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "MOTOR1_INVERTED:" in compose
@@ -608,7 +610,7 @@ def test_docker_compose_exposes_motor_inversion_environment_variables() -> None:
 
 
 def test_docker_compose_exposes_motor_current_sense_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "MOTOR_CURRENT_LIMITING_ENABLED:" in compose
@@ -640,7 +642,7 @@ def test_docker_compose_exposes_motor_current_sense_environment_variables() -> N
 
 
 def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "BMS_TRANSPORT:" in compose
@@ -652,7 +654,7 @@ def test_docker_compose_exposes_ble_bms_environment_variables() -> None:
 
 
 def test_docker_compose_exposes_pigpio_device_mappings() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "/dev/gpiomem:/dev/gpiomem" in compose
@@ -703,7 +705,7 @@ def test_env_example_documents_beacon_environment_variables() -> None:
 
 
 def test_docker_compose_uses_matching_default_ramp_rates() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "RAMP_ACCEL_RATE: ${RAMP_ACCEL_RATE:-2.0}" in compose
@@ -712,7 +714,7 @@ def test_docker_compose_uses_matching_default_ramp_rates() -> None:
 
 
 def test_docker_compose_exposes_current_trace_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "MOTOR_CURRENT_TRACE_ENABLED:" in compose
@@ -726,7 +728,7 @@ def test_docker_compose_exposes_current_trace_environment_variables() -> None:
 
 
 def test_docker_compose_exposes_throttle_filter_environment_variables() -> None:
-    with open("docker-compose.yml", encoding="utf-8") as compose_file:
+    with open(LEGACY_PI_COMPOSE_PATH, encoding="utf-8") as compose_file:
         compose = compose_file.read()
 
     assert "THROTTLE_FILTER_MODE:" in compose

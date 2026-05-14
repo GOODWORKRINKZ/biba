@@ -1,4 +1,16 @@
-# Развёртывание BiBa на Raspberry Pi
+# Развёртывание BiBa
+
+## Обзор композиций
+
+BiBa разворачивается в одной из трёх композиций железа. Каноническое описание — в [system_architecture.md](system_architecture.md). Кратко:
+
+- **Композиция A: Pi-only** — текущий продакшен-путь. Raspberry Pi Zero 2W сам читает CRSF и крутит PWM. Развёртывание полностью описано ниже.
+- **Композиция B: STM32-only** — без SBC. Развёртывание сводится к сборке и прошивке прошивки STM32F103.
+- **Композиция C: Pi + STM32** — в разработке. ROS2-стек на SBC + companion-прошивка на STM32.
+
+## Композиция A (Pi-only)
+
+Рабочая компоновка стека — [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml). На роботе все стандартные действия проходят через `bb*`-aliases (`scripts/biba_aliases.sh`); путь к compose-файлу можно переопределить переменной `BIBA_COMPOSE_FILE`.
 
 ## Предварительные требования
 
@@ -52,11 +64,11 @@ sudo systemctl start biba-controller.service
 
 # Или вручную
 cd ~/biba
-docker compose pull
-docker compose up -d
+docker compose -f docker/legacy-pi/docker-compose.yml pull
+docker compose -f docker/legacy-pi/docker-compose.yml up -d
 ```
 
-`biba-controller.service` на старте системы выполняет только `docker compose up -d`.
+`biba-controller.service` на старте системы из `WorkingDirectory=$REPO_DIR/docker/legacy-pi` выполняет только `docker compose up -d`.
 Pull новых образов остается в ручном обновлении и в `bbupdate`, чтобы не дергать сеть и GHCR во время boot.
 
 ## Управление стеком
@@ -99,7 +111,7 @@ bash ~/biba/scripts/diagnostics.sh
 
 ## Конфигурация
 
-Переменные окружения задаются в `docker-compose.yml`:
+Переменные окружения задаются в [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml):
 
 | Переменная | По умолчанию | Описание |
 |------------|-------------|---------|
@@ -339,7 +351,7 @@ ls -la /dev/ttyUSB*             # проверить порт
 dmesg | tail -20                # лог ядра
 ```
 
-Убедитесь, что USB-UART адаптер подключен. Если порт отличается от `/dev/ttyUSB0`, обновите `BMS_PORT` в `docker-compose.yml`.
+Убедитесь, что USB-UART адаптер подключен. Если порт отличается от `/dev/ttyUSB0`, обновите `BMS_PORT` в [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml).
 
 ### Нет BLE-соединения с BMS
 
@@ -380,7 +392,7 @@ sudo usermod -aG docker $USER
 
 ```bash
 bblogs                          # посмотреть причину
-docker compose -f ~/biba/docker-compose.yml logs --tail 50
+docker compose -f ~/biba/docker/legacy-pi/docker-compose.yml logs --tail 50
 ```
 
 Частая причина — pigpiod не может подключиться к GPIO. Убедитесь, что `/dev/gpiomem` существует и контейнер запускается с `privileged: true`.
@@ -393,3 +405,77 @@ docker pull ghcr.io/goodworkrinkz/biba/biba-controller:latest
 ```
 
 Убедитесь, что токен имеет право `read:packages`.
+
+## Композиция B (STM32-only)
+
+Без SBC. Развёртывание сводится к сборке и заливке прошивки `standalone` на STM32F103. Полная инструкция — в [`firmware/README.md`](../firmware/README.md). Подключение CRSF, питания и силовой части — в [wiring.md](wiring.md). Архитектура и SPI-протокол — в [stm32_architecture.md](stm32_architecture.md).
+
+## Композиция C (Pi + STM32)
+
+> Статус: **в активной интеграции**. Скелет ROS2-стека и docker-compose готовы, hardware-plugin и twist_mux ещё в работе.
+
+В композиции C STM32 принимает CRSF и держит низкоуровневую часть (PWM, current limit, failsafe), а SBC запускает ROS2-стек поверх SPI-bridge'а к STM32. Целевая структура контейнеров и пакетов — в [ros2_stack.md](ros2_stack.md). Общая картина и failsafe-уровни — в [system_architecture.md](system_architecture.md). Исходный design-doc — в [plans/2026-04-28-sbc-architecture-redesign-design.md](plans/2026-04-28-sbc-architecture-redesign-design.md).
+
+### Compose-стек
+
+Рабочая компоновка ROS2-стека — [`docker/ros2/docker-compose.yml`](../docker/ros2/docker-compose.yml). Сервисы:
+
+| Сервис | Образ | Назначение |
+|--------|-------|-----------|
+| `zenoh-router` | `ghcr.io/goodworkrinkz/biba/biba-ros2:${BIBA_ROS2_IMAGE_TAG}` (entrypoint `rmw_zenohd`) | Локальный zenoh router для `rmw_zenoh_cpp` |
+| `biba-control` | тот же | `controller_manager` + `diff_drive_controller` поверх `biba_hardware_stm32` SystemInterface (C++): `/cmd_vel` → SPI → STM32. Единственный владелец `/dev/spidev0.0`. Запускает и `robot_state_publisher`. |
+| `twist-mux` | тот же | Арбитраж `cmd_vel_*` → `/cmd_vel` |
+
+Все сервисы используют `network_mode: host` и общий шаблон env-переменных (см. [docker/ros2/.env.example](../docker/ros2/.env.example)).
+
+### Bringup на Pi
+
+Композиция C наследует Docker и клон репо от композиции A — поэтому сначала запустите её bringup, а затем поверх — ROS2-bringup:
+
+```bash
+# 1. Базовая установка (Docker, репо, алиасы) — общая с композицией A
+curl -fsSL https://raw.githubusercontent.com/GOODWORKRINKZ/biba/main/scripts/setup/setup_node.sh | bash
+
+# 2. ROS2-стек: env-файл, systemd-юнит biba-ros2.service, проверка SPI-overlay
+bash ~/biba/scripts/setup/setup_node_ros2.sh
+```
+
+[`scripts/setup/setup_node_ros2.sh`](../scripts/setup/setup_node_ros2.sh) идемпотентен и поддерживает флаги:
+
+- `--dry-run` — печатает действия без записи в систему
+- `--no-spi` — пропустить включение `dtparam=spi=on` (dev-машины, не Pi)
+
+Скрипт создаёт:
+
+- `/etc/default/biba-ros2` — env-файл с тегом образа и параметрами bridge'а (см. [docker/ros2/.env.example](../docker/ros2/.env.example))
+- `/etc/systemd/system/biba-ros2.service` — `oneshot` + `RemainAfterExit`, `WorkingDirectory=$REPO/docker/ros2`, на boot выполняет `docker compose up -d` без `pull` (политика та же, что у композиции A)
+
+### Запуск и обновление
+
+```bash
+# Авторизация в GHCR (если образ приватный)
+echo $GHCR_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+
+# Pull образов и старт
+sudo systemctl start biba-ros2.service
+# или вручную:
+cd ~/biba/docker/ros2 && docker compose pull && docker compose up -d
+
+# Логи моста
+cd ~/biba/docker/ros2 && docker compose logs -f biba-control
+```
+
+### Несовместимости с композицией A
+
+`biba-controller.service` (композиция A) и `biba-ros2.service` (композиция C) **нельзя запускать одновременно** на одной плате: оба претендуют на CRSF UART/SPI и на одни и те же `/dev/spidev*`/`/dev/ttyS*`. Перед стартом C остановите A: `sudo systemctl stop biba-controller.service && sudo systemctl disable biba-controller.service`.
+
+Текущие `bb*`-алиасы из [`scripts/biba_aliases.sh`](../scripts/biba_aliases.sh) по умолчанию указывают на `docker/legacy-pi/` (композиция A). Для управления стеком C задайте `BIBA_STACK=ros2` в shell-окружении (например, в `~/.bashrc` на Pi с композицией C):
+
+```bash
+export BIBA_STACK=ros2   # переключает bb* на docker/ros2/ + /etc/default/biba-ros2
+bbstart   # docker compose up -d для ros2-стека
+bblogs    # docker compose logs -f
+bbstack   # подсмотреть, какой стек активен
+```
+
+Прямые переменные `BIBA_COMPOSE_FILE` / `BIBA_ENV_FILE` тоже работают и переопределяют выбор `BIBA_STACK`.

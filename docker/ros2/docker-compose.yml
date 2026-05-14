@@ -1,0 +1,106 @@
+# BiBa ROS2 stack — minimal profile for composition C (Pi + STM32).
+#
+# Запускает:
+#   - zenoh-router        : бутстрап discovery для всех ROS2-узлов
+#   - biba-control        : ros2_control + diff_drive_controller через
+#                           biba_hardware_stm32 SystemInterface
+#                           (единственный владелец /dev/spidev0.0).
+#                           Также поднимает robot_state_publisher.
+#   - twist-mux           : арбитраж /cmd_vel_* источников → /cmd_vel
+#
+# Использование:
+#   cd docker/ros2
+#   cp .env.example .env       # подкрутить BIBA_IMAGE_TAG, ROS_DOMAIN_ID
+#   docker compose pull        # подтянуть образ из GHCR
+#   docker compose up -d
+#
+# Собрать локально (без push):
+#   docker compose build
+#
+# Образ строится из корня репозитория, чтобы внутрь попали и
+# ros2_ws/, и biba-controller/stm32_link/.
+
+x-biba-ros2-image: &biba_ros2_image
+  image: ghcr.io/goodworkrinkz/biba/biba-ros2:${BIBA_ROS2_IMAGE_TAG:-latest}
+  build:
+    context: ../..
+    dockerfile: docker/ros2/Dockerfile
+    args:
+      BASE_IMAGE: ${BIBA_BASE_IMAGE:-ghcr.io/goodworkrinkz/biba/biba-ros2-control}
+      BASE_TAG: ${BIBA_BASE_TAG:-latest}
+
+x-biba-ros2-env: &biba_ros2_env
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+  RMW_IMPLEMENTATION: rmw_zenoh_cpp
+  ROS_AUTOMATIC_DISCOVERY_RANGE: ${ROS_AUTOMATIC_DISCOVERY_RANGE:-LOCALHOST}
+  ZENOH_ROUTER_CHECK_ATTEMPTS: "-1"
+
+services:
+  zenoh-router:
+    <<: *biba_ros2_image
+    pull_policy: always
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      <<: *biba_ros2_env
+    command:
+      - bash
+      - -lc
+      - "source /opt/ros/humble/setup.bash && ros2 run rmw_zenoh_cpp rmw_zenohd"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'rmw_zenohd' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  biba-control:
+    <<: *biba_ros2_image
+    pull_policy: always
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    devices:
+      - /dev/spidev0.0:/dev/spidev0.0
+    environment:
+      <<: *biba_ros2_env
+    command:
+      - bash
+      - -lc
+      - >-
+        source /opt/ros/humble/setup.bash &&
+        source /opt/biba/ros2_ws/install/setup.bash &&
+        ros2 launch biba_bringup control.launch.py
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'ros2_control_node' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  twist-mux:
+    <<: *biba_ros2_image
+    pull_policy: always
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      zenoh-router:
+        condition: service_healthy
+    environment:
+      <<: *biba_ros2_env
+    command:
+      - bash
+      - -lc
+      - >-
+        source /opt/ros/humble/setup.bash &&
+        source /opt/biba/ros2_ws/install/setup.bash &&
+        ros2 launch biba_bringup twist_mux.launch.py
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'twist_mux' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
