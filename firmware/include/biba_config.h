@@ -189,4 +189,19 @@
 #  define BIBA_RIGHT_MOTOR_DIR  (-1)
 #endif
 
+/* --- Output ramping (MOTOR-03) --------------------------------------- */
+/* Mirror RAMP_* from biba-controller/config.py.                        */
+#ifndef BIBA_RAMP_ACCEL_RATE
+#  define BIBA_RAMP_ACCEL_RATE           2.0f   /* RAMP_ACCEL_RATE        */
+#endif
+#ifndef BIBA_RAMP_DECEL_RATE
+#  define BIBA_RAMP_DECEL_RATE           2.0f   /* RAMP_DECEL_RATE        */
+#endif
+#ifndef BIBA_RAMP_REVERSE_DECEL_RATE
+#  define BIBA_RAMP_REVERSE_DECEL_RATE   0.5f   /* RAMP_REVERSE_DECEL_RATE */
+#endif
+#ifndef BIBA_RAMP_ZERO_HOLD_MS
+#  define BIBA_RAMP_ZERO_HOLD_MS         150u   /* RAMP_ZERO_HOLD_S * 1000 */
+#endif
+
 #endif /* BIBA_CONFIG_H */
