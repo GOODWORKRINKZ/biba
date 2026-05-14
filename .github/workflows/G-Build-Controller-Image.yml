@@ -34,7 +34,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository }}/biba-controller
+  IMAGE_NAME: ghcr.io/goodworkrinkz/biba/biba-controller
 
 permissions:
   contents: read

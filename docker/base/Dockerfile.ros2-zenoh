@@ -1,0 +1,38 @@
+# Base image: ROS 2 Humble + Zenoh RMW.
+#
+# Назначение: общая база для всех ROS2-контейнеров BiBa, которые НЕ требуют
+# тяжёлого ros2_control стека (например, biba_stm32_bridge, voice-runtime,
+# remote-bridge). Образ собирается под linux/arm64 (Pi Zero 2W / Pi 4 / Pi 5).
+#
+# Публикуется в GHCR как ghcr.io/<owner>/<repo>/biba-ros2-zenoh:<tag>.
+# Используется как FROM в сервисных Dockerfile-ах из docker/ros2/.
+#
+# Паттерн заимствован из rob_box_project/docker/base/Dockerfile.ros2-zenoh
+# и упрощён под BiBa: APT-прокси не используется, состав пакетов минимальный.
+
+FROM ros:humble-ros-base
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Минимальные runtime-зависимости + Zenoh RMW.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-rmw-zenoh-cpp \
+        python3-pip \
+        python3-colcon-common-extensions \
+        git \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Дефолты Zenoh: localhost-discovery (под композицию C на одном Pi).
+# При необходимости переопределяется в docker-compose.yml сервиса.
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp \
+    ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST \
+    RUST_LOG=zenoh=info
+
+LABEL org.opencontainers.image.title="biba-ros2-zenoh" \
+      org.opencontainers.image.description="ROS 2 Humble + Zenoh RMW base image for BiBa" \
+      org.opencontainers.image.source="https://github.com/GOODWORKRINKZ/biba"
+
+# Точка входа от ros:humble (source /opt/ros/humble/setup.bash).
+CMD ["bash"]

@@ -1,0 +1,34 @@
+# twist_mux configuration for BiBa composition C.
+#
+# CRSF is owned by the STM32 in this composition, so this mux only
+# arbitrates SBC-side cmd_vel sources. The output is remapped to
+# /cmd_vel in the launch file, which biba_stm32_bridge consumes.
+#
+# Priority ordering (higher wins):
+#   teleop      (operator, e.g. biba_remote_bridge)         100
+#   uwb_follow  (BU4 follower; manual override)              50
+#   autonomy    (Nav2 / mission scripts)                     10
+#
+# Locks:
+#   estop       latches zero twist when /biba/estop is true 200
+
+twist_mux:
+  ros__parameters:
+    topics:
+      teleop:
+        topic: cmd_vel_teleop
+        timeout: 0.5
+        priority: 100
+      uwb_follow:
+        topic: cmd_vel_uwb
+        timeout: 0.5
+        priority: 50
+      autonomy:
+        topic: cmd_vel_nav
+        timeout: 0.5
+        priority: 10
+    locks:
+      estop:
+        topic: /biba/estop
+        timeout: 0.0
+        priority: 200

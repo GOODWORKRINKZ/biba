@@ -1,0 +1,33 @@
+# Base image: ROS 2 Humble + ros2_control стек.
+#
+# Назначение: база для контейнера, который запускает controller_manager
+# (biba_bringup + biba_hardware_stm32). Поверх ros2-zenoh добавляются
+# ros2_control / ros2_controllers / diff_drive_controller / twist_mux —
+# всё, что нужно для композиции C на Pi Zero 2W.
+#
+# Публикуется в GHCR как ghcr.io/<owner>/<repo>/biba-ros2-control:<tag>.
+
+ARG ROS2_ZENOH_TAG=latest
+ARG ROS2_ZENOH_IMAGE=ghcr.io/goodworkrinkz/biba/biba-ros2-zenoh
+FROM ${ROS2_ZENOH_IMAGE}:${ROS2_ZENOH_TAG}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-ros2-control \
+        ros-humble-ros2-controllers \
+        ros-humble-controller-manager \
+        ros-humble-diff-drive-controller \
+        ros-humble-joint-state-broadcaster \
+        ros-humble-joint-state-publisher \
+        ros-humble-robot-state-publisher \
+        ros-humble-twist-mux \
+        ros-humble-xacro \
+        ros-humble-hardware-interface \
+    && rm -rf /var/lib/apt/lists/*
+
+LABEL org.opencontainers.image.title="biba-ros2-control" \
+      org.opencontainers.image.description="ROS 2 Humble + ros2_control + diff_drive base image for BiBa" \
+      org.opencontainers.image.source="https://github.com/GOODWORKRINKZ/biba"
+
+CMD ["bash"]

@@ -225,3 +225,80 @@ sudo i2cdetect -y 1
 
 Для ADS1115 по умолчанию ожидается адрес `0x48`, поэтому в выводе `i2cdetect` обычно должен появиться `48`.
 Для BMI160/BMI166-compatible IMU обычно ожидается `0x68` или `0x69`, для ST LSM6DS3-class чаще `0x6A` или `0x6B`, так что в таблице `i2cdetect` должен появиться ещё один адрес рядом с ADS1115.
+## Подключение STM32F103
+
+Прошивка [firmware](../firmware) — опциональный
+STM32F103C8T6 ("Blue Pill") добавочный контроллер, который умеет
+работать либо самостоятельно (CRSF + BTS7960 + лимитер), либо
+SPI-slave к Raspberry Pi. Подробности — в
+[docs/stm32_architecture.md](stm32_architecture.md).
+
+Выбор режима жёстко определяется сборочным env (`standalone` /
+`companion`) или пином `MODE_SEL` (только в env `combined`).
+
+### Распиновка STM32F103C8T6 (target `BLUEPILL_F103C8`)
+
+Это эталонная распиновка target'а `BLUEPILL_F103C8`
+(см. [`firmware/targets/BLUEPILL_F103C8/target.md`](../firmware/targets/BLUEPILL_F103C8/target.md)).
+Другие target'ы (например, `BIBA_F103_REV_A`) могут назначать эти
+функции на другие пины — всегда сверяйтесь с `target.md` конкретной
+платы, которую собираете.
+
+| Назначение                                    | Пин STM32  |
+| --------------------------------------------- | ---------- |
+| TIM1_CH1 — Left RPWM                          | PA8        |
+| TIM1_CH2 — Left LPWM                          | PA9        |
+| TIM1_CH3 — Right RPWM                         | PA10       |
+| TIM1_CH4 — Right LPWM                         | PA11       |
+| Left BTS7960 R_EN / L_EN                      | PB3 / PB4  |
+| Right BTS7960 R_EN / L_EN                     | PB5 / PB8  |
+| ADC1 IN0..IN3 — 4× BTS7960 `IS` (L+R, L+R)    | PA0..PA3   |
+| ADC1 IN4 — VBAT через делитель 1:11           | PA4        |
+| ADC1 IN5 — опционально 12V rail (1:11)        | PA5        |
+| ADC1 IN6 — резерв                             | PA6        |
+| SPI2 NSS / SCK / MISO / MOSI (slave к SBC)    | PB12 / PB13 / PB14 / PB15 |
+| USART3 TX / RX — CRSF                         | PB10 / PB11 |
+| I2C1 SCL / SDA — IMU                          | PB6 / PB7  |
+| DATA_READY → SBC (GPIO-прерывание)            | PA12       |
+| MODE_SEL (pull-up; GND = companion)           | PB9        |
+| Status LED (on-board blue pill)               | PC13       |
+| SWD (оставлять для прошивки / отладки)        | PA13 / PA14 |
+
+Конкретные значения собраны в `firmware/include/biba_board.h` и
+`include/biba_config.h` — там же настраиваются частота PWM,
+current-sense калибровка и таймауты failsafe.
+
+### Нюансы, которые легко пропустить
+
+- `USART1` на стандартных пинах `PA9/PA10` конфликтует с TIM1_CH2/CH3
+  и не используется. CRSF едет через `USART3` (PB10/PB11).
+- Перед тем как PB3/PB4/PA15 заработают как GPIO, прошивка отключает
+  JTAG в `biba_hal_init()` (SWD остаётся доступен для прошивки).
+  Поэтому `Left R_EN`=PB3 и `Left L_EN`=PB4 — это освобождённые
+  JTAG-пины; если вы не отпускаете JTAG, перенесите enable-пины в
+  `biba_board.h`.
+- BTS7960 питаются отдельным силовым 5V/6V, а земля должна быть общей с
+  STM32. VCC BOARD на STM32 — с 3.3V линии USB-UART программатора или
+  с BEC.
+- **Motor-audio требует target с четырьмя независимыми таймерами PWM.**
+  `BLUEPILL_F103C8` держит все 4 канала на TIM1 — одна несущая, звук
+  через колёса невозможен. Для motor-audio (voice playback / мелодии
+  через BTS7960) используйте target `BIBA_F103_REV_A`: у него
+  `L_RPWM=TIM1_CH1`, `L_LPWM=TIM2_CH1` (remap на PA15),
+  `R_RPWM=TIM3_CH4`, `R_LPWM=TIM4_CH4`, что даёт 4 независимых
+  частоты/duty одновременно. Подробная распиновка — в
+  [`firmware/targets/BIBA_F103_REV_A/target.md`](../firmware/targets/BIBA_F103_REV_A/target.md).
+
+### SPI к Raspberry Pi (companion mode)
+
+| STM32     | Pi GPIO (BCM) | Физический пин Pi |
+| --------- | ------------- | ------------------ |
+| SPI2 NSS  | GPIO 8 (CE0)  | 24                 |
+| SPI2 SCK  | GPIO 11       | 23                 |
+| SPI2 MOSI | GPIO 10       | 19                 |
+| SPI2 MISO | GPIO 9        | 21                 |
+| DATA_READY| GPIO 25       | 22 (опциональное IRQ) |
+| GND       | GND           | 20                 |
+
+Для включения SPI-моста выставьте `STM32_LINK_ENABLED=1` в env-файле
+Pi-runtime (см. `biba-controller/config.py`).

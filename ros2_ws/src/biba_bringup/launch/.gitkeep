@@ -1,0 +1,2 @@
+# launch-файлы композиции C: bringup minimal-профиля.
+# TODO: minimal.launch.py — robot_state_publisher + biba_stm32_bridge_node + ros2_control + twist_mux.

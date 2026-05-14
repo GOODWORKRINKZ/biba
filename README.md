@@ -7,7 +7,19 @@
    <img src="docs/biba-logo-gradient.svg" alt="BiBa gradient ASCII logo" width="760">
 </p>
 
-BiBa — это колесная робот-платформа на базе Raspberry Pi Zero 2W с управлением по ExpressLRS/CRSF, телеметрией от Daly 6S BMS по BLE или USB-UART, двухканальными драйверами BTS7960 и звуковой индикацией через моторы.
+BiBa — это колесная робот-платформа с управлением по ExpressLRS/CRSF, телеметрией от Daly 6S BMS по BLE или USB-UART, двухканальными драйверами BTS7960 и звуковой индикацией через моторы. Платформа поддерживает три композиции железа — от чисто-Pi-варианта до связки одноплатник + STM32F103, поэтому репозиторий организован как hub: общие компоненты живут рядом, а сборки разводятся по подкаталогам.
+
+## Архитектура
+
+BiBa поддерживает три композиции железа. Где есть STM32 — именно он принимает CRSF и держит failsafe; одноплатник, если присутствует, работает как high-level brain поверх SPI-канала к STM32.
+
+| Композиция | SBC (Raspberry Pi) | STM32F103 add-on | Кто слушает CRSF | Compose / прошивка |
+| --- | --- | --- | --- | --- |
+| **A. Pi-only** (текущий продакшен) | да | нет | Pi (`/dev/ttyS0`) | [`docker/legacy-pi/docker-compose.yml`](docker/legacy-pi/docker-compose.yml) |
+| **B. STM32-only** | нет | да | STM32 | env `standalone` в [`firmware/`](firmware/) |
+| **C. Pi + STM32** | да | да | STM32 (Pi видит каналы через SPI-телеметрию) | env `companion` в [`firmware/`](firmware/) + ROS2-стек в `docker/ros2/` (в разработке) |
+
+Канонический разбор композиций, их обязанности и failsafe-уровни — в [docs/system_architecture.md](docs/system_architecture.md). STM32-сторона детально описана в [docs/stm32_architecture.md](docs/stm32_architecture.md), будущий ROS2-стек композиции C — в [docs/ros2_stack.md](docs/ros2_stack.md). Общий design-doc и план редизайна — [docs/plans/2026-04-28-sbc-architecture-redesign-design.md](docs/plans/2026-04-28-sbc-architecture-redesign-design.md).
 
 ## Состав железа
 
@@ -36,13 +48,23 @@ BiBa — это колесная робот-платформа на базе Ras
 | Right BTS7960 LEN | 21 | 40 |
 | GND драйвера | - | 14 |
 
+Распиновка и таблица выше актуальны для композиции A (Pi-only). Для композиций B/C wiring между Pi, STM32 и силовой частью описан в [docs/wiring.md](docs/wiring.md) и [docs/stm32_architecture.md](docs/stm32_architecture.md).
+
 Подробное описание подключения находится в [docs/wiring.md](docs/wiring.md).
+
+Опциональная прошивка для STM32F103 ("Blue Pill") add-on, который умеет работать либо самостоятельно, либо SPI-slave-ом к Pi, живёт в [`firmware/`](firmware/). Архитектура описана в [docs/stm32_architecture.md](docs/stm32_architecture.md).
 
 Текущий двухмоторный runtime на Pi Zero 2W должен быть запущен с `BTS7960_PWM_MODE=SOFTWARE`, потому что распиновка `12/18` и `19/13` делит общие hardware-PWM каналы. Это уже совпадает и с кодовым default в `config.py`, и с compose-default для развёрнутого робота.
 
 ## Структура репозитория
 
-- `biba-controller/` — Python-контроллер для CRSF, моторов, моторного audio/voice runtime и телеметрии BMS
+- `biba-controller/` — Python-контроллер для CRSF, моторов, моторного audio/voice runtime и телеметрии BMS (композиции A и C)
+- `biba-controller/stm32_link/` — опциональный SPI-клиент к STM32F103 add-on (`STM32_LINK_ENABLED=1`, композиция C)
+- `firmware/` — PlatformIO-проект прошивки STM32F103C8T6 (env'ы `standalone` для композиции B, `companion` для композиции C, `combined` / `native_test` для разработки)
+- `docker/` — каталог compose-стеков, разнесённых по композициям:
+  - `docker/legacy-pi/` — текущий продакшен-стек композиции A
+  - `docker/ros2/` — будущий ROS2-стек композиции C (в разработке)
+  - `docker/base/` — общие базовые образы (в разработке)
 - `lua/SCRIPTS/TELEMETRY/biba.lua` — экран телеметрии EdgeTX для оператора
 - `.github/workflows/` — global builder workflows для Ruff, pytest, shellcheck и сборки arm64 Docker-образа в GHCR
 - `scripts/setup/` — bringup-скрипты для Raspberry Pi (Docker, Compose, systemd-автозапуск)
@@ -51,10 +73,19 @@ BiBa — это колесная робот-платформа на базе Ras
 - `scripts/voice_prep.py` — офлайн-подготовка русскоязычных voice assets и явный promote в production voice каталог
 - `voice-src/phrases.yml` — канонический набор русских фраз по событиям
 - `voice-work/` — staging-каталог для сгенерированных кандидатов перед promote в production voice каталог
-- `docs/deployment.md` — полное руководство по развёртыванию
+- `docs/deployment.md` — руководство по развёртыванию по композициям
+- `docs/system_architecture.md` — канонический обзор всех трёх композиций
 - `.agents/skills/` — вендорный каталог skills
 
-## Подготовка Raspberry Pi
+## Quick-start по композициям
+
+- **Композиция A (Pi-only).** Сегодняшний bringup-скрипт и compose-стек. Полный гайд: [docs/deployment.md](docs/deployment.md#композиция-a-pi-only).
+- **Композиция B (STM32-only).** Без одноплатника. Сборка и заливка прошивки описаны в [firmware/README.md](firmware/README.md) и [docs/stm32_architecture.md](docs/stm32_architecture.md).
+- **Композиция C (Pi + STM32).** В разработке. Проектная картина — в [design-doc](docs/plans/2026-04-28-sbc-architecture-redesign-design.md) и [docs/ros2_stack.md](docs/ros2_stack.md).
+
+Дальше по тексту разделы про подготовку Pi, env-переменные, settings UI и motor trim относятся к композиции A.
+
+## Подготовка Raspberry Pi (композиция A)
 
 1. Включите UART на Raspberry Pi.
 2. Освободите основной UART от Bluetooth, добавив в конфигурацию:
@@ -82,25 +113,33 @@ curl -fsSL https://raw.githubusercontent.com/GOODWORKRINKZ/biba/main/scripts/set
 - настраивает алиасы для управления стеком
 - создает `systemd` unit для автозапуска `docker compose`
 
-## Запуск
+## Запуск (композиция A)
+
+Компоновка стека лежит в [`docker/legacy-pi/docker-compose.yml`](docker/legacy-pi/docker-compose.yml). На роботе все стандартные действия выполняются через `bb*`-aliases из [`scripts/biba_aliases.sh`](scripts/biba_aliases.sh) (`bbupdate`, `bbstart`, `bbstop`, `bblogs`, `bbpull`).
+
+Если удобно работать без алиасов — указывайте compose-файл явно:
 
 ```bash
-docker compose pull
-docker compose up -d
+docker compose -f docker/legacy-pi/docker-compose.yml pull
+docker compose -f docker/legacy-pi/docker-compose.yml up -d
 ```
 
-Локальная сборка по-прежнему доступна при необходимости:
+Локальная сборка:
 
 ```bash
-docker compose build
-docker compose up -d
+docker compose -f docker/legacy-pi/docker-compose.yml build
+docker compose -f docker/legacy-pi/docker-compose.yml up -d
 ```
+
+Путь к compose-файлу можно переопределить переменной `BIBA_COMPOSE_FILE` для скриптов и алиасов.
 
 Контейнер запускает `pigpiod`, слушает ELRS CRSF кадры на `/dev/ttyS0`, управляет моторами, опрашивает Daly BMS по BLE или на `/dev/ttyUSB0` и отправляет батарейную телеметрию обратно на передатчик.
 
 Docker-образ собирается под `linux/arm64`, чтобы совпадать с Raspberry Pi Zero 2W. Для этого `pigpiod` собирается внутри образа из upstream `pigpio`, так как готовый пакет `pigpio` отсутствует в Debian bookworm arm64.
 
-Тип драйвера и распиновку можно переопределить через переменные окружения в `docker-compose.yml`:
+## Конфигурация и переменные окружения (композиция A)
+
+Все env-переменные ниже применяются к compose-стеку композиции A в [`docker/legacy-pi/docker-compose.yml`](docker/legacy-pi/docker-compose.yml). Тип драйвера и распиновку можно переопределить через них:
 
 - `MOTOR_DRIVER_TYPE=BTS7960|PWM_DIR`
 - `BTS7960_PWM_MODE=HARDWARE|SOFTWARE` — для Pi Zero 2W с текущей двухмоторной проводкой нужен `SOFTWARE`
@@ -153,7 +192,7 @@ Docker-образ собирается под `linux/arm64`, чтобы совп
 - `RAMP_ZERO_HOLD_S=0.15` — пауза на нуле (секунды) после торможения перед реверсом; даёт мотору физически остановиться и убирает «гавканье» BTS7960
 - `MOTOR_DEADBAND=0.05` — мёртвая зона стика (меньше порога → мотор стоит)
 
-Если нужно включить current sense через ADS1115, дополнительно добавьте в `docker-compose.yml` соответствующие env-переменные из `docs/wiring.md`: `MOTOR_CURRENT_SENSE_ENABLED`, `MOTOR_CURRENT_LIMITING_ENABLED`, directional `*_MOTOR_CURRENT_SENSE_*_CHANNEL`, `LEFT_MOTOR_MAX_CURRENT_A`, `RIGHT_MOTOR_MAX_CURRENT_A`, `LEFT_MOTOR_MAX_POWER_W`, `RIGHT_MOTOR_MAX_POWER_W`.
+Если нужно включить current sense через ADS1115, дополнительно добавьте в [`docker/legacy-pi/docker-compose.yml`](docker/legacy-pi/docker-compose.yml) соответствующие env-переменные из `docs/wiring.md`: `MOTOR_CURRENT_SENSE_ENABLED`, `MOTOR_CURRENT_LIMITING_ENABLED`, directional `*_MOTOR_CURRENT_SENSE_*_CHANNEL`, `LEFT_MOTOR_MAX_CURRENT_A`, `RIGHT_MOTOR_MAX_CURRENT_A`, `LEFT_MOTOR_MAX_POWER_W`, `RIGHT_MOTOR_MAX_POWER_W`.
 
 Для калибровочных заездов доступен отдельный trace-режим current sense:
 
@@ -260,12 +299,14 @@ Workflow'ы организованы по схеме `G-*`:
 - `G-Build-Controller-Image.yml` — линт, тесты, сборка и push образа контроллера
 - `G-Build-All.yml` — верхнеуровневый запуск полной сборки проекта
 
-Базовая модель деплоя теперь такая:
+Базовая модель деплоя композиции A:
 
 ```bash
-docker compose pull
-docker compose up -d
+docker compose -f docker/legacy-pi/docker-compose.yml pull
+docker compose -f docker/legacy-pi/docker-compose.yml up -d
 ```
+
+Либо на роботе через alias `bbupdate` (`scripts/biba_aliases.sh`).
 
 Raspberry Pi не обязан собирать образ локально, он просто забирает готовый arm64-образ из GHCR.
 

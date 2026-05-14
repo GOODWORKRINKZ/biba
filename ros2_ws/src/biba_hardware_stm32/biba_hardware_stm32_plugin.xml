@@ -1,0 +1,11 @@
+<library path="biba_hardware_stm32">
+  <class name="biba_hardware_stm32/BibaStm32SystemHardware"
+         type="biba_hardware_stm32::BibaStm32SystemHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      SPI-backed diff-drive ros2_control SystemInterface for BiBa composition C.
+      Owns /dev/spidev0.0, exposes wheel_left_joint and wheel_right_joint with
+      position+velocity state and velocity command interfaces.
+    </description>
+  </class>
+</library>
