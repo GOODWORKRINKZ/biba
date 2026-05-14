@@ -107,9 +107,15 @@ const biba_melody_t biba_melody_trim_exit = {
     sizeof(s_trim_exit_l) / sizeof(s_trim_exit_l[0]),
 };
 
-/* backup_pip — single A5 beep (880 Hz, 100 ms) played periodically while reversing */
-static const biba_note_t s_pip_l[] = { {880, 100} };
-static const biba_note_t s_pip_r[] = { {880, 100} };
+/* backup_pip — low-A3 beep (220 Hz, 100 ms).
+ * 220 Hz chosen because biba_melody_player_tick_biased relies on motor current
+ * building up within each PWM half-cycle.  At 880 Hz the half-cycle (0.57 ms)
+ * is too short relative to motor L/R — forward pulses actively brake the wheel.
+ * At 220 Hz the half-cycle is ~2.3 ms; current builds properly → net reverse
+ * torque matches the traction setpoint while the motor still emits audible sound.
+ * Minimum supported by AUDIO_WRAP=2499 at 125 MHz is ~196 Hz (div=255). */
+static const biba_note_t s_pip_l[] = { {220, 100} };
+static const biba_note_t s_pip_r[] = { {220, 100} };
 const biba_melody_t biba_melody_backup_pip = {
     s_pip_l, s_pip_r, 1,
 };
