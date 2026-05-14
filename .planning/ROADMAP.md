@@ -27,7 +27,14 @@
   3. Переключатель арминга (CH5) включает и выключает движение — разарм гарантирует нулевой PWM и EN LOW
   4. При нейтральном положении стиков ложного движения нет (мёртвая зона работает)
   5. При старте моторы не крутятся до получения первой валидной CRSF-команды (безопасная инициализация)
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — SpeedRamp C port (ramp.h + ramp.c + biba_config.h constants)
+- [ ] 01-02-PLAN.md — SSR HAL extension (target.h + biba_hal.h + biba_hal.c + biba_hal_rp2040.c)
+- [ ] 01-03-PLAN.md — SpeedRamp Unity TDD tests (test_ramp/test_main.c, 8 cases)
+- [ ] 01-04-PLAN.md — Wire ramp + SSR into mode_standalone.c
+- [ ] 01-05-PLAN.md — Build + full native_test verification + human smoke test
 
 ---
 
