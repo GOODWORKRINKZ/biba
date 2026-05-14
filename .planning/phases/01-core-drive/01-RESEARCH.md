@@ -473,17 +473,17 @@ No network interface, no parsing of untrusted input, no flash writes in Phase 1 
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`biba_hal_ssr_set(false)` vs no-call during melody playback**
    - What we know: Melody blocks `biba_bts7960_drive()`, not PWM duty (PWM is already 0 when disarmed)
    - What's unclear: If a melody fires during the arm→disarm transition, the SSR is driven LOW immediately by the disarm edge handler — before melody completes. This is correct (safety) but means BTS7960 loses power mid-melody.
-   - Recommendation: Accept this — safety first. No change needed.
+   - RESOLVED: Accept this — safety first. No change needed. Plan 01-04 Edit A adds explicit `biba_hal_ssr_set(false)` in the failsafe edge block.
 
 2. **`biba_hal.c` (STM32) stubs for SSR**
    - What we know: All other HAL functions in `biba_hal.h` have implementations in both `biba_hal.c` (STM32) and `biba_hal_rp2040.c`. The SSR is RP2040-only for Phase 1.
    - What's unclear: Does any STM32 target build need to compile cleanly with these new declarations?
-   - Recommendation: Add no-op stubs to `biba_hal.c`. Cost: 2 lines. Avoids linker errors if STM32 builds are exercised in CI.
+   - RESOLVED: Add no-op stubs to `biba_hal.c`. Cost: 2 lines. Avoids linker errors if STM32 builds are exercised in CI. Implemented in Plan 01-02 Task 2.
 
 ---
 
