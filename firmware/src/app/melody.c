@@ -161,3 +161,48 @@ bool biba_melody_player_tick(biba_melody_player_t *p, uint32_t now_ms)
     p->note_end_ms = now_ms + (uint32_t)dur;
     return true;
 }
+
+/* Clamp helper — avoids including math.h */
+static float clampf(float v, float lo, float hi)
+{
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+bool biba_melody_player_tick_biased(biba_melody_player_t *p, uint32_t now_ms,
+                                    float left_drive, float right_drive)
+{
+    if (!p->active) return false;
+
+    /* Still waiting for the current note to finish. */
+    if (now_ms < p->note_end_ms) return true;
+
+    /* Melody finished. */
+    if (p->pos >= p->melody->count) {
+        biba_hal_motor_audio_end();
+        p->active = false;
+        return false;
+    }
+
+    /* Emit next note with drive-biased duty cycle.
+     * duty = 0.5 + drive * 0.5
+     *   drive = 0.0  → 0.50 (50/50 push-pull, zero net torque, max volume)
+     *   drive = -0.5 → 0.25 (25% fwd / 75% rev, net reverse + audible tone)
+     *   drive = -1.0 → 0.05 (clamp: 5% fwd / 95% rev, near-full torque + click)
+     * Minimum 0.05 keeps the brief forward blip so tone stays audible. */
+    biba_note_t ln = p->melody->left [p->pos];
+    biba_note_t rn = p->melody->right[p->pos];
+    p->pos++;
+
+    float duty_l = clampf(0.5f + left_drive  * 0.5f, 0.05f, 0.95f);
+    float duty_r = clampf(0.5f + right_drive * 0.5f, 0.05f, 0.95f);
+
+    uint32_t freq[4] = { ln.freq_hz, 0u, rn.freq_hz, 0u };
+    float    duty[4] = { duty_l,     0.0f, duty_r,   0.0f };
+    biba_hal_motor_audio_set_all(freq, duty);
+
+    uint16_t dur = (ln.dur_ms > rn.dur_ms) ? ln.dur_ms : rn.dur_ms;
+    p->note_end_ms = now_ms + (uint32_t)dur;
+    return true;
+}

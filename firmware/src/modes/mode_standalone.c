@@ -459,8 +459,14 @@ void biba_mode_standalone_tick(void)
     }
     s_beacon_active = beacon;
 
-    /* Advance melody state machine (no-op when idle). */
-    biba_melody_player_tick(&s_player, now);
+    /* Advance melody state machine.
+     * During reverse pip: use biased tick so motors keep driving while beeping.
+     * All other melodies use standard symmetric push-pull (zero net torque). */
+    if (s_reverse_pip_active) {
+        biba_melody_player_tick_biased(&s_player, now, left_out, right_out);
+    } else {
+        biba_melody_player_tick(&s_player, now);
+    }
 
     /* Drive motors only when audio is not occupying the PWM hardware. */
     if (!s_player.active) {
