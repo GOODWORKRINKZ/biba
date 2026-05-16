@@ -192,6 +192,9 @@
 #endif
 
 /* Reverse backup beep: interval between pip starts (ms). */
+#ifndef BIBA_REVERSE_PIP_ENABLED
+#  define BIBA_REVERSE_PIP_ENABLED          0
+#endif
 #ifndef BIBA_REVERSE_PIP_INTERVAL_MS
 #  define BIBA_REVERSE_PIP_INTERVAL_MS      600u
 #endif

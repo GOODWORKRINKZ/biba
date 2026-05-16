@@ -421,28 +421,37 @@ void biba_mode_standalone_tick(void)
         biba_melody_player_stop(&s_player);
     }
 
+    bool going_reverse = armed &&
+        (left_out  < -BIBA_MOTOR_DEADBAND) &&
+        (right_out < -BIBA_MOTOR_DEADBAND);
+    s_reversing = going_reverse;
+
+#if BIBA_REVERSE_PIP_ENABLED
     /* Detect reverse pip finishing */
     if (s_reverse_pip_active && !s_player.active) {
         s_reverse_pip_active = false;
     }
     /* Reverse: stop pip if no longer going backwards */
-    bool going_reverse = armed &&
-        (left_out  < -BIBA_MOTOR_DEADBAND) &&
-        (right_out < -BIBA_MOTOR_DEADBAND);
-    if (!going_reverse && s_reversing) {
+    if (!going_reverse) {
         if (s_reverse_pip_active) {
             biba_melody_player_stop(&s_player);
             s_reverse_pip_active = false;
         }
         s_reverse_pip_next_ms = 0u;
     }
-    s_reversing = going_reverse;
     /* Schedule next pip while reversing */
-    if (s_reversing && !s_player.active && now >= s_reverse_pip_next_ms) {
+    if (going_reverse && !s_player.active && now >= s_reverse_pip_next_ms) {
         biba_melody_player_start(&s_player, &biba_melody_backup_pip);
         s_reverse_pip_active = true;
         s_reverse_pip_next_ms = now + BIBA_REVERSE_PIP_INTERVAL_MS;
     }
+#else
+    if (s_reverse_pip_active) {
+        biba_melody_player_stop(&s_player);
+    }
+    s_reverse_pip_active = false;
+    s_reverse_pip_next_ms = 0u;
+#endif
 
     /* Beacon: play SOS every 8 s while CH_BEACON is high and not driving.
      * Priority melodies (failsafe/arm/disarm) may run first; the interval
