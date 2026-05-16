@@ -104,6 +104,23 @@ void biba_hal_init(void)
 
 uint32_t biba_hal_now_ms(void) { return HAL_GetTick(); }
 void     biba_hal_delay_ms(uint32_t ms) { HAL_Delay(ms); }
+void     biba_hal_delay_us(uint32_t us)
+{
+    if (us == 0u) return;
+#if defined(DWT) && defined(DWT_CTRL_CYCCNTENA_Msk)
+    if ((CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) == 0u) {
+        CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+        DWT->CYCCNT = 0u;
+        DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    }
+    uint32_t start = DWT->CYCCNT;
+    uint32_t ticks = (SystemCoreClock / 1000000u) * us;
+    while ((uint32_t)(DWT->CYCCNT - start) < ticks) { __NOP(); }
+#else
+    uint32_t loops = (SystemCoreClock / 3000000u) * us;
+    while (loops--) { __NOP(); }
+#endif
+}
 
 void biba_hal_status_led_set(bool on)
 {
@@ -114,6 +131,13 @@ void biba_hal_status_led_set(bool on)
     GPIO_PinState unlit = BIBA_STATUS_LED_ACTIVE_LOW ? GPIO_PIN_SET   : GPIO_PIN_RESET;
     HAL_GPIO_WritePin(BIBA_PIN_STATUS_LED_PORT, BIBA_PIN_STATUS_LED_PIN,
                       on ? lit : unlit);
+}
+
+void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
+{
+    (void)r;
+    (void)g;
+    (void)b;
 }
 
 void biba_hal_data_ready_set(bool on)

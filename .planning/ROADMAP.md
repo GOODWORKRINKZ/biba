@@ -64,9 +64,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Implement BTS7960 EN/INH thermal reset in firmware with 100 us pulse and regression tests
-- [ ] 03-02-PLAN.md — Publish canonical hardware variant matrix and field-validation evidence protocol
-- [ ] 03-03-PLAN.md — Run automated + field validation and produce requirement-traceable UAT report
+- [x] 03-01-PLAN.md — Implement BTS7960 EN/INH thermal reset in firmware with 100 us pulse and regression tests
+- [x] 03-02-PLAN.md — Publish canonical hardware variant matrix and field-validation evidence protocol
+- [x] 03-03-PLAN.md — Run automated + field validation and produce requirement-traceable UAT report
 
 ---
 

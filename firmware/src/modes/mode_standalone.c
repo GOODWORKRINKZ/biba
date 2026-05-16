@@ -160,7 +160,7 @@ void biba_mode_standalone_init(void)
     biba_failsafe_init(&s_crsf_failsafe, BIBA_CRSF_TIMEOUT_MS);
     biba_pid_reset(&s_heading_pid);
     s_last_tick_ms = biba_hal_now_ms();
-    biba_bts7960_set_enabled(true);
+    biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
 
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
     s_last_failsafe = true;
@@ -250,6 +250,9 @@ void biba_mode_standalone_tick(void)
     s_last_failsafe = failsafe;
 
     if (armed && !s_armed) {
+        /* Best-effort reset: clears possible BTS7960 thermal latch on arm edge.
+         * Recovery is not guaranteed immediately; control loop still applies failsafe. */
+        biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
         printf("[biba] ARMED\r\n");
         biba_melody_player_start(&s_player, &biba_melody_arm);
     } else if (!armed && s_armed) {
