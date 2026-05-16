@@ -8,6 +8,8 @@ BiBa разворачивается в одной из трёх композиц
 - **Композиция B: STM32-only** — без SBC. Развёртывание сводится к сборке и прошивке прошивки STM32F103.
 - **Композиция C: Pi + STM32** — в разработке. ROS2-стек на SBC + companion-прошивка на STM32.
 
+Каноническая матрица статуса платформ и ссылок на реализацию: [variants.md](variants.md).
+
 ## Композиция A (Pi-only)
 
 Рабочая компоновка стека — [`docker/legacy-pi/docker-compose.yml`](../docker/legacy-pi/docker-compose.yml). На роботе все стандартные действия проходят через `bb*`-aliases (`scripts/biba_aliases.sh`); путь к compose-файлу можно переопределить переменной `BIBA_COMPOSE_FILE`.

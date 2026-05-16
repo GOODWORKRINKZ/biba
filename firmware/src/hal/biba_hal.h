@@ -28,6 +28,7 @@ uint32_t biba_hal_now_ms(void);
 
 /* Busy-wait. Only acceptable during bring-up / error LED patterns. */
 void biba_hal_delay_ms(uint32_t ms);
+void biba_hal_delay_us(uint32_t us);
 
 /* --- GPIO ---------------------------------------------------------------- */
 

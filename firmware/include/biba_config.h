@@ -49,6 +49,9 @@
 #ifndef BIBA_PWM_DEADTIME_NS
 #  define BIBA_PWM_DEADTIME_NS         500     /* dead-time between RPWM/LPWM */
 #endif
+#ifndef BIBA_BTS7960_RESET_PULSE_US
+#  define BIBA_BTS7960_RESET_PULSE_US  100u
+#endif
 
 /* --- Current / power limits (match Pi defaults) ------------------------- */
 

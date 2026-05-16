@@ -61,7 +61,12 @@ Plans:
   2. При превышении тока (программный порог) тяга снижается автоматически — аппаратных повреждений ESC не происходит
   3. Матрица вариантов охватывает все три платформы (Pi Zero 2W, RP2040, STM32F103) с актуальными статусами (ready / WIP / planned)
   4. Каждый реализованный вариант имеет target.md или ссылку на ветку для воспроизводимой сборки
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 03-01-PLAN.md — Implement BTS7960 EN/INH thermal reset in firmware with 100 us pulse and regression tests
+- [x] 03-02-PLAN.md — Publish canonical hardware variant matrix and field-validation evidence protocol
+- [x] 03-03-PLAN.md — Run automated + field validation and produce requirement-traceable UAT report
 
 ---
 

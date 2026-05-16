@@ -1,6 +1,6 @@
 # Системная архитектура BiBa
 
-Этот документ — канонический обзор всех трёх аппаратных композиций робота, ответственности SBC и STM32, профилей ROS2-стека и точек расширения. Он рассчитан на тех, кто открывает репозиторий впервые и хочет за один проход понять «что где живёт». Низкоуровневая часть STM32 описана в [stm32_architecture.md](stm32_architecture.md), будущий ROS2-стек — в [ros2_stack.md](ros2_stack.md), развёртывание — в [deployment.md](deployment.md). Исходный design-doc, из которого выведен этот текст, — [plans/2026-04-28-sbc-architecture-redesign-design.md](plans/2026-04-28-sbc-architecture-redesign-design.md).
+Этот документ — канонический обзор всех трёх аппаратных композиций робота, ответственности SBC и STM32, профилей ROS2-стека и точек расширения. Он рассчитан на тех, кто открывает репозиторий впервые и хочет за один проход понять «что где живёт». Низкоуровневая часть STM32 описана в [stm32_architecture.md](stm32_architecture.md), будущий ROS2-стек — в [ros2_stack.md](ros2_stack.md), развёртывание — в [deployment.md](deployment.md), а каноническая матрица готовности платформ — в [variants.md](variants.md). Исходный design-doc, из которого выведен этот текст, — [plans/2026-04-28-sbc-architecture-redesign-design.md](plans/2026-04-28-sbc-architecture-redesign-design.md).
 
 ## Контекст
 

@@ -88,6 +88,18 @@ void biba_melody_player_stop(biba_melody_player_t *p);
  * Returns true while a melody is still playing. */
 bool biba_melody_player_tick(biba_melody_player_t *p, uint32_t now_ms);
 
+/* Biased tick: same as tick but shifts PWM duty so the motors produce net
+ * torque in the requested direction while still generating sound.
+ *
+ * duty = clamp(0.5 + drive * 0.5, 0.05, 0.95)
+ *   drive = 0.0  → 50/50 push-pull = zero net torque, maximum volume
+ *   drive = -0.5 → 25/75 fwd/rev  = half reverse torque + audible tone
+ *   drive = -1.0 → 5/95  fwd/rev  = near-full torque + softer click
+ *
+ * Use for backup-pip so the robot keeps moving while beeping. */
+bool biba_melody_player_tick_biased(biba_melody_player_t *p, uint32_t now_ms,
+                                    float left_drive, float right_drive);
+
 #ifdef __cplusplus
 }
 #endif

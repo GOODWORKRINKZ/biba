@@ -178,6 +178,9 @@ $$
 
 ## Примечания
 
+- Для Phase 3 thermal reset на BTS7960 используется EN/INH путь (REN/LEN) с 100 us LOW-пульсом и нулевым PWM во время reset; подробный протокол проверки см. в [field-validation.md](field-validation.md).
+- Каноническая матрица статуса поддерживаемых платформ и ссылок на реализацию: [variants.md](variants.md).
+
 - Включите основной UART на Raspberry Pi и освободите его от Bluetooth перед использованием CRSF на скорости 420000 бод.
 - Daly BMS подключается по BLE или через USB-UART адаптер и обычно появляется как `/dev/ttyUSB0` в UART-режиме.
 - Для BTS7960 каждый мотор использует две линии PWM (`RPWM` и `LPWM`) и две линии enable (`REN`, `LEN`).

@@ -168,6 +168,11 @@ void biba_hal_delay_ms(uint32_t ms)
     sleep_ms(ms);
 }
 
+void biba_hal_delay_us(uint32_t us)
+{
+    sleep_us(us);
+}
+
 void biba_hal_status_led_set(bool on)
 {
 #if BIBA_STATUS_LED_ACTIVE_LOW
