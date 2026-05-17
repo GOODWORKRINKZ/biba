@@ -154,6 +154,23 @@ static float rc_to_unit(uint16_t v)
     return biba_clamp_unit(normalised);
 }
 
+static biba_limit_result_t apply_drive_current_limits(biba_mix_output_t mix)
+{
+    biba_motor_current_t il = biba_current_sense_left();
+    biba_motor_current_t ir = biba_current_sense_right();
+    biba_motor_limit_t lim = {
+        .current_limit_a  = BIBA_LEFT_MAX_CURRENT_A,
+        .power_limit_w    = BIBA_LEFT_MAX_POWER_W,
+        .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
+    };
+    biba_motor_limit_t rim = {
+        .current_limit_a  = BIBA_RIGHT_MAX_CURRENT_A,
+        .power_limit_w    = BIBA_RIGHT_MAX_POWER_W,
+        .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
+    };
+    return biba_apply_motor_limits(mix.left, mix.right, il, ir, lim, rim);
+}
+
 void biba_mode_standalone_init(void)
 {
     biba_hal_crsf_begin(BIBA_CRSF_BAUD);
@@ -372,28 +389,14 @@ void biba_mode_standalone_tick(void)
     if (trim < -BIBA_MOTOR_TRIM_MAX_EFFECT) trim = -BIBA_MOTOR_TRIM_MAX_EFFECT;
 
     /* ------------------------------------------------------------------ *
-     * Mix → current limiter → trim → drive
+     * Mix → current limiter (thermal backoff) → trim → drive
      * ------------------------------------------------------------------ */
     float left_out = 0.0f, right_out = 0.0f;
     bool left_limited = false, right_limited = false;
 
     if (armed) {
         biba_mix_output_t mix = biba_mix_differential(throttle, steering);
-
-        biba_motor_current_t il = biba_current_sense_left();
-        biba_motor_current_t ir = biba_current_sense_right();
-        biba_motor_limit_t lim = {
-            .current_limit_a  = BIBA_LEFT_MAX_CURRENT_A,
-            .power_limit_w    = BIBA_LEFT_MAX_POWER_W,
-            .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
-        };
-        biba_motor_limit_t rim = {
-            .current_limit_a  = BIBA_RIGHT_MAX_CURRENT_A,
-            .power_limit_w    = BIBA_RIGHT_MAX_POWER_W,
-            .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
-        };
-        biba_limit_result_t out = biba_apply_motor_limits(mix.left, mix.right,
-                                                           il, ir, lim, rim);
+        biba_limit_result_t out = apply_drive_current_limits(mix);
         left_limited  = out.left_limited;
         right_limited = out.right_limited;
         left_out  = out.left;
@@ -523,10 +526,12 @@ void biba_mode_standalone_tick(void)
         if (now - s_last_log_ms >= 1000u) {
             s_last_log_ms = now;
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
-            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d rssi=%d lq=%d\r\n",
+            int current_limited = (left_limited || right_limited) ? 1 : 0;
+            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d rssi=%d lq=%d\r\n",
                    now, (int)failsafe, (int)armed, spd, (int)stabilized,
                    (int)(raw_throttle * 100), (int)(raw_steering * 100),
                    (int)(left_out * 100), (int)(right_out * 100),
+                   current_limited,
                    s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
             /* CRSF/DMA health line every 5 s */

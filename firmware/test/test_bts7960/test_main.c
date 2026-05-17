@@ -97,10 +97,27 @@ static void test_thermal_reset_preserves_larger_caller_pulse(void)
     TEST_ASSERT_EQUAL_UINT32(pulse_us, s_last_delay_us);
 }
 
+static void test_set_enabled_false_zeroes_pwm_before_disabling_outputs(void)
+{
+    const int expected[] = {
+        EVT_LEFT_ENABLE_LOW,
+        EVT_RIGHT_ENABLE_LOW,
+        EVT_PWM_LEFT_ZERO,
+        EVT_PWM_RIGHT_ZERO,
+    };
+
+    reset_fakes();
+    biba_bts7960_set_enabled(false);
+
+    TEST_ASSERT_EQUAL_INT((int)(sizeof(expected) / sizeof(expected[0])), s_event_count);
+    TEST_ASSERT_EQUAL_INT_ARRAY(expected, s_events, s_event_count);
+}
+
 static void run_all(void)
 {
     RUN_TEST(test_thermal_reset_enforces_minimum_pulse_and_sequence);
     RUN_TEST(test_thermal_reset_preserves_larger_caller_pulse);
+    RUN_TEST(test_set_enabled_false_zeroes_pwm_before_disabling_outputs);
 }
 
 #if defined(BIBA_TEST_STANDALONE)

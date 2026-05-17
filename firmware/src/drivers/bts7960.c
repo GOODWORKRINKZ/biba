@@ -11,13 +11,18 @@ static uint32_t thermal_reset_pulse_us(uint32_t pulse_us)
     return pulse_us;
 }
 
+static void set_motor_pwm_zero(void)
+{
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+}
+
 void biba_bts7960_set_enabled(bool enabled)
 {
     biba_hal_left_enable(enabled);
     biba_hal_right_enable(enabled);
     if (!enabled) {
-        biba_hal_motor_pwm_left(0.0f);
-        biba_hal_motor_pwm_right(0.0f);
+        set_motor_pwm_zero();
     }
 }
 
@@ -31,8 +36,7 @@ void biba_bts7960_thermal_reset(uint32_t pulse_us)
 {
     uint32_t hold_us = thermal_reset_pulse_us(pulse_us);
 
-    biba_hal_motor_pwm_left(0.0f);
-    biba_hal_motor_pwm_right(0.0f);
+    set_motor_pwm_zero();
     biba_hal_left_enable(false);
     biba_hal_right_enable(false);
     biba_hal_delay_us(hold_us);
