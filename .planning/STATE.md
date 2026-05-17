@@ -3,26 +3,30 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-16T17:02:55.604Z"
+last_updated: "2026-05-17T17:05:00.000Z"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 1
-  total_plans: 8
+  total_plans: 12
   completed_plans: 6
-  percent: 75
+  percent: 50
 ---
 
 # Project State
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** 1
-**Status:** Executing Phase 03
-**Last updated:** 2026-05-14
+**Phase:** 4
+**Status:** Phase 4 context captured — ready for research & planning
+**Last updated:** 2026-05-17
 
 ## Current Phase
 
-Phase 1: Core Drive
+Phase 4: Thermal Hardening & ESC Architecture
+
+**Session:** discuss-phase completed  
+**Decisions:** BTS7960 optimization primary strategy, fallback to BTN8982TA, temperature target <120°C steady-state
+**Next:** `/gsd-plan-phase 4`
 
 ## Completed Phases
 
@@ -33,6 +37,8 @@ Phase 1: Core Drive
 RP2040 port at ~50% — ELRS/CRSF + motor control base exists in `rp2040-port` branch. Needs IMU, current sense, trim port.
 ESC thermal fix in progress (hardware): BTS7960 крепление на металлическую пластину для теплоотвода.
 Field test conducted 2026-05-09 — primary issue confirmed as ESC thermal mode.
+
+**2026-05-17**: Phase 4 added to roadmap — Thermal Hardening & ESC Architecture. Synthesizing dialogue.log + forum analysis of BTN7970/BTN8982TA/IFX007T tradeoffs and cooling design strategies. Four implementation plans created: failure analysis, ESC evaluation, thermal design, and 60+ min validation test.
 
 ## Key Risks
 
