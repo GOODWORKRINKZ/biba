@@ -30,7 +30,7 @@ Phase 4 context clarified through three rounds of discussion focusing on:
 - Hybrid: BTN8982TA primary, IFX007T deferred to Phase 5
 
 **User response:** 
-> "Сейчас пока есть BTS 7960 и мы можем на данном этапе попытаться его лучше охлаждать и уменьшить частоту ШИМ до 5кгц как рекомендуют, для экспериментов... наша дискуссия в этом файле: /home/ros2/Downloads/biba/dialogue.log"
+> "Сейчас пока есть BTS 7960 и мы можем на данном этапе попытаться его лучше охлаждать и уменьшить частоту ШИМ до 5кгц как рекомендуют, для экспериментов... наша дискуссия в этом файле: /home/ros2/Downloads/biba/artifacts/current-trace/phase-04-community-dialogue.log"
 
 **Interpretation:** User wants to **optimize existing BTS7960 first** before switching chips. Primary reference: dialogue.log (community findings + user's notes on PWM optimization and cooling).
 
@@ -151,7 +151,7 @@ Phase 4 context clarified through three rounds of discussion focusing on:
 
 ## Canonical References (for Downstream Agents)
 
-- [dialogue.log](../../../dialogue.log) — User's primary reference; community findings on BTS7960 thermal issues
+- [dialogue.log](../../../artifacts/current-trace/phase-04-community-dialogue.log) — User's primary reference; community findings on BTS7960 thermal issues
 - [04-SPEC.md](./04-SPEC.md) — Locked requirements; provides goal and acceptance criteria context
 - [DIALOGUE-ANALYSIS.md](./DIALOGUE-ANALYSIS.md) — Technical analysis of ESC failures and solutions
 - [docs/field-validation.md](../../docs/field-validation.md) — Phase 3 thermal testing protocol (reference for Phase 4 test methodology)

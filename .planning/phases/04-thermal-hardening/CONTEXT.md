@@ -74,7 +74,7 @@ This phase synthesizes field experience and community knowledge (BiBa, Arduino f
 
 ## Source Materials
 
-- [dialogue.log](../../../dialogue.log) — Community discussion of BTS7960 thermal issues, motor driver comparisons, and solutions (user's primary reference)
+- [dialogue.log](../../../artifacts/current-trace/phase-04-community-dialogue.log) — Community discussion of BTS7960 thermal issues, motor driver comparisons, and solutions (user's primary reference)
 - DIALOGUE-ANALYSIS.md (existing) — Technical analysis of ESC failures, BTN8982TA vs IFX007T comparison
 - Arduino Forum threads: BTS7960 failures in wheelchair projects
 - Arduino.ru forum: Gas mower project overheating (~20–30 min)

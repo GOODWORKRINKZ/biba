@@ -2,7 +2,7 @@
 
 **Milestone:** RP2040 Port
 **Created:** 2026-05-14
-**Phases:** 3
+**Phases:** 4
 **Requirements mapped:** 22/22 ✓
 
 ---
@@ -12,6 +12,7 @@
 - [ ] **Phase 1: Core Drive** — CRSF + BTS7960 PWM + Arming/Failsafe
 - [ ] **Phase 2: Stabilization & Sensing** — IMU heading-hold + Current sensing + Trim persistence
 - [ ] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation
+- [ ] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation
 
 ---
 
@@ -67,6 +68,25 @@ Plans:
 - [x] 03-01-PLAN.md — Implement BTS7960 EN/INH thermal reset in firmware with 100 us pulse and regression tests
 - [x] 03-02-PLAN.md — Publish canonical hardware variant matrix and field-validation evidence protocol
 - [x] 03-03-PLAN.md — Run automated + field validation and produce requirement-traceable UAT report
+
+---
+# Phase 4: Thermal Hardening & ESC Architecture
+**Goal**: Выбрать оптимальный ESC с обоснованием (BTN8982TA vs IFX007T), спроектировать теплотехническую архитектуру с активным охлаждением и подтвердить в полевых испытаниях
+**Depends on**: Phase 3
+**Requirements**: THERM-03, THERM-04, ESC-ARCH-01, ESC-ARCH-02
+**Success Criteria** (what must be TRUE):
+  1. Проведён анализ ≥5 реальных проектов (BiBa, газонокосилка, коляска) с BTS7960 — выявлены общие причины отказов (пусковой ток >100A, перегрев после 20–30 мин езды)
+  2. BTN8982TA и IFX007T оценены по спецификациям и доступности — выбран драйвер для RP2040 варианта с обоснованием (Rds(on), cost, availability, thermal limit)
+  3. Спроектирована теплотехническая архитектура: радиатор, гидроизоляция, вентилятор, EMC-фильтрация — документирована в THERM-DESIGN.md
+  4. Прототип с выбранным ESC пройден ≥60 мин безпрерывной нагрузки (симуляция полевого теста) без теплового отказа
+  5. Матрица совместимости ESC × RP2040 × Motor опубликована на github в HARDWARE-MATRIX.md
+**Plans**: 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Synthesize dialogue.log + forum threads (Arduino.ru, Arduino.cc, radiokot.ru) into comparative ESC failure analysis
+- [ ] 04-02-PLAN.md — Evaluate BTN8982TA + IFX007T: datasheets, sourcing, thermal simulation (SPICE/FEA if available)
+- [ ] 04-03-PLAN.md — Design thermal architecture: cooling strategy selection, PCB layout, EMC/waterproofing spec
+- [ ] 04-04-PLAN.md — Prototype validation: 60+ min continuous load test + field validation + HARDWARE-MATRIX publication
 
 ---
 
