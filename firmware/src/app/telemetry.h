@@ -15,6 +15,10 @@ typedef struct {
     float   setpoint_right;
     float   current_left_a;
     float   current_right_a;
+    uint16_t vbat_mv;          /* battery voltage from 3DR Power Module (mV) */
+    float   ibat_a;            /* battery current from 3DR Power Module (A)  */
+    float   temperature_c;     /* ambient temperature from AHT30 (°C)        */
+    float   humidity_pct;      /* relative humidity from AHT30 (%)           */
     uint8_t crsf_rssi;
     uint8_t crsf_link_quality;
     int8_t  crsf_snr_db;

@@ -26,6 +26,15 @@ void biba_telemetry_collect(const biba_telemetry_input_t *inputs,
 
     out->vbat_mv     = biba_voltage_sense_vbat_mv();
     out->rail_12v_mv = biba_voltage_sense_rail_mv();
+    out->ibat_ma     = clamp_i16((int32_t)(biba_voltage_sense_ibat_a() * 1000.0f));
+
+    /* Temperature and humidity: pre-populated by a low-rate task (≤1 Hz)
+     * that calls aht30_read(); copied directly from the inputs struct.
+     * aht30_read() blocks ~80 ms and must NOT be called here. */
+    out->temperature_cdeg = clamp_i16((int32_t)(inputs->temperature_c * 100.0f));
+    out->humidity_q8      = (inputs->humidity_pct > 100.0f) ? 100u
+                          : (inputs->humidity_pct < 0.0f)   ? 0u
+                          : (uint8_t)inputs->humidity_pct;
 
     biba_imu_sample_t imu;
     if (biba_imu_read(&imu)) {
