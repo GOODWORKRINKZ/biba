@@ -1,5 +1,6 @@
 #include "current_sense.h"
 
+#include "ads1115.h"
 #include "biba_board.h"
 #include "biba_config.h"
 #include "hal/biba_hal.h"
@@ -14,17 +15,16 @@ void biba_current_sense_configure(biba_current_calibration_t left,
     s_right = right;
 }
 
-static biba_motor_current_t sample(unsigned r_chan, unsigned l_chan,
+static biba_motor_current_t sample(uint8_t fwd_chan, uint8_t rev_chan,
                                     const biba_current_calibration_t *cal)
 {
-    uint16_t r_raw = biba_hal_adc_sample(r_chan);
-    uint16_t l_raw = biba_hal_adc_sample(l_chan);
-    /* BTS7960: R_IS is active when rotating one direction, L_IS the other;
-     * the driver's internal current mirror maps a fraction of motor current
-     * to the IS pin. We take the larger of the two as the magnitude. */
-    float vr = biba_hal_adc_volts(r_raw);
-    float vl = biba_hal_adc_volts(l_raw);
-    float v = (vr > vl) ? vr : vl;
+    float vfwd = 0.0f;
+    float vrev = 0.0f;
+    /* Read both half-bridge IS channels from ADS1115.
+     * Only one half-bridge conducts at a time; take the larger magnitude. */
+    (void)ads1115_read_channel_v(ADS1115_ADDR, fwd_chan, &vfwd);
+    (void)ads1115_read_channel_v(ADS1115_ADDR, rev_chan, &vrev);
+    float v = (vfwd > vrev) ? vfwd : vrev;
     float amps = (v - cal->zero_offset_v) * cal->amps_per_volt;
     biba_motor_current_t out = { .current_a = amps, .valid = true };
     return out;
@@ -32,10 +32,10 @@ static biba_motor_current_t sample(unsigned r_chan, unsigned l_chan,
 
 biba_motor_current_t biba_current_sense_left(void)
 {
-    return sample(BIBA_ADC_CHAN_LEFT_R_IS, BIBA_ADC_CHAN_LEFT_L_IS, &s_left);
+    return sample(BIBA_ADS1115_CHAN_IS_L_FWD, BIBA_ADS1115_CHAN_IS_L_REV, &s_left);
 }
 
 biba_motor_current_t biba_current_sense_right(void)
 {
-    return sample(BIBA_ADC_CHAN_RIGHT_R_IS, BIBA_ADC_CHAN_RIGHT_L_IS, &s_right);
+    return sample(BIBA_ADS1115_CHAN_IS_R_FWD, BIBA_ADS1115_CHAN_IS_R_REV, &s_right);
 }

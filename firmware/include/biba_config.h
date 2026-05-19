@@ -84,6 +84,15 @@
 #ifndef BIBA_VBAT_DIVIDER_RATIO
 #  define BIBA_VBAT_DIVIDER_RATIO      11.0f
 #endif
+
+/* 3DR Power Module battery current calibration defaults.
+ * Targets with a real power module should override in target_config.h. */
+#ifndef BIBA_IBAT_AMPS_PER_VOLT
+#  define BIBA_IBAT_AMPS_PER_VOLT      1.0f
+#endif
+#ifndef BIBA_IBAT_ZERO_OFFSET_V
+#  define BIBA_IBAT_ZERO_OFFSET_V      0.0f
+#endif
 /* PA5 rail tap uses its own divider. Defaults to the VBAT ratio because
  * the reference Blue Pill wiring shares the 1:11 ladder; a custom board
  * with a dedicated 12 V rail divider should override this in its
