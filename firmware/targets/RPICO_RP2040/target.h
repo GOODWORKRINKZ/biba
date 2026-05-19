@@ -35,9 +35,13 @@
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
  *   GP25 GPIO OUT  Onboard LED (active high)
- *   GP26 ADC0      VBAT voltage divider
- *   GP27 ADC1      Left motor IS  (BTS7960 IS pin)
- *   GP28 ADC2      Right motor IS (BTS7960 IS pin)
+ *   GP26 ADC0      VBAT (3DR Power Module voltage output)
+ *   GP27 ADC1      Ibat (3DR Power Module current output)
+ *   GP20 I2C0_SDA  IMU + ADS1115 + AHT30 (shared I2C0 bus)
+ *   GP21 I2C0_SCL  IMU + ADS1115 + AHT30 (shared I2C0 bus)
+ *
+ * BTS7960 IS pins (IS_L_FWD, IS_L_REV, IS_R_FWD, IS_R_REV) are routed
+ * to ADS1115 AIN0–AIN3 via I2C0 (addr 0x48, FSR=±4.096 V).
  *
  * Motor audio: L and R pairs each share one PWM slice (fixed wrap),
  * so per-channel independent carriers are not supported.
@@ -117,27 +121,29 @@
 
 /* --- ADC ---------------------------------------------------------------- */
 /*
- * RP2040 ADC pins: GP26=CH0, GP27=CH1, GP28=CH2, GP29=CH3.
+ * RP2040 native ADC pins: GP26=CH0, GP27=CH1.
  *
- *   CH0 (GP26) — VBAT voltage divider
- *   CH1 (GP27) — Left motor IS  (BTS7960 IS output, left H-bridge)
- *   CH2 (GP28) — Right motor IS (BTS7960 IS output, right H-bridge)
+ *   CH0 (GP26) — VBAT voltage divider (3DR Power Module analog output)
+ *   CH1 (GP27) — Ibat (3DR Power Module current analog output)
  *
- * Each BTS7960 chip exposes a single IS pin for its half-bridge.
- * The R/L aliases both point to the same channel (one IS per driver chip).
+ * BTS7960 IS pins (4 total: IS_L_FWD, IS_L_REV, IS_R_FWD, IS_R_REV)
+ * are routed to the ADS1115 external 16-bit ADC (I2C, addr 0x48).
+ * Native ADC channels for IS are removed — do not alias them back.
  */
-#define BIBA_ADC_CHAN_LEFT_R_IS     1U   /* GP27 = ADC1, left driver IS  */
-#define BIBA_ADC_CHAN_LEFT_L_IS     1U   /* aliased to same channel       */
-#define BIBA_ADC_CHAN_RIGHT_R_IS    2U   /* GP28 = ADC2, right driver IS  */
-#define BIBA_ADC_CHAN_RIGHT_L_IS    2U   /* aliased to same channel       */
-#define BIBA_ADC_CHAN_VBAT          0U   /* GP26 = ADC0                   */
-#define BIBA_ADC_CHAN_RAIL_12V      0U   /* aliased — not wired           */
-#define BIBA_ADC_CHAN_RAIL_CURRENT  0U   /* aliased — not wired           */
+#define BIBA_ADC_CHAN_VBAT           0U   /* GP26 = ADC0, 3DR PM voltage  */
+#define BIBA_ADC_CHAN_IBAT           1U   /* GP27 = ADC1, 3DR PM current  */
 
-#define BIBA_ADC_SCAN_LEN           3U
+#define BIBA_ADC_SCAN_LEN           2U
+#define BIBA_ADC_CHANNEL_SEQ        { 0, 1 }
 
-/* Polled on demand; no DMA sequence needed. */
-#define BIBA_ADC_CHANNEL_SEQ        { 0, 1, 2 }
+/* ADS1115 logical channel mapping (AIN0–AIN3 vs GND).
+ * IS voltage: VIS = (IL / kILIS) × RIS  where kILIS = 8500, RIS = 1 kΩ.
+ * ADS1115 FSR = ±4.096 V (PGA=001b) — captures up to ~34.8 A per half-bridge.
+ */
+#define BIBA_ADS1115_CHAN_IS_L_FWD   0U   /* AIN0: left  motor, forward  half-bridge IS */
+#define BIBA_ADS1115_CHAN_IS_L_REV   1U   /* AIN1: left  motor, reverse  half-bridge IS */
+#define BIBA_ADS1115_CHAN_IS_R_FWD   2U   /* AIN2: right motor, forward  half-bridge IS */
+#define BIBA_ADS1115_CHAN_IS_R_REV   3U   /* AIN3: right motor, reverse  half-bridge IS */
 
 /* --- Status LED (GP25, onboard on Pico, active high) ------------------- */
 
