@@ -13,6 +13,7 @@
 - [ ] **Phase 2: Stabilization & Sensing** — IMU heading-hold + Current sensing + Trim persistence
 - [x] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation (completed 2026-05-19)
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
+- [ ] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry
 
 ---
 
@@ -104,6 +105,21 @@ Features deferred beyond current milestone (v2+):
 | ROS2-01: BiBa ноды в ROS2 | Отдельный milestone на Pi Zero 2W |
 | NAV-01: Follow-me режим | За пределами RC управления |
 
+### Phase 5: Current Sensing & ADC Architecture
+**Goal**: Понять схему измерения тока в BTS7960 (IS-пины), принять решение по распределению АЦП ресурсов RP2040 (2 канала) и ADS1115 (4 канала по I2C) для мониторинга: напряжения батареи, тока батареи, тока по каждому колесу, а также подключить датчик температуры/влажности по I2C для телеметрии
+**Depends on**: Phase 4
+**Requirements**: ADC-01, ADC-02, ADC-03, ADC-04, TELEM-02
+**Success Criteria** (what must be TRUE):
+  1. BTS7960 IS-пины изучены: известен масштабный коэффициент (kILIS), допустимый диапазон входного напряжения АЦП, схема включения резистора IS → GND
+  2. Принята схема распределения каналов: RP2040 ADC0/ADC1 + ADS1115 ch0–ch3 → назначены сигналы (Vbat, Ibat, Iwheel_L, Iwheel_R, temp/hum)
+  3. Код чтения ADS1115 по I2C работает на RP2040, возвращает актуальные значения тока/напряжения в физических единицах (А, В)
+  4. Датчик температуры/влажности опрашивается по тому же I2C шине и значения уходят в CRSF телеметрию
+  5. Измерения тока колёс сверены с нагрузочным тестом — погрешность не хуже ±5% при токах 5–30 A
+**Plans**: TBD
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 5 to break down)
+
 ---
 
 ## Progress
@@ -114,3 +130,4 @@ Features deferred beyond current milestone (v2+):
 | 2. Stabilization & Sensing | 0/TBD | not started | - |
 | 3. Field Ready | 3/3 | complete | 2026-05-19 |
 | 4. Thermal Hardening | 4/4 | complete (UAT ✓) | 2026-05-19 |
+| 5. Current Sensing & ADC | 0/TBD | not started | - |

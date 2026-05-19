@@ -17,7 +17,7 @@ progress:
 **Project:** BiBa
 **Milestone:** RP2040 Port
 **Phase:** —
-**Status:** All active phases complete. Ready for milestone close or Phase 2 (Stabilization & Sensing).
+**Status:** All active phases complete. Phase 5 added — ready to plan.
 **Last updated:** 2026-05-19
 
 ## Current Phase
@@ -36,8 +36,8 @@ Phase 4 field validation confirmed: large heatsink installed + one driver replac
 Center of mass shifted closer to geometric center → handling improved significantly.
 All 10 UAT acceptance criteria passed. 04-UAT.md status=complete.
 
-Phase 2 (Stabilization & Sensing) has no directory yet — next logical work item.
-Consider `/gsd-complete-milestone v1.0` if milestone scope is considered done.
+Phase 2 (Stabilization & Sensing) has no directory yet — may follow after Phase 5.
+Phase 5 (Current Sensing & ADC Architecture) added 2026-05-19 — scope: BTS7960 IS pins, ADS1115 I2C ADC, battery/per-wheel current, temp/hum telemetry.
 
 **2026-05-17**: Phase 4 added to roadmap — Thermal Hardening & ESC Architecture. Synthesizing dialogue.log + forum analysis of BTN7970/BTN8982TA/IFX007T tradeoffs and cooling design strategies. Four implementation plans created: failure analysis, ESC evaluation, thermal design, and 60+ min validation test.
 
