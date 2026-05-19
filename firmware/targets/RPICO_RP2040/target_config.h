@@ -31,9 +31,10 @@
 #define BIBA_IBAT_AMPS_PER_VOLT      18.18f
 #define BIBA_IBAT_ZERO_OFFSET_V      0.0f
 
-/* 3DR Power Module — Vbat (RP2040 ADC0 / GP26).
- * Calibration placeholder: ~5.7× resistive divider ratio.
- * TODO: replace with measured divider ratio.                         */
-#define BIBA_VBAT_DIVIDER_RATIO      5.7f
+/* GM v1.0 / APM-Pixhawk Power Module clone (90 A) — Vbat (RP2040 ADC0 / GP26).
+ * Standard resistive divider ratio = 10.1× (matches ArduPilot BATT_VOLT_MULT).
+ * At 6S full charge (25.2 V): 25.2 / 10.1 = 2.49 V — within RP2040 ADC max.
+ * Fine-tune from measured Vbat vs ADC reading if needed.             */
+#define BIBA_VBAT_DIVIDER_RATIO      10.1f
 
 #endif /* BIBA_TARGET_CONFIG_H */

@@ -10,7 +10,7 @@ uint16_t biba_voltage_sense_vbat_mv(void)
     float pin_v = biba_hal_adc_volts(raw);
     float bus_v = pin_v * BIBA_VBAT_DIVIDER_RATIO;
     if (bus_v < 0.0f) bus_v = 0.0f;
-    if (bus_v > 65.0f) bus_v = 65.0f;
+    if (bus_v > 30.0f) bus_v = 30.0f;  /* 6S max ~25.2 V; 30 V leaves headroom */
     return (uint16_t)(bus_v * 1000.0f);
 }
 
