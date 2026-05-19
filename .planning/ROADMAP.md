@@ -9,9 +9,9 @@
 
 ## Phases
 
-- [ ] **Phase 1: Core Drive** — CRSF + BTS7960 PWM + Arming/Failsafe
+- [x] **Phase 1: Core Drive** — CRSF + BTS7960 PWM + Arming/Failsafe (completed 2026-05-19)
 - [ ] **Phase 2: Stabilization & Sensing** — IMU heading-hold + Current sensing + Trim persistence
-- [ ] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation
+- [x] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation (completed 2026-05-19)
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
 
 ---
@@ -110,6 +110,7 @@ Features deferred beyond current milestone (v2+):
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Drive | 0/? | Not started | - |
-| 2. Stabilization & Sensing | 0/? | Not started | - |
-| 3. Field Ready | 0/? | Not started | - |
+| 1. Core Drive | 5/5 | complete | 2026-05-19 |
+| 2. Stabilization & Sensing | 0/TBD | not started | - |
+| 3. Field Ready | 3/3 | complete | 2026-05-19 |
+| 4. Thermal Hardening | 4/4 | complete (UAT ✓) | 2026-05-19 |

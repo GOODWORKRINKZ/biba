@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-05-19T07:48:36.392Z"
+status: idle
+last_updated: "2026-05-19T11:00:00.000Z"
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 12
+  completed_plans: 12
   percent: 100
 ---
 
@@ -16,27 +16,28 @@ progress:
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** 4
-**Status:** Executing Phase 04
-**Last updated:** 2026-05-17
+**Phase:** —
+**Status:** All active phases complete. Ready for milestone close or Phase 2 (Stabilization & Sensing).
+**Last updated:** 2026-05-19
 
 ## Current Phase
 
-Phase 4: Thermal Hardening & ESC Architecture
-
-**Session:** discuss-phase completed  
-**Decisions:** BTS7960 optimization primary strategy, fallback to BTN8982TA, temperature target <120°C steady-state
-**Next:** `/gsd-plan-phase 4`
+None — Phase 4 UAT passed 2026-05-19.
 
 ## Completed Phases
 
-(none)
+- Phase 1: Core Drive — complete
+- Phase 3: Field Ready — complete
+- Phase 4: Thermal Hardening & ESC Architecture — complete (UAT passed 2026-05-19)
 
 ## Notes
 
-RP2040 port at ~50% — ELRS/CRSF + motor control base exists in `rp2040-port` branch. Needs IMU, current sense, trim port.
-ESC thermal fix in progress (hardware): BTS7960 крепление на металлическую пластину для теплоотвода.
-Field test conducted 2026-05-09 — primary issue confirmed as ESC thermal mode.
+Phase 4 field validation confirmed: large heatsink installed + one driver replaced → thermal within limits throughout run.
+Center of mass shifted closer to geometric center → handling improved significantly.
+All 10 UAT acceptance criteria passed. 04-UAT.md status=complete.
+
+Phase 2 (Stabilization & Sensing) has no directory yet — next logical work item.
+Consider `/gsd-complete-milestone v1.0` if milestone scope is considered done.
 
 **2026-05-17**: Phase 4 added to roadmap — Thermal Hardening & ESC Architecture. Synthesizing dialogue.log + forum analysis of BTN7970/BTN8982TA/IFX007T tradeoffs and cooling design strategies. Four implementation plans created: failure analysis, ESC evaluation, thermal design, and 60+ min validation test.
 
