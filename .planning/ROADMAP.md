@@ -12,7 +12,7 @@
 - [ ] **Phase 1: Core Drive** — CRSF + BTS7960 PWM + Arming/Failsafe
 - [ ] **Phase 2: Stabilization & Sensing** — IMU heading-hold + Current sensing + Trim persistence
 - [ ] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation
-- [ ] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation
+- [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
 
 ---
 
@@ -83,10 +83,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Synthesize dialogue.log + forum threads (Arduino.ru, Arduino.cc, radiokot.ru) into comparative ESC failure analysis
-- [ ] 04-02-PLAN.md — Evaluate BTN8982TA + IFX007T: datasheets, sourcing, thermal simulation (SPICE/FEA if available)
-- [ ] 04-03-PLAN.md — Design thermal architecture: cooling strategy selection, PCB layout, EMC/waterproofing spec
-- [ ] 04-04-PLAN.md — Prototype validation: 60+ min continuous load test + field validation + HARDWARE-MATRIX publication
+- [x] 04-01-PLAN.md — Synthesize dialogue.log + forum threads (Arduino.ru, Arduino.cc, radiokot.ru) into comparative ESC failure analysis
+- [x] 04-02-PLAN.md — Evaluate BTN8982TA + IFX007T: datasheets, sourcing, thermal simulation (SPICE/FEA if available)
+- [x] 04-03-PLAN.md — Design thermal architecture: cooling strategy selection, PCB layout, EMC/waterproofing spec
+- [x] 04-04-PLAN.md — Prototype validation: 60+ min continuous load test + field validation + HARDWARE-MATRIX publication
 
 ---
 
