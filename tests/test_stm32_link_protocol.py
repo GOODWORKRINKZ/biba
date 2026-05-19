@@ -221,3 +221,68 @@ def test_build_motor_audio_rejects_invalid_args(kwargs):
 
     with pytest.raises(ValueError):
         build_motor_audio(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Phase 05: Telemetry struct — ibat, temperature, humidity round-trip
+# ---------------------------------------------------------------------------
+
+def test_telemetry_ibat_temperature_humidity_roundtrip() -> None:
+    """New fields ibat_a, temperature_c, humidity_pct survive a to_bytes → from_bytes cycle."""
+    tlm = Telemetry(
+        vbat_v=24.0,
+        ibat_a=12.345,
+        temperature_c=27.5,
+        humidity_pct=62.0,
+    )
+    frame = TelemetryFrame(seq=1, flags=0, telemetry=tlm)
+    raw = frame.to_bytes()
+    rt = TelemetryFrame.from_bytes(raw)
+
+    assert rt.telemetry.ibat_a == pytest.approx(12.345, abs=1e-3)
+    assert rt.telemetry.temperature_c == pytest.approx(27.5, abs=0.01)
+    assert rt.telemetry.humidity_pct == pytest.approx(62.0, abs=0.5)
+
+
+def test_telemetry_zero_new_fields_produce_zero_outputs() -> None:
+    """Default Telemetry() (all zeros) → new fields decode as zero."""
+    frame = TelemetryFrame(seq=0, flags=0, telemetry=Telemetry())
+    rt = TelemetryFrame.from_bytes(frame.to_bytes())
+    assert rt.telemetry.ibat_a == 0.0
+    assert rt.telemetry.temperature_c == 0.0
+    assert rt.telemetry.humidity_pct == 0.0
+
+
+def test_telemetry_existing_fields_unaffected_by_new_fields() -> None:
+    """Adding new fields does not shift or corrupt the original layout."""
+    tlm = Telemetry(
+        setpoint_left=0.5,
+        current_left_a=5.0,
+        vbat_v=25.2,
+        gyro_z_dps=90.0,
+        crsf_rssi=200,
+        uptime_ms=999_000,
+        ibat_a=3.0,
+        temperature_c=25.0,
+        humidity_pct=45.0,
+    )
+    rt = TelemetryFrame.from_bytes(TelemetryFrame(seq=2, flags=0, telemetry=tlm).to_bytes()).telemetry
+
+    assert rt.setpoint_left == pytest.approx(0.5, abs=1e-4)
+    assert rt.current_left_a == pytest.approx(5.0, abs=1e-3)
+    assert rt.vbat_v == pytest.approx(25.2, abs=1e-3)
+    assert rt.gyro_z_dps == pytest.approx(90.0, abs=0.01)
+    assert rt.crsf_rssi == 200
+    assert rt.uptime_ms == 999_000
+    assert rt.ibat_a == pytest.approx(3.0, abs=1e-3)
+    assert rt.temperature_c == pytest.approx(25.0, abs=0.01)
+    assert rt.humidity_pct == pytest.approx(45.0, abs=0.5)
+
+
+def test_telemetry_struct_is_still_48_bytes() -> None:
+    """Total packed struct size must remain 48 bytes (backward-compatible)."""
+    import struct as _struct
+    from stm32_link.protocol import TELEMETRY_STRUCT, TELEMETRY_SIZE
+    assert TELEMETRY_SIZE == 48
+    assert _struct.calcsize(TELEMETRY_STRUCT) == 48
+

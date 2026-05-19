@@ -147,7 +147,8 @@ def parse_frame(buffer: bytes) -> Frame:
 
 # Matches biba_proto_telemetry_t packed layout byte-for-byte.
 # "<" = little-endian, no padding because of __attribute__((packed)).
-TELEMETRY_STRUCT = "<hhhhHHhhhhhhBBbBI16s"
+# Fields ibat_ma, temperature_cdeg, humidity_q8 carved from former reserved[16].
+TELEMETRY_STRUCT = "<hhhhHHhhhhhhBBbBIhhB11s"
 TELEMETRY_SIZE = struct.calcsize(TELEMETRY_STRUCT)
 assert TELEMETRY_SIZE == 48, f"telemetry size drifted: {TELEMETRY_SIZE}"
 
@@ -171,6 +172,9 @@ class Telemetry:
     crsf_snr_db: int = 0
     error_flags: int = 0
     uptime_ms: int = 0
+    ibat_a: float = 0.0             # battery current in amps (3DR PM)
+    temperature_c: float = 0.0      # ambient temperature in °C (AHT30)
+    humidity_pct: float = 0.0       # relative humidity 0–100 % (AHT30)
 
 
 def _to_q15(value: float) -> int:
@@ -212,6 +216,9 @@ class TelemetryFrame:
             crsf_snr_db=fields[14],
             error_flags=fields[15],
             uptime_ms=fields[16],
+            ibat_a=fields[17] / 1000.0,
+            temperature_c=fields[18] / 100.0,
+            humidity_pct=float(fields[19]),
         )
         return cls(seq=frame.seq, flags=frame.flags, telemetry=tlm)
 
@@ -236,7 +243,10 @@ class TelemetryFrame:
             max(-128, min(127, t.crsf_snr_db)),
             t.error_flags & 0xFF,
             t.uptime_ms & 0xFFFFFFFF,
-            b"\x00" * 16,
+            max(-32768, min(32767, int(round(t.ibat_a * 1000)))),
+            max(-32768, min(32767, int(round(t.temperature_c * 100)))),
+            max(0, min(100, int(round(t.humidity_pct)))),
+            b"\x00" * 11,
         )
         return build_frame(TelemetryId.SNAPSHOT, self.seq, self.flags, payload)
 

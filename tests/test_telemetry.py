@@ -167,3 +167,36 @@ def test_send_system_stats_accepts_canonical_metrics_and_applies_transport_offse
     assert payload[10:12] == bytes.fromhex("000f")
     assert payload[12:14] == bytes.fromhex("0403")
     assert metrics.right_wheel_current_ma == 2700
+
+
+# ---------------------------------------------------------------------------
+# Phase 05: battery current passed through send_battery()
+# ---------------------------------------------------------------------------
+
+def test_send_battery_encodes_ibat_correctly() -> None:
+    """ibat_a is passed as current_a; verify it encodes correctly at 0.1 A units."""
+    serial_port = FakeSerial()
+    telemetry = CRSFTelemetry(serial_port)
+
+    # 18.0 A → CRSF current = 180 deci-amps = 0x00B4
+    telemetry.send_battery(voltage_v=24.0, current_a=18.0, capacity_mah=0, remaining_pct=80)
+
+    parsed = parse_frame(serial_port.writes[-1])
+    assert parsed is not None
+    _, payload = parsed
+    # voltage (2 bytes) + current (2 bytes): current = 180 = 0x00B4
+    assert payload[2:4] == bytes([0x00, 0xB4])
+
+
+def test_send_battery_encodes_vbat_correctly() -> None:
+    """vbat at 25.6 V → CRSF voltage = 256 deci-volts = 0x0100."""
+    serial_port = FakeSerial()
+    telemetry = CRSFTelemetry(serial_port)
+
+    telemetry.send_battery(voltage_v=25.6, current_a=0.0, capacity_mah=0, remaining_pct=0)
+
+    parsed = parse_frame(serial_port.writes[-1])
+    assert parsed is not None
+    _, payload = parsed
+    # voltage = 256 = 0x0100
+    assert payload[0:2] == bytes([0x01, 0x00])
