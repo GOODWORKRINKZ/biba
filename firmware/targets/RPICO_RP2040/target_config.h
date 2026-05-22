@@ -39,9 +39,12 @@
 
 /* Phase 06 HW not yet wired: native ADC GP26/GP27 carry noise/old VBAT
  * divider until 1k‖1k + 0.1µF RC filter is installed on BTS7960 IS pins.
- * Disable per-motor current limiter so spurious IS readings don't throttle
- * PWM. Restore to 18.0f after Phase 06 hardware rework. */
+ * Disable per-motor current AND power limiters so spurious IS readings
+ * don't throttle PWM (power limiter uses the same current sample).
+ * Restore to 18.0f / 180.0f after Phase 06 hardware rework. */
 #define BIBA_LEFT_MAX_CURRENT_A      0.0f
 #define BIBA_RIGHT_MAX_CURRENT_A     0.0f
+#define BIBA_LEFT_MAX_POWER_W        0.0f
+#define BIBA_RIGHT_MAX_POWER_W       0.0f
 
 #endif /* BIBA_TARGET_CONFIG_H */
