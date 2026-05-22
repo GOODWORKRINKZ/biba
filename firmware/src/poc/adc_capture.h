@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define ADC_CAPTURE_MAX_SAMPLES  4096u
 
 /* Initialise RP2040 ADC clock divider for the target sample rate.
@@ -16,3 +20,7 @@ void adc_capture_init(uint32_t sample_rate_sps);
  * out_buf: caller buffer, size >= n_samples uint16_t.
  * Returns true on success, false on DMA timeout (> 500 ms). */
 bool adc_capture_burst(uint8_t channel, uint16_t n_samples, uint16_t *out_buf);
+
+#ifdef __cplusplus
+}
+#endif
