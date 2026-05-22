@@ -61,25 +61,49 @@ def freq_fft(samples: np.ndarray, sps: int) -> float:
     n = len(samples)
     if n < 4:
         return 0.0
+    # DC removal before windowing — otherwise Hanning side-lobes of the
+    # large DC component leak into the low-frequency RPM band.
+    ac = samples - samples.mean()
     window = np.hanning(n)
-    spectrum = np.abs(np.fft.rfft(samples * window))
+    spectrum = np.abs(np.fft.rfft(ac * window))
     freqs = np.fft.rfftfreq(n, d=1.0 / sps)
-    mask = (freqs >= 100.0) & (freqs <= 5000.0)
+    # Time-domain plot shows RPM-modulated IS at 2–20 Hz across the duty
+    # sweep.  Search 1–200 Hz; the PWM comb above that is irrelevant.
+    mask = (freqs >= 1.0) & (freqs <= 200.0)
     if not mask.any():
         return 0.0
     return float(freqs[mask][int(np.argmax(spectrum[mask]))])
 
 
 def freq_zero_crossing(samples: np.ndarray, sps: int) -> float:
+    """Schmitt-trigger zero-crossing rate.
+
+    A naive `signal > threshold` detector glitches on noisy slow signals
+    because the signal hovers near the threshold for many samples while
+    noise oscillates around it.  We use a two-level hysteresis (Schmitt
+    trigger) so a False→True transition requires crossing `+hi` and the
+    inverse requires crossing `-lo`.  Hysteresis is sized to the AC std
+    of the signal so it scales with amplitude.
+    """
     if len(samples) < 4:
         return 0.0
     ac = samples - samples.mean()
-    threshold = ac.std() * 0.1
-    if threshold <= 0.0:
+    sigma = float(ac.std())
+    if sigma <= 0.0:
         return 0.0
-    above = ac > threshold
-    # Rising crossings: False -> True
-    crossings = np.where(np.diff(above.astype(int)) > 0)[0]
+    hi = sigma * 0.5
+    lo = -sigma * 0.5
+
+    crossings: list[int] = []
+    state_high = False
+    for i, v in enumerate(ac):
+        if state_high:
+            if v < lo:
+                state_high = False
+        else:
+            if v > hi:
+                state_high = True
+                crossings.append(i)
     if len(crossings) < 2:
         return 0.0
     period = float(np.median(np.diff(crossings)))
@@ -95,23 +119,26 @@ def freq_autocorr(samples: np.ndarray, sps: int) -> float:
     if ac.std() == 0.0:
         return 0.0
     corr = np.correlate(ac, ac, mode="full")[len(ac) - 1:]
-    min_lag = max(int(sps * 0.0002), 1)   # > 5 kHz upper bound
-    max_lag = int(sps * 0.01)             # < 100 Hz lower bound
+    # Search 5 ms (200 Hz) lag floor.  Cap max lag at min(500 ms, N/3) —
+    # the N/3 cap keeps the /overlap normalisation well-conditioned
+    # (overlap ≥ 2N/3, division is stable).  Without the cap the
+    # normalised autocorr blows up in the tail and reports spurious
+    # ultra-low-frequency peaks.
+    min_lag = max(int(sps * 0.005), 1)
+    max_lag = min(int(sps * 0.5), len(ac) // 3)
     max_lag = min(max_lag, len(corr) - 1)
     if max_lag <= min_lag + 1:
         return 0.0
-    # Find the FIRST local maximum after the central peak — this is the
-    # fundamental period.  Picking the global max over the whole search
-    # window biases toward integer multiples of the true period (which
-    # also have high autocorrelation for pure sinusoids).
-    segment = corr[min_lag:max_lag]
-    peak_idx = None
-    for i in range(1, len(segment) - 1):
-        if segment[i] > segment[i - 1] and segment[i] > segment[i + 1]:
-            peak_idx = i + min_lag
-            break
-    if peak_idx is None:
-        peak_idx = int(np.argmax(segment)) + min_lag
+    # np.correlate returns unnormalised sums; the envelope tapers as
+    # (N - lag) because fewer samples overlap at larger lags.  Without
+    # correction, short lags always win — the algorithm reports the
+    # min_lag bound instead of the true period.  Normalise by overlap
+    # count to expose the underlying cos(2πfτ) shape, then take the
+    # global max in the search window.
+    overlap = np.arange(len(corr), 0, -1, dtype=float)
+    norm = corr / overlap
+    segment = norm[min_lag:max_lag]
+    peak_idx = int(np.argmax(segment)) + min_lag
     if peak_idx <= 0:
         return 0.0
     return float(sps) / float(peak_idx)
@@ -177,13 +204,17 @@ def main(argv: list[str] | None = None) -> int:
     # PNG: PSDs + scatter
     fig, (ax_psd, ax_scatter) = plt.subplots(1, 2, figsize=(14, 6))
     for r in results:
-        f, pxx = welch(r["samples"], fs=args.sps, nperseg=min(512, len(r["samples"])))
+        # nperseg = full capture for best low-frequency resolution:
+        # Δf = sps/N ≈ 2.4 Hz at 4096 samples @ 10 kSPS.
+        nps = min(len(r["samples"]), 4096)
+        f, pxx = welch(r["samples"], fs=args.sps, nperseg=nps)
         ax_psd.semilogy(f, pxx, label=f"duty={r['duty']}% {r['dir']}", linewidth=0.8)
     ax_psd.set_xlabel("Frequency (Hz)")
     ax_psd.set_ylabel("PSD (mV²/Hz)")
-    ax_psd.set_title("Welch PSD per capture")
+    ax_psd.set_title("Welch PSD per capture (RPM band)")
+    ax_psd.set_xlim(0, 200)
     ax_psd.legend(fontsize=7, ncol=2)
-    ax_psd.grid(True, alpha=0.3)
+    ax_psd.grid(True, which="both", alpha=0.3)
 
     for direction, marker_style in [("FWD", "o"), ("REV", "s")]:
         rows = [r for r in results if r["dir"] == direction]
