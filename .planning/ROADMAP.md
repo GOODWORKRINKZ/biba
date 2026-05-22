@@ -72,7 +72,8 @@ Plans:
 - [x] 03-03-PLAN.md — Run automated + field validation and produce requirement-traceable UAT report
 
 ---
-# Phase 4: Thermal Hardening & ESC Architecture
+
+### Phase 4: Thermal Hardening & ESC Architecture
 **Goal**: Выбрать оптимальный ESC с обоснованием (BTN8982TA vs IFX007T), спроектировать теплотехническую архитектуру с активным охлаждением и подтвердить в полевых испытаниях
 **Depends on**: Phase 3
 **Requirements**: THERM-03, THERM-04, ESC-ARCH-01, ESC-ARCH-02
