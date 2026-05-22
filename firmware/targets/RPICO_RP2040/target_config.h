@@ -37,4 +37,11 @@
  * Fine-tune from measured Vbat vs ADC reading if needed.             */
 #define BIBA_VBAT_DIVIDER_RATIO      10.1f
 
+/* Phase 06 HW not yet wired: native ADC GP26/GP27 carry noise/old VBAT
+ * divider until 1k‖1k + 0.1µF RC filter is installed on BTS7960 IS pins.
+ * Disable per-motor current limiter so spurious IS readings don't throttle
+ * PWM. Restore to 18.0f after Phase 06 hardware rework. */
+#define BIBA_LEFT_MAX_CURRENT_A      0.0f
+#define BIBA_RIGHT_MAX_CURRENT_A     0.0f
+
 #endif /* BIBA_TARGET_CONFIG_H */
