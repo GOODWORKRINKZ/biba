@@ -230,11 +230,26 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         float p_term = kp * err;
         float i_term = ki * integral;
         duty = p_term + i_term;
-        /* Stiction kick: BTS7960 + brushed motor needs ~20 %% duty to
-         * actually move.  If the controller asks for anything in
-         * (0, 0.20), snap up to 0.20 so we don't waste a window heating
-         * the FETs while the wheel is stuck. */
-        if (duty > 0.0f && duty < 0.20f) duty = 0.20f;
+        /* Dead-zone / stiction handling.  Open-loop measurement:
+         * the brushed motor + BTS7960 needs ~20 %% duty to break stiction,
+         * and below that produces no measurable IS modulation.  Two rules:
+         *
+         *  - If the controller asks for duty in (0, 0.20) and target > 0,
+         *    snap up to 0.20 (stiction kick).  Without this the requested
+         *    duty would heat the FETs without spinning the wheel.
+         *  - If the wheel is already spinning (meas_hz > 0) and the
+         *    controller asks for duty < 0.20, hold at 0.20 instead of
+         *    falling to 0 \u2014 dropping to 0 causes the wheel to coast
+         *    down then need another stiction kick, producing the
+         *    pulsing limit cycle we observed at unreachable targets.
+         *  - True full stop only when target == 0. */
+        bool wheel_spinning = (meas_hz > 0.0f);
+        if (target_hz > 0.0f && duty > 0.0f && duty < 0.20f) {
+            duty = 0.20f;
+        }
+        if (target_hz > 0.0f && wheel_spinning && duty < 0.20f) {
+            duty = 0.20f;
+        }
         if (duty < 0.0f) duty = 0.0f;
         if (duty > 1.0f) duty = 1.0f;
         biba_hal_motor_pwm_left(duty);
