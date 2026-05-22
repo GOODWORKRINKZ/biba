@@ -125,7 +125,12 @@ static float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
     }
     float mean = (float)sum / (float)n;
     float pk_pk = (float)(mx - mn);
-    if (pk_pk < 8.0f) return 0.0f;  /* below ADC noise floor */
+    /* Noise floor: ADC quiescent noise on the IS line with the motor off
+     * is ~10-15 LSB pk-pk; require well above that before declaring a
+     * detectable AC signal.  Previously 8 LSB — ZC was reporting random
+     * 10-30 Hz at duty=0 from pure noise, which fooled the PI controller
+     * into thinking the motor was spinning when it was not. */
+    if (pk_pk < 40.0f) return 0.0f;
     float hi = 0.25f * pk_pk;
     float lo = -hi;
 
@@ -201,15 +206,35 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         float mean_adc = (float)sum / (float)RPMRUN_N_SAMPLES;
         float curr_a = adc_to_amps(mean_adc - baseline_adc);
 
-        /* PI update.  Integrator clamps to [-1.5, +1.5] so wind-up doesn't
-         * trap the loop when the wheel is stalled. */
+        /* PI update with conditional integration (anti-windup).
+         * Three rules:
+         *  1. Don't integrate while the duty is saturated at 0 or 1 —
+         *     pumping the I term during saturation creates the 100%/0%
+         *     limit cycle we observed ("колесо стучит").
+         *  2. Don't integrate when meas_hz==0 from the noise floor —
+         *     otherwise the controller pumps duty when the wheel is
+         *     not yet moving and overshoots wildly.
+         *  3. Soft integral clamp keeps the I contribution to duty in
+         *     [0, +1.5] regardless of Ki. */
         float err = target_hz - meas_hz;
-        integral += err * RPMRUN_DT_S;
+        bool sat_high = duty >= 0.999f;
+        bool sat_low  = duty <= 0.001f;
+        bool can_integrate =
+            !(sat_high && err > 0.0f) &&
+            !(sat_low  && err < 0.0f);
+        if (can_integrate && meas_hz > 0.0f) {
+            integral += err * RPMRUN_DT_S;
+        }
         if (integral > 1.5f / (ki + 1e-6f)) integral = 1.5f / (ki + 1e-6f);
         if (integral < 0.0f) integral = 0.0f;
         float p_term = kp * err;
         float i_term = ki * integral;
         duty = p_term + i_term;
+        /* Stiction kick: BTS7960 + brushed motor needs ~20 %% duty to
+         * actually move.  If the controller asks for anything in
+         * (0, 0.20), snap up to 0.20 so we don't waste a window heating
+         * the FETs while the wheel is stuck. */
+        if (duty > 0.0f && duty < 0.20f) duty = 0.20f;
         if (duty < 0.0f) duty = 0.0f;
         if (duty > 1.0f) duty = 1.0f;
         biba_hal_motor_pwm_left(duty);
