@@ -19,10 +19,19 @@ void adc_capture_init(uint32_t sample_rate_sps)
         false,  /* err_in_fifo: don't insert error flag */
         false   /* byte_shift: keep 12-bit samples */
     );
-    /* Clock divider formula (Pitfall 2: subtract 1 to get the correct
-     * divisor — the RP2040 ADC clock is 48 MHz, each conversion takes
-     * 96 ADC clocks, so: div = (48e6 / (96 * sps)) - 1              */
-    float div = (float)48000000u / (96.0f * (float)sample_rate_sps) - 1.0f;
+    /* Clock divider formula.  pico-sdk: sample period = (1 + div) cycles
+     * of the 48 MHz ADC clock.  Minimum conversion time is 96 cycles
+     * (≈500 kSPS hard cap), but the divisor itself does NOT include the
+     * /96 — that is the conversion-time floor, not a frequency divider.
+     *
+     * For 10 kSPS:  div = 48e6/10e3 - 1 = 4799.
+     *
+     * Previous version had an extra /96 in here which made the ADC run
+     * 50× faster than requested.  CAPTURE windows were 4 ms instead of
+     * 205 ms, which silently shrank the ZC window so far that the RPMRUN
+     * loop could never see the 2-25 Hz fundamental and produced random
+     * meas_hz from noise crossings. */
+    float div = (float)48000000u / (float)sample_rate_sps - 1.0f;
     if (div < 0.0f) div = 0.0f;
     adc_set_clkdiv(div);
 }

@@ -97,7 +97,7 @@ def main() -> int:
                     if not header_written:
                         continue
                     parts = [p.strip() for p in body.split(",")]
-                    if len(parts) != 5:
+                    if len(parts) != 8:
                         continue
                     writer.writerow(parts)
                     try:
@@ -107,6 +107,9 @@ def main() -> int:
                             "meas": float(parts[2]),
                             "duty": float(parts[3]),
                             "curr_a": float(parts[4]),
+                            "err": float(parts[5]),
+                            "i_term": float(parts[6]),
+                            "p_term": float(parts[7]),
                         })
                     except ValueError:
                         pass
@@ -132,21 +135,35 @@ def main() -> int:
         meas = [r["meas"] for r in rows]
         duty = [r["duty"] for r in rows]
         curr = [r["curr_a"] for r in rows]
+        err = [r["err"] for r in rows]
+        p_term = [r["p_term"] * 100.0 for r in rows]
+        i_term = [r["i_term"] * 100.0 for r in rows]
 
-        fig, (ax_f, ax_d, ax_i) = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
+        fig, (ax_f, ax_d, ax_pi, ax_i) = plt.subplots(
+            4, 1, figsize=(11, 10), sharex=True,
+        )
         ax_f.plot(t, target, "--", color="tab:gray", label="target")
         ax_f.plot(t, meas, color="tab:blue", label="measured (ZC)")
+        ax_f.plot(t, err, color="tab:purple", alpha=0.5, label="error")
+        ax_f.axhline(0, color="k", lw=0.4)
         ax_f.set_ylabel("Frequency (Hz)")
         ax_f.legend(loc="upper right")
         ax_f.grid(True, alpha=0.3)
 
-        ax_d.plot(t, duty, color="tab:orange")
+        ax_d.plot(t, duty, color="tab:orange", label="duty")
         ax_d.set_ylabel("Duty (%)")
         ax_d.set_ylim(-5, 105)
         ax_d.grid(True, alpha=0.3)
 
+        ax_pi.plot(t, p_term, color="tab:green", label="P term (% duty)")
+        ax_pi.plot(t, i_term, color="tab:red", label="I term (% duty)")
+        ax_pi.axhline(0, color="k", lw=0.4)
+        ax_pi.set_ylabel("PI contribution (% duty)")
+        ax_pi.legend(loc="upper right")
+        ax_pi.grid(True, alpha=0.3)
+
         ax_i.plot(t, curr, color="tab:red")
-        ax_i.set_ylabel("Current (A)\n(IS DC, ±0.5 A)")
+        ax_i.set_ylabel("Current (A)\n(IS DC)")
         ax_i.set_xlabel("Time (s)")
         ax_i.grid(True, alpha=0.3)
 

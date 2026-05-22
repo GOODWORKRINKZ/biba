@@ -182,7 +182,7 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
 
     Serial.printf("RPMRUN_START target=%.2f duration_ms=%lu kp=%.4f ki=%.4f baseline_adc=%.1f\n",
                   target_hz, (unsigned long)duration_ms, kp, ki, baseline_adc);
-    Serial.println("RPM_DATA t_ms,target_hz,meas_hz,duty_pct,curr_a");
+    Serial.println("RPM_DATA t_ms,target_hz,meas_hz,duty_pct,curr_a,err_hz,i_term,p_term");
 
     float duty = 0.0f;
     float integral = 0.0f;
@@ -207,14 +207,17 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         integral += err * RPMRUN_DT_S;
         if (integral > 1.5f / (ki + 1e-6f)) integral = 1.5f / (ki + 1e-6f);
         if (integral < 0.0f) integral = 0.0f;
-        duty = kp * err + ki * integral;
+        float p_term = kp * err;
+        float i_term = ki * integral;
+        duty = p_term + i_term;
         if (duty < 0.0f) duty = 0.0f;
         if (duty > 1.0f) duty = 1.0f;
         biba_hal_motor_pwm_left(duty);
 
-        Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f\n",
+        Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f,%.2f,%.3f,%.3f\n",
                       (unsigned long)(millis() - t_start),
-                      target_hz, meas_hz, duty * 100.0f, curr_a);
+                      target_hz, meas_hz, duty * 100.0f, curr_a,
+                      err, i_term, p_term);
 
         /* Check for STOP request between iterations (single-char peek). */
         if (Serial.available()) {
