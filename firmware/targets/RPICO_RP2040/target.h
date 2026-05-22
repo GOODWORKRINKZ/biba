@@ -132,8 +132,8 @@
  * ADS1115 AIN0 — VBAT (3DR Power Module voltage output)
  * ADS1115 AIN1 — IBAT (3DR Power Module current output)
  */
-#define BIBA_ADC_CHAN_IS_LEFT        0U   /* GP26 = ADC0, RC-filtered IS left  */
-#define BIBA_ADC_CHAN_IS_RIGHT       1U   /* GP27 = ADC1, RC-filtered IS right */
+#define BIBA_ADC_CHAN_IS_RIGHT       0U   /* GP27 = ADC1, RC-filtered IS right */
+#define BIBA_ADC_CHAN_IS_LEFT        1U   /* GP26 = ADC0, RC-filtered IS left  */
 
 #define BIBA_ADC_SCAN_LEN           2U
 #define BIBA_ADC_CHANNEL_SEQ        { 0, 1 }
