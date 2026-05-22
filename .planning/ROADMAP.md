@@ -13,7 +13,8 @@
 - [ ] **Phase 2: Stabilization & Sensing** — IMU heading-hold + Current sensing + Trim persistence
 - [x] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation (completed 2026-05-19)
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
-- [ ] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry
+- [x] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry (completed 2026-05-22)
+- [ ] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts
 
 ---
 
@@ -88,6 +89,38 @@ Plans:
 - [x] 04-02-PLAN.md — Evaluate BTN8982TA + IFX007T: datasheets, sourcing, thermal simulation (SPICE/FEA if available)
 - [x] 04-03-PLAN.md — Design thermal architecture: cooling strategy selection, PCB layout, EMC/waterproofing spec
 - [x] 04-04-PLAN.md — Prototype validation: 60+ min continuous load test + field validation + HARDWARE-MATRIX publication
+
+---
+
+### Phase 5: Current Sensing & ADC Architecture
+**Goal**: Измерять ток колёс и батареи через BTS7960 IS-пины и ADS1115 I2C ADC
+**Depends on**: Phase 4
+**Requirements**: CURR-01, CURR-02, CURR-03
+**Success Criteria** (what must be TRUE):
+  1. Ток каждого колеса читается через IS-пины BTS7960 → ADS1115 и виден в телеметрии
+  2. Ток батареи (IBAT) и напряжение (VBAT) измеряются через ADS1115 AIN0/AIN1
+  3. Температура и влажность (AHT30) читаются и передаются в STM32 proto
+  4. Все поля телеметрии покрыты unit-тестами
+**Plans**: 1 plan
+
+Plans:
+- [x] 05-PLAN.md — ADS1115+AHT30 drivers, ADC remap, telemetry proto, tests
+
+---
+
+### Phase 6: IS-Signal RPM Proof-of-Concept
+**Goal**: Доказать что IS-пульсации через RC-фильтр пригодны для оценки RPM мотора MY1016Z
+**Depends on**: Phase 5
+**Requirements**: RPM-POC-01
+**Success Criteria** (what must be TRUE):
+  1. DMA-захват IS-сигнала при разных duty дампит данные через USB CDC
+  2. FFT, zero-crossing и autocorr алгоритмы оценивают частоту ±5% на синтетическом сигнале
+  3. Спектральный пик из IS-сигнала линейно зависит от duty (R² > 0.9 в поле)
+  4. Оба firmware env (`rpico_rp2040_standalone`, `rpico_rp2040_is_poc`) собираются без ошибок
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-PLAN.md — ADC remap, DMA capture driver, USB shell, Python capture+analyse scripts, unit tests
 
 ---
 

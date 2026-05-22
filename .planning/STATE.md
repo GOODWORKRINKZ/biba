@@ -2,33 +2,34 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: idle
-last_updated: "2026-05-19T11:00:00.000Z"
+status: in_progress
+last_updated: "2026-05-22T00:00:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 6
+  completed_phases: 5
+  total_plans: 13
+  completed_plans: 13
+  percent: 83
 ---
 
 # Project State
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** —
-**Status:** All active phases complete. Phase 5 added — ready to plan.
-**Last updated:** 2026-05-19
+**Phase:** Phase 6 — IS-Signal RPM Proof-of-Concept
+**Status:** Phase 6 in progress — plan committed, implementation not started.
+**Last updated:** 2026-05-22
 
 ## Current Phase
 
-None — Phase 4 UAT passed 2026-05-19.
+Phase 6: IS-Signal RPM Proof-of-Concept — план написан (06-PLAN.md), реализация не начата.
 
 ## Completed Phases
 
 - Phase 1: Core Drive — complete
 - Phase 3: Field Ready — complete
 - Phase 4: Thermal Hardening & ESC Architecture — complete (UAT passed 2026-05-19)
+- Phase 5: Current Sensing & ADC Architecture — complete (2026-05-22)
 
 ## Notes
 
@@ -36,8 +37,11 @@ Phase 4 field validation confirmed: large heatsink installed + one driver replac
 Center of mass shifted closer to geometric center → handling improved significantly.
 All 10 UAT acceptance criteria passed. 04-UAT.md status=complete.
 
-Phase 2 (Stabilization & Sensing) has no directory yet — may follow after Phase 5.
-Phase 5 (Current Sensing & ADC Architecture) added 2026-05-19 — scope: BTS7960 IS pins, ADS1115 I2C ADC, battery/per-wheel current, temp/hum telemetry.
+Phase 5 (Current Sensing & ADC Architecture) complete 2026-05-22: ADS1115+AHT30 drivers, per-wheel current sense, VBAT/IBAT, temp/hum telemetry, protocol extended, all tests green.
+
+Phase 6 (IS-Signal RPM PoC) added 2026-05-22: plan committed. Hardware change: IS_LEFT/RIGHT → GP26/27 native ADC through RC filter (1kΩ‖1kΩ + 0.1µF). VBAT/IBAT → ADS1115 AIN0/AIN1. New pio env `rpico_rp2040_is_poc`. Python scripts for DMA capture + FFT/ZC/autocorr analysis.
+
+Phase 2 (Stabilization & Sensing) remains deferred — no directory yet, may follow after Phase 6.
 
 **2026-05-17**: Phase 4 added to roadmap — Thermal Hardening & ESC Architecture. Synthesizing dialogue.log + forum analysis of BTN7970/BTN8982TA/IFX007T tradeoffs and cooling design strategies. Four implementation plans created: failure analysis, ESC evaluation, thermal design, and 60+ min validation test.
 
