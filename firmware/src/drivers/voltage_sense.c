@@ -3,12 +3,13 @@
 #include "biba_board.h"
 #include "biba_config.h"
 #include "hal/biba_hal.h"
+#include "drivers/ads1115.h"
 
 uint16_t biba_voltage_sense_vbat_mv(void)
 {
-    uint16_t raw = biba_hal_adc_sample(BIBA_ADC_CHAN_VBAT);
-    float pin_v = biba_hal_adc_volts(raw);
-    float bus_v = pin_v * BIBA_VBAT_DIVIDER_RATIO;
+    float v = 0.0f;
+    (void)ads1115_read_channel_v(ADS1115_ADDR, BIBA_ADS1115_CHAN_VBAT, &v);
+    float bus_v = v * BIBA_VBAT_DIVIDER_RATIO;
     if (bus_v < 0.0f) bus_v = 0.0f;
     if (bus_v > 30.0f) bus_v = 30.0f;  /* 6S max ~25.2 V; 30 V leaves headroom */
     return (uint16_t)(bus_v * 1000.0f);
@@ -16,15 +17,10 @@ uint16_t biba_voltage_sense_vbat_mv(void)
 
 float biba_voltage_sense_ibat_a(void)
 {
-#ifdef BIBA_ADC_CHAN_IBAT
-    uint16_t raw = biba_hal_adc_sample(BIBA_ADC_CHAN_IBAT);
-    float pin_v = biba_hal_adc_volts(raw);
-    float amps = (pin_v - BIBA_IBAT_ZERO_OFFSET_V) * BIBA_IBAT_AMPS_PER_VOLT;
-    if (amps < 0.0f) amps = 0.0f;
-    return amps;
-#else
-    return 0.0f;
-#endif
+    float v = 0.0f;
+    (void)ads1115_read_channel_v(ADS1115_ADDR, BIBA_ADS1115_CHAN_IBAT, &v);
+    float amps = (v - BIBA_IBAT_ZERO_OFFSET_V) * BIBA_IBAT_AMPS_PER_VOLT;
+    return amps < 0.0f ? 0.0f : amps;
 }
 
 uint16_t biba_voltage_sense_rail_mv(void)

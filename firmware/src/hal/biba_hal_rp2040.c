@@ -140,9 +140,9 @@ void biba_hal_init(void)
 
     /* ADC --------------------------------------------------------------- */
     adc_init();
-    /* ADC-capable pins: GP26 = ADC0 (VBAT), GP27 = ADC1 (Ibat). */
-    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_VBAT */
-    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IBAT */
+    /* Phase 06: GP26 = ADC0 = IS_LEFT (RC-filtered), GP27 = ADC1 = IS_RIGHT (RC-filtered). */
+    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_LEFT  */
+    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_RIGHT */
 
     /* I2C0 for IMU, ADS1115 (0x48), AHT30 (0x38) ----------------------- */
     i2c_init(BIBA_I2C_INST, 400000u);
@@ -151,7 +151,7 @@ void biba_hal_init(void)
     gpio_pull_up(BIBA_PIN_I2C_SDA_GPIO);
     gpio_pull_up(BIBA_PIN_I2C_SCL_GPIO);
 
-    /* Initialise ADS1115 (BTS7960 IS pins) and AHT30 (temp/humidity). */
+    /* Initialise ADS1115 (Phase 06: VBAT/IBAT via AIN0/AIN1) and AHT30 (temp/humidity). */
     (void)ads1115_init(ADS1115_ADDR, ADS1115_FSR_4096MV);
     (void)aht30_init();
 

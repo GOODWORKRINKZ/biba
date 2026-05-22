@@ -35,13 +35,14 @@
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
  *   GP25 GPIO OUT  Onboard LED (active high)
- *   GP26 ADC0      VBAT (3DR Power Module voltage output)
- *   GP27 ADC1      Ibat (3DR Power Module current output)
+ *   GP26 ADC0      IS_LEFT  (1kΩ‖1kΩ RC filter from BTS7960 L IS pins — Phase 06)
+ *   GP27 ADC1      IS_RIGHT (1kΩ‖1kΩ RC filter from BTS7960 R IS pins — Phase 06)
  *   GP20 I2C0_SDA  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *   GP21 I2C0_SCL  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *
- * BTS7960 IS pins (IS_L_FWD, IS_L_REV, IS_R_FWD, IS_R_REV) are routed
- * to ADS1115 AIN0–AIN3 via I2C0 (addr 0x48, FSR=±4.096 V).
+ * Phase 06 topology change: VBAT and IBAT moved to ADS1115 AIN0/AIN1.
+ * GP26/GP27 now carry RC-filtered IS signals for RPM PoC.
+ * ADS1115 AIN0–AIN1 carry VBAT/IBAT (3DR Power Module outputs).
  *
  * Motor audio: L and R pairs each share one PWM slice (fixed wrap),
  * so per-channel independent carriers are not supported.
@@ -121,29 +122,28 @@
 
 /* --- ADC ---------------------------------------------------------------- */
 /*
- * RP2040 native ADC pins: GP26=CH0, GP27=CH1.
+ * Phase 06 topology: RP2040 native ADC GP26/GP27 now carry RC-filtered
+ * BTS7960 IS signals for RPM PoC.  VBAT and IBAT (3DR Power Module) are
+ * routed to ADS1115 AIN0/AIN1 via I2C0.
  *
- *   CH0 (GP26) — VBAT voltage divider (3DR Power Module analog output)
- *   CH1 (GP27) — Ibat (3DR Power Module current analog output)
+ *   CH0 (GP26) — IS_LEFT  (1kΩ‖1kΩ + 0.1µF RC filter)
+ *   CH1 (GP27) — IS_RIGHT (1kΩ‖1kΩ + 0.1µF RC filter)
  *
- * BTS7960 IS pins (4 total: IS_L_FWD, IS_L_REV, IS_R_FWD, IS_R_REV)
- * are routed to the ADS1115 external 16-bit ADC (I2C, addr 0x48).
- * Native ADC channels for IS are removed — do not alias them back.
+ * ADS1115 AIN0 — VBAT (3DR Power Module voltage output)
+ * ADS1115 AIN1 — IBAT (3DR Power Module current output)
  */
-#define BIBA_ADC_CHAN_VBAT           0U   /* GP26 = ADC0, 3DR PM voltage  */
-#define BIBA_ADC_CHAN_IBAT           1U   /* GP27 = ADC1, 3DR PM current  */
+#define BIBA_ADC_CHAN_IS_LEFT        0U   /* GP26 = ADC0, RC-filtered IS left  */
+#define BIBA_ADC_CHAN_IS_RIGHT       1U   /* GP27 = ADC1, RC-filtered IS right */
 
 #define BIBA_ADC_SCAN_LEN           2U
 #define BIBA_ADC_CHANNEL_SEQ        { 0, 1 }
 
-/* ADS1115 logical channel mapping (AIN0–AIN3 vs GND).
- * IS voltage: VIS = (IL / kILIS) × RIS  where kILIS = 8500, RIS = 1 kΩ.
- * ADS1115 FSR = ±4.096 V (PGA=001b) — captures up to ~34.8 A per half-bridge.
+/* ADS1115 logical channel mapping (AIN0–AIN1 vs GND — Phase 06).
+ * AIN0: VBAT via 3DR Power Module resistive divider.
+ * AIN1: IBAT via 3DR Power Module current output.
  */
-#define BIBA_ADS1115_CHAN_IS_L_FWD   0U   /* AIN0: left  motor, forward  half-bridge IS */
-#define BIBA_ADS1115_CHAN_IS_L_REV   1U   /* AIN1: left  motor, reverse  half-bridge IS */
-#define BIBA_ADS1115_CHAN_IS_R_FWD   2U   /* AIN2: right motor, forward  half-bridge IS */
-#define BIBA_ADS1115_CHAN_IS_R_REV   3U   /* AIN3: right motor, reverse  half-bridge IS */
+#define BIBA_ADS1115_CHAN_VBAT       0U   /* AIN0: 3DR PM voltage out  */
+#define BIBA_ADS1115_CHAN_IBAT       1U   /* AIN1: 3DR PM current out  */
 
 /* --- Status LED (GP25, onboard on Pico, active high) ------------------- */
 
