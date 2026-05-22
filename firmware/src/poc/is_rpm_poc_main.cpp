@@ -233,11 +233,38 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         float meas_raw = zc_freq_hz(s_buf + zc_skip,
                                     RPMRUN_N_SAMPLES - zc_skip,
                                     RPMRUN_SPS);
-        /* EMA update: skip update when raw==0 (missing measurement — motor
-         * stalled or ZC below noise floor; hold last known value). */
-        if (meas_raw > 0.0f) {
+        /* EMA update with two-sided validity gate.
+         *
+         * Low-side: at no-load high speed back-EMF ≈ Vbat → IS current → 0
+         * → noise-floor ZC returns spurious ≈20-80 Hz instead of 0.
+         * Reject raw below 80 Hz (below stiction operating point).
+         *
+         * High-side: when the wheel is stalled under load, full current flows
+         * at PWM switching rate → IS-pin shows large current ripple at PWM
+         * frequency → ZC detector can return 500-1200 Hz even though the
+         * wheel is stationary.  Cap at target_hz * 2.5 + 300 Hz; any reading
+         * above that is physically impossible at the commanded duty point.
+         *
+         * When raw == 0 (no ZC at all — wheel stopped or transient blanked):
+         * decay EMA by ×0.5 each cycle so that if the wheel truly stalls the
+         * controller sees meas → 0 and can raise duty to restart.  Without
+         * this decay the EMA stays frozen at the last high value and the
+         * integral winds negative, cutting motor power permanently. */
+        const float ZC_MIN_VALID_HZ = 80.0f;
+        const float ZC_MAX_VALID_HZ = target_hz * 2.5f + 300.0f;
+        if (meas_raw >= ZC_MIN_VALID_HZ && meas_raw <= ZC_MAX_VALID_HZ) {
             meas_ema = EMA_ALPHA * meas_raw + (1.0f - EMA_ALPHA) * meas_ema;
+        } else if (meas_raw == 0.0f) {
+            /* Wheel stopped / no ZC: decay slowly toward 0 so the controller
+             * can eventually recover if the wheel truly stalls.
+             * Factor 0.9 per cycle (100 ms) → half-life ≈ 660 ms (6-7 cycles).
+             * The previous 0.5 factor (half-life = 1 cycle) caused the EMA to
+             * collapse during normal transient-blanking (2 zero cycles after a
+             * duty step), making the controller think the wheel stopped every
+             * time it changed duty. */
+            meas_ema *= 0.9f;
         }
+        /* else: out-of-range noise spike — hold current EMA unchanged. */
         /* Use filtered value for control; expose both in telemetry. */
         float meas_hz = meas_ema;
 
@@ -269,13 +296,17 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         if (can_integrate && meas_hz > 50.0f) {
             integral += err * RPMRUN_DT_S;
         }
-        /* Clamp integral so its duty contribution stays within ±3 pp.
-         * FF is already accurate to ±8 Hz; the I term only needs to trim
-         * that small residual.  A ±15 pp clamp (previous value) caused a
-         * large limit cycle: I saturated high, overshot, then saturated low. */
-        float i_clamp = 0.03f / (ki + 1e-6f);
-        if (integral >  i_clamp) integral =  i_clamp;
-        if (integral < -i_clamp) integral = -i_clamp;
+        /* Asymmetric integral clamp: PI can add up to +3 pp duty to fight
+         * load, but can only subtract up to -1 pp below FF.  FF is already
+         * calibrated to within ±8 Hz; there is almost never a need to
+         * reduce duty significantly below FF.  A symmetric -3 pp clamp
+         * caused the motor to stall after stall-noise spiked the EMA high:
+         * I(-3%) + P(-5%) pulled duty to 9 %, below the real stiction
+         * threshold, and the motor could not restart for 700+ ms. */
+        float i_clamp_pos = 0.03f / (ki + 1e-6f);
+        float i_clamp_neg = 0.01f / (ki + 1e-6f);
+        if (integral >  i_clamp_pos) integral =  i_clamp_pos;
+        if (integral < -i_clamp_neg) integral = -i_clamp_neg;
         float p_term = kp * err;
         float i_term = ki * integral;
         /* When meas==0 the ZC has no measurement (motor not yet spinning or
@@ -478,12 +509,12 @@ void loop(void)
     }
 
     if (line.startsWith("RPMRUN ")) {
-        /* "RPMRUN <target_hz> <duration_ms> [kp_x1000 ki_x1000 [stiction_x100 [ff_slope_x100 ff_dead_x10]]]" */
+        /* "RPMRUN <target_hz> <duration_ms> [kp_x1000000 ki_x1000000 [stiction_x100 [ff_slope_x100 ff_dead_x10]]]" */
         String rest = line.substring(7);
         float target_hz = 10.0f;
         uint32_t duration_ms = 10000;
-        int kp_mil      = 2;    /* default Kp = 0.002 — small correction on top of FF */
-        int ki_mil      = 10;   /* default Ki = 0.010 */
+        int kp_mil      = 2000;   /* default Kp = 0.002 */
+        int ki_mil      = 10000;  /* default Ki = 0.010 */
         int stiction_pct = 12;  /* default stiction floor = 12% */
         int ff_slope_x100 = (int)(RPMRUN_FF_SLOPE_DEFAULT * 100.0f + 0.5f);  /* 1013 */
         int ff_dead_x10   = (int)(RPMRUN_FF_DEAD_DEFAULT  * 10.0f  + 0.5f);  /* 746  */
@@ -494,8 +525,8 @@ void loop(void)
         if (stiction_pct > 50)   stiction_pct = 50;
         if (ff_slope_x100 < 0)   ff_slope_x100 = 0;
         cmd_rpmrun(target_hz, duration_ms,
-                   (float)kp_mil      / 1000.0f,
-                   (float)ki_mil      / 1000.0f,
+                   (float)kp_mil      / 1000000.0f,
+                   (float)ki_mil      / 1000000.0f,
                    (float)stiction_pct / 100.0f,
                    (float)ff_slope_x100 / 100.0f,
                    (float)ff_dead_x10   / 10.0f);

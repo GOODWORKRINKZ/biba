@@ -43,7 +43,7 @@ def main() -> int:
                         help="Proportional gain. Small — FF handles most of the duty.")
     parser.add_argument("--ki", type=float, default=0.010,
                         help="Integral gain. Loop dt is 0.1 s.")
-    parser.add_argument("--stiction", type=int, default=12,
+    parser.add_argument("--stiction", type=int, default=20,
                         help="Stiction floor duty %% (0-50). "
                              "Duty snaps to this when in (0, floor). "
                              "Default 12 %% — enough to overcome BTS7960 dead-zone.")
@@ -64,8 +64,8 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     duration_ms = int(args.duration * 1000)
-    kp_mil = int(round(args.kp * 1000))
-    ki_mil = int(round(args.ki * 1000))
+    kp_mil = int(round(args.kp * 1_000_000))
+    ki_mil = int(round(args.ki * 1_000_000))
 
     print(f"opening {args.port} @ {args.baud}")
     with serial.Serial(args.port, args.baud, timeout=2.0) as ser:
