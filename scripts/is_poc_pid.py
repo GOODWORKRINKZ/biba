@@ -39,12 +39,12 @@ def main() -> int:
                         help="Target IS frequency in Hz (5..20 typical).")
     parser.add_argument("--duration", type=float, default=10.0,
                         help="Run duration in seconds (max 60).")
-    parser.add_argument("--kp", type=float, default=0.01,
+    parser.add_argument("--kp", type=float, default=0.001,
                         help="Proportional gain (duty per Hz of error). "
-                             "Default sized for ~hundreds-of-Hz IS signal.")
-    parser.add_argument("--ki", type=float, default=0.05,
-                        help="Integral gain.  Loop dt is 0.2 s, so Ki=0.05 "
-                             "means +0.01 duty per Hz·iteration.")
+                             "Open-loop gain measured at ~950 Hz/duty, so "
+                             "Kp=0.001 means ~1 % duty per Hz error.")
+    parser.add_argument("--ki", type=float, default=0.002,
+                        help="Integral gain.  Loop dt is 0.2 s.")
     parser.add_argument(
         "--out",
         type=Path,

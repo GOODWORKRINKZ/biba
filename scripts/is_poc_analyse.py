@@ -67,9 +67,10 @@ def freq_fft(samples: np.ndarray, sps: int) -> float:
     window = np.hanning(n)
     spectrum = np.abs(np.fft.rfft(ac * window))
     freqs = np.fft.rfftfreq(n, d=1.0 / sps)
-    # Time-domain plot shows RPM-modulated IS at 2–20 Hz across the duty
-    # sweep.  Search 1–200 Hz; the PWM comb above that is irrelevant.
-    mask = (freqs >= 1.0) & (freqs <= 200.0)
+    # IS-modulation fundamental scales linearly with duty: ~190 Hz at
+    # 25 % duty, ~910 Hz at 100 % duty (BTS7960 / brushed motor in this
+    # rig).  Search 50–1500 Hz; the PWM carrier sits much higher.
+    mask = (freqs >= 50.0) & (freqs <= 1500.0)
     if not mask.any():
         return 0.0
     return float(freqs[mask][int(np.argmax(spectrum[mask]))])
@@ -119,13 +120,13 @@ def freq_autocorr(samples: np.ndarray, sps: int) -> float:
     if ac.std() == 0.0:
         return 0.0
     corr = np.correlate(ac, ac, mode="full")[len(ac) - 1:]
-    # Search 5 ms (200 Hz) lag floor.  Cap max lag at min(500 ms, N/3) —
+    # Search 0.67 ms (1500 Hz) lag floor.  Cap max lag at min(50 ms, N/3) —
     # the N/3 cap keeps the /overlap normalisation well-conditioned
     # (overlap ≥ 2N/3, division is stable).  Without the cap the
     # normalised autocorr blows up in the tail and reports spurious
     # ultra-low-frequency peaks.
-    min_lag = max(int(sps * 0.005), 1)
-    max_lag = min(int(sps * 0.5), len(ac) // 3)
+    min_lag = max(int(sps * 0.00067), 1)
+    max_lag = min(int(sps * 0.05), len(ac) // 3)
     max_lag = min(max_lag, len(corr) - 1)
     if max_lag <= min_lag + 1:
         return 0.0
@@ -223,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     ax_psd.set_xlabel("Frequency (Hz)")
     ax_psd.set_ylabel("PSD (mV²/Hz)")
     ax_psd.set_title("Welch PSD per capture (RPM band)")
-    ax_psd.set_xlim(0, 200)
+    ax_psd.set_xlim(0, 1500)
     ax_psd.legend(fontsize=7, ncol=2)
     ax_psd.grid(True, which="both", alpha=0.3)
 
