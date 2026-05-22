@@ -39,12 +39,19 @@ def main() -> int:
                         help="Target IS frequency in Hz (5..20 typical).")
     parser.add_argument("--duration", type=float, default=10.0,
                         help="Run duration in seconds (max 60).")
-    parser.add_argument("--kp", type=float, default=0.001,
-                        help="Proportional gain (duty per Hz of error). "
-                             "Open-loop gain measured at ~950 Hz/duty, so "
-                             "Kp=0.001 means ~1 % duty per Hz error.")
-    parser.add_argument("--ki", type=float, default=0.002,
-                        help="Integral gain.  Loop dt is 0.2 s.")
+    parser.add_argument("--kp", type=float, default=0.002,
+                        help="Proportional gain. Small — FF handles most of the duty.")
+    parser.add_argument("--ki", type=float, default=0.010,
+                        help="Integral gain. Loop dt is 0.1 s.")
+    parser.add_argument("--stiction", type=int, default=12,
+                        help="Stiction floor duty %% (0-50). "
+                             "Duty snaps to this when in (0, floor). "
+                             "Default 12 %% — enough to overcome BTS7960 dead-zone.")
+    parser.add_argument("--ff-slope", type=float, default=10.13,
+                        help="Feed-forward slope Hz per %% duty (from step test). "
+                             "0 = disable FF.")
+    parser.add_argument("--ff-dead", type=float, default=74.6,
+                        help="Feed-forward dead-zone offset Hz (from step test).")
     parser.add_argument(
         "--out",
         type=Path,
@@ -71,12 +78,16 @@ def main() -> int:
             print(f"no PONG — got: {resp!r}", file=sys.stderr)
             return 1
 
-        cmd = f"RPMRUN {args.target:.2f} {duration_ms} {kp_mil} {ki_mil}\n"
+        ff_slope_x100 = int(round(args.ff_slope * 100))
+        ff_dead_x10   = int(round(args.ff_dead * 10))
+        cmd = f"RPMRUN {args.target:.2f} {duration_ms} {kp_mil} {ki_mil} {args.stiction} {ff_slope_x100} {ff_dead_x10}\n"
         print(f">>> {cmd.strip()}")
         ser.write(cmd.encode())
 
         rows: list[dict[str, float]] = []
         header_written = False
+        start_seen = False
+        target_echo: float | None = None
         with open(args.out, "w", newline="") as fh:
             writer = csv.writer(fh)
             t_deadline = time.time() + args.duration + 5.0
@@ -88,6 +99,23 @@ def main() -> int:
                 if not line:
                     continue
                 print(line)
+                if line.startswith("RPMRUN_START"):
+                    start_seen = True
+                    # Parse "target=<f>" out of the start banner so we can
+                    # confirm the firmware actually heard the value we sent.
+                    for tok in line.split():
+                        if tok.startswith("target="):
+                            try:
+                                target_echo = float(tok.split("=", 1)[1])
+                            except ValueError:
+                                target_echo = None
+                    if target_echo is not None and abs(target_echo - args.target) > 0.5:
+                        print(
+                            f"!!! firmware echoed target={target_echo} but we asked for "
+                            f"{args.target} — possible serial corruption or stale firmware",
+                            file=sys.stderr,
+                        )
+                    continue
                 if line.startswith("RPM_DATA"):
                     body = line[len("RPM_DATA"):].strip()
                     if body.startswith("t_ms"):
@@ -112,9 +140,17 @@ def main() -> int:
                             "err": float(parts[5]),
                             "i_term": float(parts[6]),
                             "p_term": float(parts[7]),
+                            "raw_hz": None,  # filled by next # raw_hz= line
                         })
                     except ValueError:
                         pass
+                elif line.startswith("# raw_hz="):
+                    # Diagnostic comment emitted by firmware when raw != EMA
+                    if rows:
+                        try:
+                            rows[-1]["raw_hz"] = float(line.split("=", 1)[1])
+                        except ValueError:
+                            pass
                 elif line.startswith("RPMRUN_END") or line.startswith("RPMRUN_ABORT"):
                     break
 
@@ -123,6 +159,12 @@ def main() -> int:
         time.sleep(0.2)
 
     print(f"\nwrote {args.out}  ({len(rows)} samples)")
+    if not start_seen:
+        print("!!! never saw RPMRUN_START — firmware did not accept the command",
+              file=sys.stderr)
+    if len(rows) == 0:
+        print("!!! no RPM_DATA rows collected — CSV may contain stale data",
+              file=sys.stderr)
 
     if rows and not args.no_plot:
         try:
@@ -135,6 +177,8 @@ def main() -> int:
         t = [r["t_ms"] / 1000.0 for r in rows]
         target = [r["target"] for r in rows]
         meas = [r["meas"] for r in rows]
+        raw_t = [r["t_ms"] / 1000.0 for r in rows if r.get("raw_hz") is not None]
+        raw_hz = [r["raw_hz"] for r in rows if r.get("raw_hz") is not None]
         duty = [r["duty"] for r in rows]
         curr = [r["curr_a"] for r in rows]
         err = [r["err"] for r in rows]
@@ -145,7 +189,10 @@ def main() -> int:
             4, 1, figsize=(11, 10), sharex=True,
         )
         ax_f.plot(t, target, "--", color="tab:gray", label="target")
-        ax_f.plot(t, meas, color="tab:blue", label="measured (ZC)")
+        ax_f.plot(t, meas, color="tab:blue", lw=1.5, label="meas EMA")
+        if raw_hz:
+            ax_f.scatter(raw_t, raw_hz, s=8, color="tab:cyan", alpha=0.5,
+                         label="raw ZC", zorder=3)
         ax_f.plot(t, err, color="tab:purple", alpha=0.5, label="error")
         ax_f.axhline(0, color="k", lw=0.4)
         ax_f.set_ylabel("Frequency (Hz)")
@@ -164,7 +211,17 @@ def main() -> int:
         ax_pi.legend(loc="upper right")
         ax_pi.grid(True, alpha=0.3)
 
-        ax_i.plot(t, curr, color="tab:red")
+        # Mark duty-change events on the current panel so transients are
+        # visible: vertical lines wherever duty shifts by more than 2 pp.
+        ax_i2 = ax_i.twinx()
+        ax_i2.plot(t, duty, color="tab:orange", alpha=0.4, lw=1, label="duty %")
+        ax_i2.set_ylabel("Duty (%)", color="tab:orange")
+        ax_i2.set_ylim(-5, 115)
+        ax_i2.tick_params(axis="y", labelcolor="tab:orange")
+        for i_idx in range(1, len(duty)):
+            if abs(duty[i_idx] - duty[i_idx - 1]) > 2.0:
+                ax_i.axvline(t[i_idx], color="tab:orange", lw=0.8, alpha=0.6)
+        ax_i.plot(t, curr, color="tab:red", label="current")
         ax_i.set_ylabel("Current (A)\n(IS DC)")
         ax_i.set_xlabel("Time (s)")
         ax_i.grid(True, alpha=0.3)

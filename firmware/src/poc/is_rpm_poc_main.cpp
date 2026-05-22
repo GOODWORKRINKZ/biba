@@ -101,8 +101,10 @@ static void cmd_capture(float signed_duty, bool is_fwd,
 }
 
 /* --- Closed-loop PI controller --------------------------------------- */
-/* Per-iteration capture parameters: 200 ms window → 5 Hz update rate. */
-#define RPMRUN_N_SAMPLES   2048u
+/* Per-iteration capture parameters: 100 ms window → 10 Hz update rate.
+ * Halved from 2048 to reduce felt jerk: plant τ < 200 ms so the old
+ * 200 ms period was slower than the plant, causing large discrete steps. */
+#define RPMRUN_N_SAMPLES   1024u
 #define RPMRUN_SPS         10000u
 #define RPMRUN_DT_S        ((float)RPMRUN_N_SAMPLES / (float)RPMRUN_SPS)
 #define RPMRUN_MAX_DUR_MS  60000u
@@ -166,12 +168,19 @@ static float adc_to_amps(float adc_mean)
     return v * BIBA_IS_AMPS_PER_VOLT;
 }
 
+/* Feed-forward calibration constants (measured via STEPRUN 20→50):
+ * freq_hz ≈ FF_SLOPE * duty_pct - FF_DEAD
+ * duty_ff = (target_hz + FF_DEAD) / (FF_SLOPE * 100) */
+#define RPMRUN_FF_SLOPE_DEFAULT  10.13f   /* Hz per percent duty */
+#define RPMRUN_FF_DEAD_DEFAULT   74.6f    /* Hz dead-zone offset  */
+
 static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
-                       float kp, float ki)
+                       float kp, float ki, float stiction_floor,
+                       float ff_slope, float ff_dead)
 {
     if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
-    if (target_hz < 0.0f) target_hz = 0.0f;
-    if (target_hz > 50.0f) target_hz = 50.0f;
+    if (target_hz < 0.0f)    target_hz = 0.0f;
+    if (target_hz > 2000.0f) target_hz = 2000.0f;
 
     /* 1. Baseline IS reading with motor off — DC offset on the IS line. */
     biba_hal_motor_pwm_left(0.0f);
@@ -185,12 +194,27 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
     for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
     float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
 
-    Serial.printf("RPMRUN_START target=%.2f duration_ms=%lu kp=%.4f ki=%.4f baseline_adc=%.1f\n",
-                  target_hz, (unsigned long)duration_ms, kp, ki, baseline_adc);
+    /* Feed-forward duty for target_hz (open-loop calibration). */
+    float ff_duty = 0.0f;
+    if (ff_slope > 0.0f && target_hz > 0.0f) {
+        ff_duty = (target_hz + ff_dead) / (ff_slope * 100.0f);
+        if (ff_duty < 0.0f) ff_duty = 0.0f;
+        if (ff_duty > 1.0f) ff_duty = 1.0f;
+    }
+
+    Serial.printf("RPMRUN_START target=%.2f duration_ms=%lu kp=%.4f ki=%.4f stiction=%.2f ff_duty=%.3f baseline_adc=%.1f\n",
+                  target_hz, (unsigned long)duration_ms, kp, ki, stiction_floor, ff_duty, baseline_adc);
     Serial.println("RPM_DATA t_ms,target_hz,meas_hz,duty_pct,curr_a,err_hz,i_term,p_term");
 
     float duty = 0.0f;
+    float prev_duty = 0.0f;
     float integral = 0.0f;
+    /* EMA filter for ZC frequency.  Alpha=0.7 → each new reading gets 70 %
+     * weight.  Fast convergence: 2 loop cycles (200 ms) to track a step.
+     * Transient blanking (zc_skip) already prevents noisy settle readings
+     * from entering; P/I clamps bound any residual noise impact. */
+    float meas_ema = 0.0f;
+    const float EMA_ALPHA = 0.7f;
     uint32_t t_start = millis();
 
     while ((millis() - t_start) < duration_ms) {
@@ -199,7 +223,23 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
             Serial.println("ERROR capture timeout");
             break;
         }
-        float meas_hz = zc_freq_hz(s_buf, RPMRUN_N_SAMPLES, RPMRUN_SPS);
+        /* Transient blanking: after a significant duty step the IS signal
+         * needs ~50 ms to settle (BTS7960 RC filter + motor inertia).
+         * Skip the first 512 samples (50 ms @ 10 kSPS) from ZC analysis
+         * whenever the previous iteration changed duty by more than 5 pp.
+         * This prevents the settling transient from being counted as a
+         * spurious high-frequency zero-crossing burst. */
+        uint16_t zc_skip = (fabsf(duty - prev_duty) > 0.05f) ? 512u : 0u;
+        float meas_raw = zc_freq_hz(s_buf + zc_skip,
+                                    RPMRUN_N_SAMPLES - zc_skip,
+                                    RPMRUN_SPS);
+        /* EMA update: skip update when raw==0 (missing measurement — motor
+         * stalled or ZC below noise floor; hold last known value). */
+        if (meas_raw > 0.0f) {
+            meas_ema = EMA_ALPHA * meas_raw + (1.0f - EMA_ALPHA) * meas_ema;
+        }
+        /* Use filtered value for control; expose both in telemetry. */
+        float meas_hz = meas_ema;
 
         uint32_t sum = 0;
         for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) sum += s_buf[i];
@@ -222,14 +262,33 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         bool can_integrate =
             !(sat_high && err > 0.0f) &&
             !(sat_low  && err < 0.0f);
-        if (can_integrate && meas_hz > 0.0f) {
+        /* Only integrate when the measurement is plausibly stable: require
+         * meas_hz above a minimum threshold so that transient spin-up ZC
+         * readings (< 50 Hz) don't accumulate a large integral before the
+         * motor has actually reached steady state. */
+        if (can_integrate && meas_hz > 50.0f) {
             integral += err * RPMRUN_DT_S;
         }
-        if (integral > 1.5f / (ki + 1e-6f)) integral = 1.5f / (ki + 1e-6f);
-        if (integral < 0.0f) integral = 0.0f;
+        /* Clamp integral so its duty contribution stays within ±3 pp.
+         * FF is already accurate to ±8 Hz; the I term only needs to trim
+         * that small residual.  A ±15 pp clamp (previous value) caused a
+         * large limit cycle: I saturated high, overshot, then saturated low. */
+        float i_clamp = 0.03f / (ki + 1e-6f);
+        if (integral >  i_clamp) integral =  i_clamp;
+        if (integral < -i_clamp) integral = -i_clamp;
         float p_term = kp * err;
         float i_term = ki * integral;
-        duty = p_term + i_term;
+        /* When meas==0 the ZC has no measurement (motor not yet spinning or
+         * transient blanked).  Trust the feed-forward alone — adding P on
+         * top when err=target produces large overshoot that causes the
+         * same limit-cycle we just fixed.  Once the wheel is spinning the
+         * P term corrects small residuals around the FF operating point.
+         * Also clamp P contribution to ±10 % duty so a single bad ZC read
+         * cannot cause a large step. */
+        if (meas_hz == 0.0f) p_term = 0.0f;
+        if (p_term >  0.05f) p_term =  0.05f;
+        if (p_term < -0.05f) p_term = -0.05f;
+        duty = ff_duty + p_term + i_term;
         /* Dead-zone / stiction handling.  Open-loop measurement:
          * the brushed motor + BTS7960 needs ~20 %% duty to break stiction,
          * and below that produces no measurable IS modulation.  Two rules:
@@ -244,20 +303,25 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
          *    pulsing limit cycle we observed at unreachable targets.
          *  - True full stop only when target == 0. */
         bool wheel_spinning = (meas_hz > 0.0f);
-        if (target_hz > 0.0f && duty > 0.0f && duty < 0.20f) {
-            duty = 0.20f;
+        if (target_hz > 0.0f && duty > 0.0f && duty < stiction_floor) {
+            duty = stiction_floor;
         }
-        if (target_hz > 0.0f && wheel_spinning && duty < 0.20f) {
-            duty = 0.20f;
+        if (target_hz > 0.0f && wheel_spinning && duty < stiction_floor) {
+            duty = stiction_floor;
         }
         if (duty < 0.0f) duty = 0.0f;
         if (duty > 1.0f) duty = 1.0f;
+        prev_duty = duty;
         biba_hal_motor_pwm_left(duty);
 
         Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f,%.2f,%.3f,%.3f\n",
                       (unsigned long)(millis() - t_start),
                       target_hz, meas_hz, duty * 100.0f, curr_a,
                       err, i_term, p_term);
+        /* raw ZC value (pre-filter) logged as comment for diagnostics */
+        if (meas_raw != meas_hz) {
+            Serial.printf("# raw_hz=%.2f\n", meas_raw);
+        }
 
         /* Check for STOP request between iterations (single-char peek). */
         if (Serial.available()) {
@@ -272,6 +336,86 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
 
     biba_hal_motor_pwm_left(0.0f);
     Serial.println("RPMRUN_END");
+}
+
+/* --- Open-loop step response ----------------------------------------- */
+/* STEPRUN <duty_start_pct> <duty_end_pct> <pre_windows> <post_windows>
+ *
+ * Holds duty_start for pre_windows capture-windows, then instantly steps to
+ * duty_end and holds for post_windows.  Each window is 200 ms (2048 @ 10kSPS).
+ * Streams ZC frequency + current — no controller, pure plant response.
+ *
+ * Response format:
+ *   STEPRUN_START from=<pct> to=<pct> pre=<n> post=<n>
+ *   STEP_DATA t_ms,phase,duty_pct,meas_hz,curr_a
+ *   ...
+ *   STEPRUN_END
+ */
+static void cmd_steprun(int duty_start_pct, int duty_end_pct,
+                        uint16_t pre_windows, uint16_t post_windows)
+{
+    if (duty_start_pct < 0)   duty_start_pct = 0;
+    if (duty_start_pct > 100) duty_start_pct = 100;
+    if (duty_end_pct < 0)     duty_end_pct = 0;
+    if (duty_end_pct > 100)   duty_end_pct = 100;
+    if (pre_windows  < 1)  pre_windows  = 1;
+    if (pre_windows  > 50) pre_windows  = 50;
+    if (post_windows < 1)  post_windows = 1;
+    if (post_windows > 100) post_windows = 100;
+
+    /* Baseline with motor off */
+    biba_hal_motor_pwm_left(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline capture timeout");
+        return;
+    }
+    uint32_t bl_sum = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
+    float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
+
+    Serial.printf("STEPRUN_START from=%d to=%d pre=%u post=%u baseline_adc=%.1f\n",
+                  duty_start_pct, duty_end_pct,
+                  (unsigned)pre_windows, (unsigned)post_windows,
+                  baseline_adc);
+    Serial.println("STEP_DATA t_ms,phase,duty_pct,meas_hz,curr_a");
+
+    float duty_start = duty_start_pct / 100.0f;
+    float duty_end   = duty_end_pct   / 100.0f;
+    uint32_t t_start = millis();
+
+    for (uint16_t w = 0; w < pre_windows + post_windows; ++w) {
+        float duty = (w < pre_windows) ? duty_start : duty_end;
+        const char *phase = (w < pre_windows) ? "PRE" : "POST";
+        /* Apply step exactly at the window boundary */
+        biba_hal_motor_pwm_left(duty);
+
+        /* Skip first 512 samples (50 ms) after the step to let IS settle */
+        uint16_t skip = (w == pre_windows) ? 512u : 0u;
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+            Serial.println("ERROR capture timeout");
+            break;
+        }
+        float meas_hz = zc_freq_hz(s_buf + skip, RPMRUN_N_SAMPLES - skip, RPMRUN_SPS);
+
+        uint32_t sum = 0;
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) sum += s_buf[i];
+        float curr_a = adc_to_amps((float)sum / (float)RPMRUN_N_SAMPLES - baseline_adc);
+
+        Serial.printf("STEP_DATA %lu,%s,%.1f,%.2f,%.2f\n",
+                      (unsigned long)(millis() - t_start),
+                      phase, duty * 100.0f, meas_hz, curr_a);
+
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n');
+            ln.trim();
+            if (ln == "STOP") { Serial.println("STEPRUN_ABORT stop requested"); goto done; }
+        }
+    }
+done:
+    biba_hal_motor_pwm_left(0.0f);
+    Serial.println("STEPRUN_END");
 }
 
 void setup(void)
@@ -334,16 +478,37 @@ void loop(void)
     }
 
     if (line.startsWith("RPMRUN ")) {
-        /* "RPMRUN <target_hz> <duration_ms> [kp_x1000 ki_x1000]" */
+        /* "RPMRUN <target_hz> <duration_ms> [kp_x1000 ki_x1000 [stiction_x100 [ff_slope_x100 ff_dead_x10]]]" */
         String rest = line.substring(7);
         float target_hz = 10.0f;
         uint32_t duration_ms = 10000;
-        int kp_mil = 50;     /* default Kp = 0.050 (%-duty per Hz of error) */
-        int ki_mil = 1000;   /* default Ki = 1.000 */
-        sscanf(rest.c_str(), "%f %lu %d %d",
-               &target_hz, &duration_ms, &kp_mil, &ki_mil);
+        int kp_mil      = 2;    /* default Kp = 0.002 — small correction on top of FF */
+        int ki_mil      = 10;   /* default Ki = 0.010 */
+        int stiction_pct = 12;  /* default stiction floor = 12% */
+        int ff_slope_x100 = (int)(RPMRUN_FF_SLOPE_DEFAULT * 100.0f + 0.5f);  /* 1013 */
+        int ff_dead_x10   = (int)(RPMRUN_FF_DEAD_DEFAULT  * 10.0f  + 0.5f);  /* 746  */
+        sscanf(rest.c_str(), "%f %lu %d %d %d %d %d",
+               &target_hz, &duration_ms, &kp_mil, &ki_mil,
+               &stiction_pct, &ff_slope_x100, &ff_dead_x10);
+        if (stiction_pct < 0)    stiction_pct = 0;
+        if (stiction_pct > 50)   stiction_pct = 50;
+        if (ff_slope_x100 < 0)   ff_slope_x100 = 0;
         cmd_rpmrun(target_hz, duration_ms,
-                   (float)kp_mil / 1000.0f, (float)ki_mil / 1000.0f);
+                   (float)kp_mil      / 1000.0f,
+                   (float)ki_mil      / 1000.0f,
+                   (float)stiction_pct / 100.0f,
+                   (float)ff_slope_x100 / 100.0f,
+                   (float)ff_dead_x10   / 10.0f);
+        return;
+    }
+
+    if (line.startsWith("STEPRUN ")) {
+        /* "STEPRUN <duty_start_pct> <duty_end_pct> [pre_windows post_windows]" */
+        String rest = line.substring(8);
+        int ds = 0, de = 40;
+        int pre = 5, post = 15;
+        sscanf(rest.c_str(), "%d %d %d %d", &ds, &de, &pre, &post);
+        cmd_steprun(ds, de, (uint16_t)pre, (uint16_t)post);
         return;
     }
 
