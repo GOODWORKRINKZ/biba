@@ -3,15 +3,26 @@
  * Commands (over USB CDC, 115200 baud, line-terminated by '\n'):
  *   PING                                 -> "PONG"
  *   STOP                                 -> stops motors, disarms SSR + enables, "OK stopped"
- *   CAPTURE <FWD|REV> <duty_pct> <n> <sps> ->
- *       Drives the left motor PWM at the requested direction/duty, waits
- *       500 ms for the IS signal to settle, then DMA-bursts <n> samples
- *       from BIBA_ADC_CHAN_IS_LEFT at <sps> samples/second.
+ *   CAPTURE <FWD|REV> <duty_pct> <n> <sps> [settle_ms] ->
+ *       Drives the left motor PWM at the requested direction/duty, settles,
+ *       then DMA-bursts <n> samples from BIBA_ADC_CHAN_IS_LEFT at <sps> sps.
  *
  *       Response format:
- *         CAPTURE_START duty=<pct> dir=<FWD|REV> chan=<n> sps=<sps> n=<n>
+ *         CAPTURE_START duty=<pct> dir=<FWD|REV> chan=<n> sps=<sps> n=<n> settle_ms=<m>
  *         <comma-separated 12-bit ADC values, one line>
  *         CAPTURE_END
+ *
+ *   RPMRUN <target_hz> <duration_ms> [kp_x1000 ki_x1000] ->
+ *       Closed-loop PI controller: setpoint is IS-frequency in Hz; plant is
+ *       the left motor PWM duty; measurement is on-device Schmitt-trigger
+ *       zero-crossing of a 2048-sample @ 10 kSPS burst (200 ms window →
+ *       5 Hz loop rate).  Live CSV stream over USB:
+ *         RPMRUN_START target=<hz> duration_ms=<m> kp=<f> ki=<f>
+ *         RPM_DATA t_ms,target_hz,meas_hz,duty_pct,curr_a
+ *         ...
+ *         RPMRUN_END
+ *       Kp/Ki are passed as integers ×1000 (e.g. 50 1000 → 0.05 / 1.0).
+ *       Defaults: Kp=0.05, Ki=1.0.
  *
  * The firmware always drives the IS_LEFT channel. The Python orchestrator's
  * --motor {left|right} flag selects which physical unit is run; this firmware
@@ -24,6 +35,7 @@
 extern "C" {
 #include "hal/biba_hal.h"
 #include "biba_board.h"
+#include "biba_config.h"
 }
 #include "poc/adc_capture.h"
 
@@ -88,6 +100,137 @@ static void cmd_capture(float signed_duty, bool is_fwd,
     Serial.println("CAPTURE_END");
 }
 
+/* --- Closed-loop PI controller --------------------------------------- */
+/* Per-iteration capture parameters: 200 ms window → 5 Hz update rate. */
+#define RPMRUN_N_SAMPLES   2048u
+#define RPMRUN_SPS         10000u
+#define RPMRUN_DT_S        ((float)RPMRUN_N_SAMPLES / (float)RPMRUN_SPS)
+#define RPMRUN_MAX_DUR_MS  60000u
+#define ADC_VREF_V         3.3f
+#define ADC_FULLSCALE      4095.0f
+
+/* On-device Schmitt-trigger zero-crossing rate over s_buf[0..n-1].
+ * Returns 0.0 when the signal has no detectable AC content. */
+static float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
+{
+    if (n < 4) return 0.0f;
+
+    /* Pass 1: mean + min/max for hysteresis sizing. */
+    uint32_t sum = 0;
+    uint16_t mn = buf[0], mx = buf[0];
+    for (uint16_t i = 0; i < n; ++i) {
+        sum += buf[i];
+        if (buf[i] < mn) mn = buf[i];
+        if (buf[i] > mx) mx = buf[i];
+    }
+    float mean = (float)sum / (float)n;
+    float pk_pk = (float)(mx - mn);
+    if (pk_pk < 8.0f) return 0.0f;  /* below ADC noise floor */
+    float hi = 0.25f * pk_pk;
+    float lo = -hi;
+
+    /* Pass 2: count up-crossings of +hi after dropping below -lo (Schmitt). */
+    bool state_high = false;
+    uint16_t crossings = 0;
+    uint32_t first = 0, last = 0;
+    for (uint16_t i = 0; i < n; ++i) {
+        float v = (float)buf[i] - mean;
+        if (state_high) {
+            if (v < lo) state_high = false;
+        } else {
+            if (v > hi) {
+                state_high = true;
+                if (crossings == 0) first = i;
+                last = i;
+                crossings++;
+            }
+        }
+    }
+    if (crossings < 2) return 0.0f;
+    float period_samples = (float)(last - first) / (float)(crossings - 1);
+    if (period_samples <= 0.0f) return 0.0f;
+    return (float)sps / period_samples;
+}
+
+static float adc_to_amps(float adc_mean)
+{
+    /* Convert mean ADC raw to current via BIBA_IS_AMPS_PER_VOLT.
+     * Baseline (IS at duty=0) is subtracted in cmd_rpmrun() before this
+     * function is called, so adc_mean here is already baseline-relative. */
+    float v = adc_mean * ADC_VREF_V / ADC_FULLSCALE;
+    return v * BIBA_IS_AMPS_PER_VOLT;
+}
+
+static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
+                       float kp, float ki)
+{
+    if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
+    if (target_hz < 0.0f) target_hz = 0.0f;
+    if (target_hz > 50.0f) target_hz = 50.0f;
+
+    /* 1. Baseline IS reading with motor off — DC offset on the IS line. */
+    biba_hal_motor_pwm_left(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline capture timeout");
+        return;
+    }
+    uint32_t bl_sum = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
+    float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
+
+    Serial.printf("RPMRUN_START target=%.2f duration_ms=%lu kp=%.4f ki=%.4f baseline_adc=%.1f\n",
+                  target_hz, (unsigned long)duration_ms, kp, ki, baseline_adc);
+    Serial.println("RPM_DATA t_ms,target_hz,meas_hz,duty_pct,curr_a");
+
+    float duty = 0.0f;
+    float integral = 0.0f;
+    uint32_t t_start = millis();
+
+    while ((millis() - t_start) < duration_ms) {
+        /* Capture window — drives loop period (200 ms @ N=2048, sps=10k). */
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+            Serial.println("ERROR capture timeout");
+            break;
+        }
+        float meas_hz = zc_freq_hz(s_buf, RPMRUN_N_SAMPLES, RPMRUN_SPS);
+
+        uint32_t sum = 0;
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) sum += s_buf[i];
+        float mean_adc = (float)sum / (float)RPMRUN_N_SAMPLES;
+        float curr_a = adc_to_amps(mean_adc - baseline_adc);
+
+        /* PI update.  Integrator clamps to [-1.5, +1.5] so wind-up doesn't
+         * trap the loop when the wheel is stalled. */
+        float err = target_hz - meas_hz;
+        integral += err * RPMRUN_DT_S;
+        if (integral > 1.5f / (ki + 1e-6f)) integral = 1.5f / (ki + 1e-6f);
+        if (integral < 0.0f) integral = 0.0f;
+        duty = kp * err + ki * integral;
+        if (duty < 0.0f) duty = 0.0f;
+        if (duty > 1.0f) duty = 1.0f;
+        biba_hal_motor_pwm_left(duty);
+
+        Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f\n",
+                      (unsigned long)(millis() - t_start),
+                      target_hz, meas_hz, duty * 100.0f, curr_a);
+
+        /* Check for STOP request between iterations (single-char peek). */
+        if (Serial.available()) {
+            String line = Serial.readStringUntil('\n');
+            line.trim();
+            if (line == "STOP") {
+                Serial.println("RPMRUN_ABORT stop requested");
+                break;
+            }
+        }
+    }
+
+    biba_hal_motor_pwm_left(0.0f);
+    Serial.println("RPMRUN_END");
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -144,6 +287,20 @@ void loop(void)
          * this firmware always drives the IS_LEFT channel. */
         uint8_t adc_chan = BIBA_ADC_CHAN_IS_LEFT;
         cmd_capture(signed_duty, is_fwd, adc_chan, n, sps, settle_ms);
+        return;
+    }
+
+    if (line.startsWith("RPMRUN ")) {
+        /* "RPMRUN <target_hz> <duration_ms> [kp_x1000 ki_x1000]" */
+        String rest = line.substring(7);
+        float target_hz = 10.0f;
+        uint32_t duration_ms = 10000;
+        int kp_mil = 50;     /* default Kp = 0.050 (%-duty per Hz of error) */
+        int ki_mil = 1000;   /* default Ki = 1.000 */
+        sscanf(rest.c_str(), "%f %lu %d %d",
+               &target_hz, &duration_ms, &kp_mil, &ki_mil);
+        cmd_rpmrun(target_hz, duration_ms,
+                   (float)kp_mil / 1000.0f, (float)ki_mil / 1000.0f);
         return;
     }
 
