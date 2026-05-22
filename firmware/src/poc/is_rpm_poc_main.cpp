@@ -29,12 +29,22 @@ extern "C" {
 
 static uint16_t s_buf[ADC_CAPTURE_MAX_SAMPLES];
 
+/* Default spin-up settle window before sampling. Motor inertia + RC-filter
+ * settling on the IS line takes longer than initially assumed: bench scope
+ * shows the IS waveform stabilises ~1 s after a duty step. Host can
+ * override via the 5th CAPTURE arg. */
+#define IS_POC_DEFAULT_SETTLE_MS  1500u
+#define IS_POC_MAX_SETTLE_MS      10000u
+
 static void cmd_capture(float signed_duty, bool is_fwd,
-                        uint8_t adc_chan, uint16_t n_samples, uint32_t sps)
+                        uint8_t adc_chan, uint16_t n_samples, uint32_t sps,
+                        uint32_t settle_ms)
 {
     if (signed_duty > 1.0f)  signed_duty = 1.0f;
     if (signed_duty < -1.0f) signed_duty = -1.0f;
     if (n_samples > ADC_CAPTURE_MAX_SAMPLES) n_samples = ADC_CAPTURE_MAX_SAMPLES;
+    if (settle_ms == 0u)               settle_ms = IS_POC_DEFAULT_SETTLE_MS;
+    if (settle_ms > IS_POC_MAX_SETTLE_MS) settle_ms = IS_POC_MAX_SETTLE_MS;
 
     /* Issue 1 fix: use biba_hal_motor_pwm_left/right (the original plan
      * referenced a nonexistent HAL setter). */
@@ -44,7 +54,7 @@ static void cmd_capture(float signed_duty, bool is_fwd,
         biba_hal_motor_pwm_right(signed_duty);
     }
 
-    delay(500);
+    delay(settle_ms);
 
     adc_capture_init(sps);
     bool ok = adc_capture_burst(adc_chan, n_samples, s_buf);
@@ -61,13 +71,15 @@ static void cmd_capture(float signed_duty, bool is_fwd,
         return;
     }
 
-    /* Issue 2 fix: include dir=FWD|REV in CAPTURE_START header. */
-    Serial.printf("CAPTURE_START duty=%d dir=%s chan=%d sps=%lu n=%u\n",
+    /* Issue 2 fix: include dir=FWD|REV in CAPTURE_START header.
+     * settle_ms is echoed so post-hoc analysis knows the spin-up window. */
+    Serial.printf("CAPTURE_START duty=%d dir=%s chan=%d sps=%lu n=%u settle_ms=%lu\n",
                   (int)(fabsf(signed_duty) * 100.0f),
                   is_fwd ? "FWD" : "REV",
                   (int)adc_chan,
                   (unsigned long)sps,
-                  (unsigned)n_samples);
+                  (unsigned)n_samples,
+                  (unsigned long)settle_ms);
 
     for (uint16_t i = 0; i < n_samples; i++) {
         Serial.print(s_buf[i]);
@@ -114,23 +126,24 @@ void loop(void)
     }
 
     if (line.startsWith("CAPTURE ")) {
-        /* Issue 2 fix: "CAPTURE <FWD|REV> <duty_pct> <n_samples> <sps>" —
-         * direction token FIRST, then 3 numeric args.
-         * Issue 3 fix: dual-channel capture removed per D-04. */
+        /* "CAPTURE <FWD|REV> <duty_pct> <n_samples> <sps> [settle_ms]" —
+         * direction token FIRST, then numeric args.  settle_ms is optional
+         * (defaults to IS_POC_DEFAULT_SETTLE_MS = 1500 ms). */
         String rest = line.substring(8);             /* after "CAPTURE " */
         bool is_fwd = rest.startsWith("FWD");
         rest = rest.substring(4);                    /* skip "FWD " or "REV " */
         int duty_pct = 50;
         uint16_t n = 2048;
         uint32_t sps = 10000;
-        sscanf(rest.c_str(), "%d %hu %lu", &duty_pct, &n, &sps);
+        uint32_t settle_ms = 0u;                     /* 0 → use default */
+        sscanf(rest.c_str(), "%d %hu %lu %lu", &duty_pct, &n, &sps, &settle_ms);
         if (duty_pct < 0)   duty_pct = 0;
         if (duty_pct > 100) duty_pct = 100;
         float signed_duty = is_fwd ? (duty_pct / 100.0f) : -(duty_pct / 100.0f);
         /* The Python --motor left/right flag selects which unit to run;
          * this firmware always drives the IS_LEFT channel. */
         uint8_t adc_chan = BIBA_ADC_CHAN_IS_LEFT;
-        cmd_capture(signed_duty, is_fwd, adc_chan, n, sps);
+        cmd_capture(signed_duty, is_fwd, adc_chan, n, sps, settle_ms);
         return;
     }
 

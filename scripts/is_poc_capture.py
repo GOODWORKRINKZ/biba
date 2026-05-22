@@ -27,8 +27,9 @@ except ImportError:  # pragma: no cover - serial only required at run-time
 
 DUTY_POINTS_DEFAULT = [25, 50, 75, 100]
 DIRECTIONS = ["FWD", "REV"]
-N_SAMPLES_DEFAULT = 2048
+N_SAMPLES_DEFAULT = 4096
 SPS_DEFAULT = 10000
+SETTLE_MS_DEFAULT = 1500  # firmware default; bench shows IS waveform stabilises ~1 s after duty step
 
 
 def wait_for_ready(ser, timeout: float = 10.0) -> None:
@@ -40,13 +41,14 @@ def wait_for_ready(ser, timeout: float = 10.0) -> None:
     raise TimeoutError("IS_POC_READY not received within timeout")
 
 
-def capture_one(ser, duty: int, direction: str, n: int, sps: int) -> list[int]:
+def capture_one(ser, duty: int, direction: str, n: int, sps: int,
+                settle_ms: int) -> list[int]:
     """Send one CAPTURE command and read back samples.
 
     Direction-first command per D-01.  Accumulates data across multiple
     readlines until CAPTURE_END is observed (Pitfall 4 fix).
     """
-    cmd = f"CAPTURE {direction} {duty} {n} {sps}\n"
+    cmd = f"CAPTURE {direction} {duty} {n} {sps} {settle_ms}\n"
     ser.write(cmd.encode())
 
     # Wait for header
@@ -85,6 +87,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--n", type=int, default=N_SAMPLES_DEFAULT)
     parser.add_argument("--sps", type=int, default=SPS_DEFAULT)
     parser.add_argument(
+        "--settle-ms", type=int, default=SETTLE_MS_DEFAULT,
+        help="Spin-up delay (ms) between PWM command and capture start. "
+             "Bumped from old 500 ms to let the motor reach steady state.",
+    )
+    parser.add_argument(
         "--motor", choices=["left", "right"], required=True,
         help="Motor to drive: left uses IS_LEFT (GP26), right uses IS_RIGHT (GP27)",
     )
@@ -109,7 +116,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for duty in args.duty:
             for direction in DIRECTIONS:
-                samples = capture_one(ser, duty, direction, args.n, args.sps)
+                samples = capture_one(
+                    ser, duty, direction, args.n, args.sps, args.settle_ms,
+                )
                 fname = out_dir / f"duty_{duty:03d}_{direction}_sps{args.sps}.csv"
                 with open(fname, "w", newline="") as fh:
                     w = csv.writer(fh)
