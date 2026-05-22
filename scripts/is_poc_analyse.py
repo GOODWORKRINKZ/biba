@@ -98,9 +98,20 @@ def freq_autocorr(samples: np.ndarray, sps: int) -> float:
     min_lag = max(int(sps * 0.0002), 1)   # > 5 kHz upper bound
     max_lag = int(sps * 0.01)             # < 100 Hz lower bound
     max_lag = min(max_lag, len(corr) - 1)
-    if max_lag <= min_lag:
+    if max_lag <= min_lag + 1:
         return 0.0
-    peak_idx = int(np.argmax(corr[min_lag:max_lag])) + min_lag
+    # Find the FIRST local maximum after the central peak — this is the
+    # fundamental period.  Picking the global max over the whole search
+    # window biases toward integer multiples of the true period (which
+    # also have high autocorrelation for pure sinusoids).
+    segment = corr[min_lag:max_lag]
+    peak_idx = None
+    for i in range(1, len(segment) - 1):
+        if segment[i] > segment[i - 1] and segment[i] > segment[i + 1]:
+            peak_idx = i + min_lag
+            break
+    if peak_idx is None:
+        peak_idx = int(np.argmax(segment)) + min_lag
     if peak_idx <= 0:
         return 0.0
     return float(sps) / float(peak_idx)
