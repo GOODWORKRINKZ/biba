@@ -23,7 +23,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from scipy.signal import welch  # noqa: E402
+from scipy.signal import find_peaks, welch  # noqa: E402
 
 _FNAME_RE = re.compile(r"duty_(\d+)_(FWD|REV)")
 
@@ -129,16 +129,27 @@ def freq_autocorr(samples: np.ndarray, sps: int) -> float:
     max_lag = min(max_lag, len(corr) - 1)
     if max_lag <= min_lag + 1:
         return 0.0
-    # np.correlate returns unnormalised sums; the envelope tapers as
-    # (N - lag) because fewer samples overlap at larger lags.  Without
-    # correction, short lags always win — the algorithm reports the
-    # min_lag bound instead of the true period.  Normalise by overlap
-    # count to expose the underlying cos(2πfτ) shape, then take the
-    # global max in the search window.
+    # Normalise by overlap count: np.correlate returns unnormalised sums
+    # whose envelope tapers as (N - lag), which biases peak detection
+    # toward short lags.  After /overlap the fundamental and its
+    # harmonics have ~equal amplitude for a clean sine, so we cannot
+    # rely on global argmax — it would pick a random harmonic under
+    # noise.  Instead, take the FIRST sufficiently prominent peak in
+    # the search window: that is, by definition, the fundamental
+    # period of the signal.
     overlap = np.arange(len(corr), 0, -1, dtype=float)
     norm = corr / overlap
     segment = norm[min_lag:max_lag]
-    peak_idx = int(np.argmax(segment)) + min_lag
+    # Prominence threshold: at least 30 % of the peak-to-trough range
+    # in the search window — enough to reject noise micro-peaks while
+    # accepting both clean sine peaks and the lower-SNR real captures.
+    prominence = 0.3 * (segment.max() - segment.min())
+    peaks, _ = find_peaks(segment, prominence=prominence)
+    if len(peaks) == 0:
+        # Fall back to global max if no prominent peak found.
+        peak_idx = int(np.argmax(segment)) + min_lag
+    else:
+        peak_idx = int(peaks[0]) + min_lag
     if peak_idx <= 0:
         return 0.0
     return float(sps) / float(peak_idx)
