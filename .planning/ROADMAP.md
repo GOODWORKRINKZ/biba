@@ -121,7 +121,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-PLAN.md — ADC remap, DMA capture driver, USB shell, Python capture+analyse scripts, unit tests
+- [x] 06-PLAN.md — ADC remap, DMA capture driver, USB shell, Python capture+analyse scripts, unit tests
 
 ---
 
@@ -152,7 +152,6 @@ Features deferred beyond current milestone (v2+):
 **Plans**: TBD
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 5 to break down)
 
 ---
 
