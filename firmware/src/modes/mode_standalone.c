@@ -489,8 +489,11 @@ void biba_mode_standalone_tick(void)
      * output [-1,1] to a target RPM (Phase 7: forward only) and read the
      * latest duty produced by the DMA IRQ. The PI step itself runs in
      * on_adc_done() at the ADC capture cadence (~5 Hz per channel). */
-    s_target_hz_left  = (left_out  > 0.0f) ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
-    s_target_hz_right = (right_out > 0.0f) ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
+    /* Use BIBA_MOTOR_DEADBAND (0.05) as the minimum threshold to avoid the
+     * stiction floor snapping to 0.20 duty when the stick is at neutral but
+     * the CRSF value has a tiny positive bias (e.g. left_out = 0.003). */
+    s_target_hz_left  = (left_out  > BIBA_MOTOR_DEADBAND) ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
+    s_target_hz_right = (right_out > BIBA_MOTOR_DEADBAND) ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
 
     float duty_left  = s_rpm_duty_left;
     float duty_right = s_rpm_duty_right;
