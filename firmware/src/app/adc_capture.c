@@ -14,6 +14,8 @@ static uint8_t  s_last_ch;
 static uint16_t s_last_n;
 static uint16_t *s_buf_ptr;
 
+static void dma_irq_handler(void);
+
 void adc_capture_init(uint32_t sample_rate_sps)
 {
     adc_init();
@@ -34,6 +36,18 @@ void adc_capture_init(uint32_t sample_rate_sps)
     float div = (float)48000000u / (float)sample_rate_sps - 1.0f;
     if (div < 0.0f) div = 0.0f;
     adc_set_clkdiv(div);
+
+    /* Register the DMA_IRQ_0 shared handler exactly once. Doing this here
+     * (instead of inside adc_capture_start_async) avoids a deadlock when
+     * the IRQ callback re-arms the next capture: irq_add_shared_handler()
+     * is not safe to call from inside the IRQ it is registering. */
+    static bool s_irq_installed = false;
+    if (!s_irq_installed) {
+        irq_add_shared_handler(DMA_IRQ_0, dma_irq_handler,
+                               PICO_SHARED_IRQ_HANDLER_DEFAULT_ORDER_PRIORITY);
+        irq_set_enabled(DMA_IRQ_0, true);
+        s_irq_installed = true;
+    }
 }
 
 bool adc_capture_burst(uint8_t channel, uint16_t n_samples, uint16_t *out_buf)
@@ -133,13 +147,11 @@ bool adc_capture_start_async(uint8_t channel, uint16_t n_samples,
         false               /* do NOT start yet — IRQ enable first */
     );
 
-    /* Enable per-channel IRQ on DMA_IRQ_0 and register the shared handler.
-     * irq_add_shared_handler is idempotent for the same handler pointer —
-     * subsequent calls are no-ops. */
+    /* Enable per-channel IRQ. The shared DMA_IRQ_0 handler itself was
+     * installed once in adc_capture_init() — calling irq_add_shared_handler
+     * from here would deadlock when the IRQ callback re-arms the next
+     * capture (same IRQ vector is still active on this core). */
     dma_channel_set_irq0_enabled(s_dma_ch, true);
-    irq_add_shared_handler(DMA_IRQ_0, dma_irq_handler,
-                           PICO_SHARED_IRQ_HANDLER_DEFAULT_ORDER_PRIORITY);
-    irq_set_enabled(DMA_IRQ_0, true);
 
     dma_channel_start(s_dma_ch);
     adc_run(true);
