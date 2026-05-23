@@ -457,14 +457,22 @@ void biba_mode_standalone_tick(void)
         s_trim_gesture_start_ms = 0u;
         s_trim_gesture_consumed = false;
     }
-    float trim = s_trim_mode_active
-        ? trim_ch * BIBA_MOTOR_TRIM_MAX_EFFECT
-        : s_saved_motor_trim;
-    if (trim >  BIBA_MOTOR_TRIM_MAX_EFFECT) trim =  BIBA_MOTOR_TRIM_MAX_EFFECT;
-    if (trim < -BIBA_MOTOR_TRIM_MAX_EFFECT) trim = -BIBA_MOTOR_TRIM_MAX_EFFECT;
+    /* TODO(trim): Motor trim was designed for open-loop duty control (Phase ≤6).
+     * With RPM closed-loop (Phase 7+) the PI independently regulates each wheel
+     * to the same target_hz, so duty-level trim has no meaningful effect and
+     * may fight the integrator.  Options to revisit:
+     *   a) Remove trim entirely — PI balances wheels via feedback.
+     *   b) Rethink as target_hz offset trim (left_target_hz *= 1 ± trim) so
+     *      the operator can permanently bias one wheel's setpoint if the two
+     *      motors have different real-world characteristics.
+     * For now trim is bypassed (trim = 0). The gesture/LED machinery is kept
+     * so no user-visible behaviour is lost and the code compiles cleanly. */
+    float trim = 0.0f;
+    (void)trim_ch;  /* suppress unused-variable warning */
 
     /* ------------------------------------------------------------------ *
-     * Mix → current limiter (thermal backoff) → trim → drive
+     * Mix → current limiter (thermal backoff) → drive
+     * (trim bypassed — see TODO above)
      * ------------------------------------------------------------------ */
     float left_out = 0.0f, right_out = 0.0f;
     bool left_limited = false, right_limited = false;
