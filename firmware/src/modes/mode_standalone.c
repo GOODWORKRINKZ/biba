@@ -15,7 +15,9 @@
 #include "biba_board.h"
 #include "app/control_loop.h"
 #include "app/failsafe.h"
-#include "app/ramp.h"
+#include "app/adc_capture.h"
+#include "app/zc_detector.h"
+#include "app/rpm_pi.h"
 #include "app/telemetry.h"
 #include "drivers/bts7960.h"
 #include "drivers/crsf.h"
@@ -82,9 +84,27 @@ static const biba_pid_config_t s_heading_cfg = {
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
 static bool s_last_failsafe;
 
-/* Per-motor slew-rate limiters (D-01, D-03). */
-static biba_ramp_t s_ramp_left;
-static biba_ramp_t s_ramp_right;
+/* RPM closed-loop state (per-channel). Replaces the open-loop slew
+ * ramp from Phase ≤6. DMA IRQ writes s_rpm_duty_*; tick reads them. */
+static biba_rpm_pi_state_t  s_rpm_pi_left;
+static biba_rpm_pi_state_t  s_rpm_pi_right;
+static volatile float       s_rpm_duty_left;
+static volatile float       s_rpm_duty_right;
+static volatile float       s_target_hz_left;   /* tick writes, on_adc_done reads */
+static volatile float       s_target_hz_right;
+static float                s_raw_hz_left;       /* LEFT ZC held until RIGHT branch */
+static uint16_t             s_adc_buf[1024];     /* shared DMA buffer (L then R) */
+
+/* ADC capture state machine. */
+typedef enum { ADC_IDLE, ADC_CAPTURING_LEFT, ADC_CAPTURING_RIGHT } adc_state_t;
+static volatile adc_state_t s_adc_state = ADC_IDLE;
+
+/* PI config initialised in biba_mode_standalone_init(). */
+static biba_rpm_pi_config_t s_rpm_cfg;
+
+/* Max Hz at 100% duty (from Phase 06 calibration). Maps mixer [-1,1] -> Hz. */
+#define STANDALONE_RPM_MAX_HZ  940.0f
+
 static bool s_beacon_active;
 static uint32_t s_sos_next_ms;   /* earliest time for next SOS repeat */
 static biba_melody_player_t s_player;
@@ -154,6 +174,32 @@ static float rc_to_unit(uint16_t v)
     return biba_clamp_unit(normalised);
 }
 
+/* DMA IRQ callback: a 1024-sample capture just finished on `channel`.
+ * Compute the ZC frequency, advance the L->R state machine, and once both
+ * channels are sampled run the PI step for both motors. Writes to the
+ * volatile s_rpm_duty_* are picked up by the next biba_mode_standalone_tick. */
+static void on_adc_done(uint8_t channel, const uint16_t *buf, uint16_t n)
+{
+    (void)channel;
+    float raw_hz = zc_freq_hz(buf, n, 10000u);
+
+    if (s_adc_state == ADC_CAPTURING_LEFT) {
+        s_raw_hz_left = raw_hz;
+        s_adc_state = ADC_CAPTURING_RIGHT;
+        (void)adc_capture_start_async(1u, 1024u, s_adc_buf, on_adc_done);
+    } else if (s_adc_state == ADC_CAPTURING_RIGHT) {
+        float raw_hz_right = raw_hz;
+        float raw_hz_left  = s_raw_hz_left;
+
+        s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
+                                            s_target_hz_left,  raw_hz_left);
+        s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
+                                            s_target_hz_right, raw_hz_right);
+        s_adc_state = ADC_CAPTURING_LEFT;
+        (void)adc_capture_start_async(0u, 1024u, s_adc_buf, on_adc_done);
+    }
+}
+
 static biba_limit_result_t apply_drive_current_limits(biba_mix_output_t mix)
 {
     biba_motor_current_t il = biba_current_sense_left();
@@ -182,8 +228,29 @@ void biba_mode_standalone_init(void)
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
     s_last_failsafe = true;
 
-    biba_ramp_init(&s_ramp_left);
-    biba_ramp_init(&s_ramp_right);
+    /* PI config: load default tuning from rpm_pi.h. */
+    s_rpm_cfg.kp             = BIBA_RPM_PI_KP;
+    s_rpm_cfg.ki             = BIBA_RPM_PI_KI;
+    s_rpm_cfg.ki_low         = BIBA_RPM_PI_KI_LOW;
+    s_rpm_cfg.ki_low_thresh  = BIBA_RPM_PI_KI_LOW_THRESH;
+    s_rpm_cfg.ff_slope       = BIBA_RPM_PI_FF_SLOPE;
+    s_rpm_cfg.ff_dead        = BIBA_RPM_PI_FF_DEAD;
+    s_rpm_cfg.stiction_floor = BIBA_RPM_PI_STICTION;
+    s_rpm_cfg.p_clamp        = BIBA_RPM_PI_P_CLAMP;
+    s_rpm_cfg.dt_s           = BIBA_RPM_PI_DT_S;
+
+    biba_rpm_pi_reset(&s_rpm_pi_left);
+    biba_rpm_pi_reset(&s_rpm_pi_right);
+    s_rpm_duty_left   = 0.0f;
+    s_rpm_duty_right  = 0.0f;
+    s_target_hz_left  = 0.0f;
+    s_target_hz_right = 0.0f;
+    s_raw_hz_left     = 0.0f;
+
+    /* Start the LEFT->RIGHT ADC capture state machine. */
+    adc_capture_init(10000u);
+    s_adc_state = ADC_CAPTURING_LEFT;
+    (void)adc_capture_start_async(0u, 1024u, s_adc_buf, on_adc_done);
 
     /* Play startup fanfare through motor coils. */
     biba_melody_player_start(&s_player, &biba_melody_startup);
@@ -260,8 +327,12 @@ void biba_mode_standalone_tick(void)
     /* Failsafe rising edge: play warning (distinct from normal disarm). */
     if (failsafe && !s_last_failsafe) {
         biba_melody_player_start(&s_player, &biba_melody_failsafe);
-        biba_ramp_reset(&s_ramp_left);    /* D-04: hard reset on failsafe edge */
-        biba_ramp_reset(&s_ramp_right);
+        biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on failsafe edge */
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        s_rpm_duty_left   = 0.0f;
+        s_rpm_duty_right  = 0.0f;
+        s_target_hz_left  = 0.0f;
+        s_target_hz_right = 0.0f;
         biba_hal_ssr_set(false);          /* D-10: belt-and-suspenders SSR cut on failsafe */
     }
     s_last_failsafe = failsafe;
@@ -280,8 +351,12 @@ void biba_mode_standalone_tick(void)
         }
         /* Exit trim mode on disarm edge (safety) */
         s_trim_mode_active = false;
-        biba_ramp_reset(&s_ramp_left);    /* D-04: hard reset on disarm edge */
-        biba_ramp_reset(&s_ramp_right);
+        biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on disarm edge */
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        s_rpm_duty_left   = 0.0f;
+        s_rpm_duty_right  = 0.0f;
+        s_target_hz_left  = 0.0f;
+        s_target_hz_right = 0.0f;
     }
     s_armed = armed;
     biba_hal_ssr_set(armed);              /* D-10: SSR HIGH=armed, LOW=disarmed */
@@ -410,10 +485,22 @@ void biba_mode_standalone_tick(void)
         }
     }
 
-    /* D-03, D-05: Apply ramp post-mix. Always runs — never bypassed.
-     * MUST be before melody/going_reverse checks (Pitfalls 2 and 3). */
-    left_out  = biba_ramp_update(&s_ramp_left,  left_out,  dt);
-    right_out = biba_ramp_update(&s_ramp_right, right_out, dt);
+    /* RPM closed-loop substitution for the old ramp. Convert the mixer
+     * output [-1,1] to a target RPM (Phase 7: forward only) and read the
+     * latest duty produced by the DMA IRQ. The PI step itself runs in
+     * on_adc_done() at the ADC capture cadence (~5 Hz per channel). */
+    s_target_hz_left  = (left_out  > 0.0f) ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
+    s_target_hz_right = (right_out > 0.0f) ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
+
+    float duty_left  = s_rpm_duty_left;
+    float duty_right = s_rpm_duty_right;
+    if (failsafe || !armed) {
+        duty_left  = 0.0f;
+        duty_right = 0.0f;
+    }
+    left_out  = duty_left;
+    right_out = duty_right;
+    (void)dt;   /* PI dt is configured via cfg.dt_s; tick dt no longer used here */
 
     /* If actively driving, motors are needed — interrupt melodies.
      * Exception: the intentional reverse backup pip must not be self-cancelled. */
@@ -505,6 +592,8 @@ void biba_mode_standalone_tick(void)
             .setpoint_right   = right_out,
             .current_left_a   = il.current_a,
             .current_right_a  = ir.current_a,
+            .wheel_rpm_left_hz  = s_rpm_pi_left.meas_ema,
+            .wheel_rpm_right_hz = s_rpm_pi_right.meas_ema,
             .crsf_rssi        = s_link.uplink_rssi_1,
             .crsf_link_quality = s_link.uplink_link_quality,
             .crsf_snr_db      = s_link.uplink_snr,
