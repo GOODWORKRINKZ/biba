@@ -485,24 +485,46 @@ void biba_mode_standalone_tick(void)
         }
     }
 
-    /* RPM closed-loop substitution for the old ramp. Convert the mixer
-     * output [-1,1] to a target RPM (Phase 7: forward only) and read the
-     * latest duty produced by the DMA IRQ. The PI step itself runs in
-     * on_adc_done() at the ADC capture cadence (~5 Hz per channel). */
-    /* Use BIBA_MOTOR_DEADBAND (0.05) as the minimum threshold to avoid the
-     * stiction floor snapping to 0.20 duty when the stick is at neutral but
-     * the CRSF value has a tiny positive bias (e.g. left_out = 0.003). */
-    s_target_hz_left  = (left_out  > BIBA_MOTOR_DEADBAND) ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
-    s_target_hz_right = (right_out > BIBA_MOTOR_DEADBAND) ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
+    /* RPM closed-loop (forward) + open-loop pass-through (reverse).
+     * Forward: IS ZC closes the loop via on_adc_done() IRQ.
+     * Reverse: ZC only detects magnitude, not direction — pass raw mixer
+     *          duty directly.  Reset PI on direction flip so the integrator
+     *          starts clean when returning to forward. */
+    {
+        static bool s_prev_rev_left  = false;
+        static bool s_prev_rev_right = false;
 
-    float duty_left  = s_rpm_duty_left;
-    float duty_right = s_rpm_duty_right;
-    if (failsafe || !armed) {
-        duty_left  = 0.0f;
-        duty_right = 0.0f;
+        bool rev_left  = (left_out  < -BIBA_MOTOR_DEADBAND);
+        bool rev_right = (right_out < -BIBA_MOTOR_DEADBAND);
+
+        /* Direction flip → reset PI + clear stale duty */
+        if (rev_left != s_prev_rev_left) {
+            biba_rpm_pi_reset(&s_rpm_pi_left);
+            s_rpm_duty_left = 0.0f;
+        }
+        if (rev_right != s_prev_rev_right) {
+            biba_rpm_pi_reset(&s_rpm_pi_right);
+            s_rpm_duty_right = 0.0f;
+        }
+        s_prev_rev_left  = rev_left;
+        s_prev_rev_right = rev_right;
+
+        /* Forward target (deadband guard prevents stiction snap at neutral) */
+        s_target_hz_left  = (!rev_left  && left_out  > BIBA_MOTOR_DEADBAND)
+                            ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
+        s_target_hz_right = (!rev_right && right_out > BIBA_MOTOR_DEADBAND)
+                            ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
+
+        /* Reverse: bypass PI, use raw mixer duty directly */
+        float duty_left  = rev_left  ? left_out  : s_rpm_duty_left;
+        float duty_right = rev_right ? right_out : s_rpm_duty_right;
+        if (failsafe || !armed) {
+            duty_left  = 0.0f;
+            duty_right = 0.0f;
+        }
+        left_out  = duty_left;
+        right_out = duty_right;
     }
-    left_out  = duty_left;
-    right_out = duty_right;
     (void)dt;   /* PI dt is configured via cfg.dt_s; tick dt no longer used here */
 
     /* If actively driving, motors are needed — interrupt melodies.
