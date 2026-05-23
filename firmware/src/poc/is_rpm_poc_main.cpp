@@ -111,52 +111,51 @@ static void cmd_capture(float signed_duty, bool is_fwd,
 #define ADC_VREF_V         3.3f
 #define ADC_FULLSCALE      4095.0f
 
-/* On-device Schmitt-trigger zero-crossing rate over s_buf[0..n-1].
- * Returns 0.0 when the signal has no detectable AC content. */
+/* Sub-window Schmitt-trigger ZC detector (A2 algorithm).
+ *
+ * Splits the input into ZC_SUBWIN_K equal blocks; computes local min/max/mean
+ * per block and counts Schmitt crossings within that block.  Local baselines
+ * remove low-frequency DC drift that ruins a single global-mean detector
+ * during PWM transients (verified on bench: A2 mean-error 43 Hz vs A1
+ * 92 Hz on TRAP sweep, 44 vs 164 on SIN sweep).
+ *
+ * Frequency estimate = total_crossings * 0.5 * sps / n  (each commutation
+ * period contributes two crossings).
+ *
+ * Returns 0.0 when no block has enough AC content.
+ */
+#define ZC_SUBWIN_K          8u
+#define ZC_SUBWIN_MIN_PKPK   30u  /* per-block AC threshold (LSB) */
+
 static float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
 {
-    if (n < 4) return 0.0f;
-
-    /* Pass 1: mean + min/max for hysteresis sizing. */
-    uint32_t sum = 0;
-    uint16_t mn = buf[0], mx = buf[0];
-    for (uint16_t i = 0; i < n; ++i) {
-        sum += buf[i];
-        if (buf[i] < mn) mn = buf[i];
-        if (buf[i] > mx) mx = buf[i];
-    }
-    float mean = (float)sum / (float)n;
-    float pk_pk = (float)(mx - mn);
-    /* Noise floor: ADC quiescent noise on the IS line with the motor off
-     * is ~10-15 LSB pk-pk; require well above that before declaring a
-     * detectable AC signal.  Previously 8 LSB — ZC was reporting random
-     * 10-30 Hz at duty=0 from pure noise, which fooled the PI controller
-     * into thinking the motor was spinning when it was not. */
-    if (pk_pk < 40.0f) return 0.0f;
-    float hi = 0.25f * pk_pk;
-    float lo = -hi;
-
-    /* Pass 2: count up-crossings of +hi after dropping below -lo (Schmitt). */
-    bool state_high = false;
-    uint16_t crossings = 0;
-    uint32_t first = 0, last = 0;
-    for (uint16_t i = 0; i < n; ++i) {
-        float v = (float)buf[i] - mean;
-        if (state_high) {
-            if (v < lo) state_high = false;
-        } else {
-            if (v > hi) {
-                state_high = true;
-                if (crossings == 0) first = i;
-                last = i;
-                crossings++;
-            }
+    if (n < ZC_SUBWIN_K * 4u) return 0.0f;
+    uint16_t blk = n / (uint16_t)ZC_SUBWIN_K;
+    uint16_t total = 0;
+    uint16_t active_blocks = 0;
+    for (uint16_t b = 0; b < ZC_SUBWIN_K; ++b) {
+        const uint16_t *seg = buf + (uint32_t)b * blk;
+        uint16_t mn = seg[0], mx = seg[0];
+        for (uint16_t i = 1; i < blk; ++i) {
+            if (seg[i] < mn) mn = seg[i];
+            if (seg[i] > mx) mx = seg[i];
+        }
+        uint16_t pkpk = (uint16_t)(mx - mn);
+        if (pkpk < ZC_SUBWIN_MIN_PKPK) continue;
+        active_blocks++;
+        int32_t mid  = ((int32_t)mn + (int32_t)mx) / 2;
+        int32_t hyst = (int32_t)pkpk / 4;
+        int32_t up = mid + hyst, dn = mid - hyst;
+        int state = (seg[0] > (uint16_t)mid) ? 1 : -1;
+        for (uint16_t i = 1; i < blk; ++i) {
+            int32_t v = (int32_t)seg[i];
+            if (state > 0 && v < dn) { state = -1; total++; }
+            else if (state < 0 && v > up) { state = 1; total++; }
         }
     }
-    if (crossings < 2) return 0.0f;
-    float period_samples = (float)(last - first) / (float)(crossings - 1);
-    if (period_samples <= 0.0f) return 0.0f;
-    return (float)sps / period_samples;
+    /* Require evidence from at least 2 blocks to call it real signal. */
+    if (active_blocks < 2u || total < 2u) return 0.0f;
+    return (float)total * 0.5f * (float)sps / (float)n;
 }
 
 static float adc_to_amps(float adc_mean)
@@ -223,13 +222,18 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
             Serial.println("ERROR capture timeout");
             break;
         }
-        /* Transient blanking: after a significant duty step the IS signal
-         * needs ~50 ms to settle (BTS7960 RC filter + motor inertia).
-         * Skip the first 512 samples (50 ms @ 10 kSPS) from ZC analysis
-         * whenever the previous iteration changed duty by more than 5 pp.
-         * This prevents the settling transient from being counted as a
-         * spurious high-frequency zero-crossing burst. */
-        uint16_t zc_skip = (fabsf(duty - prev_duty) > 0.05f) ? 512u : 0u;
+        /* Transient blanking: A2 sub-window ZC handles slow drift, but it
+         * still can't measure commutation period when the duty itself is
+         * changing mid-window (period non-stationary).  Skip a chunk of
+         * leading samples proportional to the duty step:
+         *   Δduty > 3 pp  → skip 256 samples (25 ms)
+         *   Δduty > 8 pp  → skip 512 samples (50 ms)
+         * Below 3 pp the change is small enough that the rest of the window
+         * still contains usable periodicity. */
+        float d_step = fabsf(duty - prev_duty);
+        uint16_t zc_skip = 0u;
+        if      (d_step > 0.08f) zc_skip = 512u;
+        else if (d_step > 0.03f) zc_skip = 256u;
         float meas_raw = zc_freq_hz(s_buf + zc_skip,
                                     RPMRUN_N_SAMPLES - zc_skip,
                                     RPMRUN_SPS);
@@ -449,6 +453,265 @@ done:
     Serial.println("STEPRUN_END");
 }
 
+/* --- Open-loop duty sweep (waveform / trapezoid) --------------------- *
+ *
+ * SWEEP <shape> <amp_pct> <p_start_ms> <p_end_ms> <duration_ms>
+ *
+ *   shape:        SIN  — bidirectional sinusoid, signed duty in [-amp, +amp]
+ *                 TRAP — trapezoid: rise(p/4) hold+(p/4) fall(p/4) hold-(p/4)
+ *   amp_pct:      peak |duty| in % (0..80)
+ *   p_start_ms:   initial modulation period in ms
+ *   p_end_ms:     final period in ms (linear chirp p_start → p_end)
+ *   duration_ms:  total run time
+ *
+ * Each loop iteration drives one 100 ms ADC window.  Per-window output:
+ *   SWEEP_DATA t_ms,duty_cmd_pct,meas_hz,curr_a,pkpk_adc,zc_count
+ *
+ * pkpk_adc and zc_count expose the raw waveform statistics that drive
+ * the ZC detector — useful for diagnosing why ZC fails during transients.
+ */
+static uint16_t adc_pkpk(const uint16_t *buf, uint16_t n)
+{
+    if (n == 0) return 0;
+    uint16_t lo = buf[0], hi = buf[0];
+    for (uint16_t i = 1; i < n; ++i) {
+        if (buf[i] < lo) lo = buf[i];
+        if (buf[i] > hi) hi = buf[i];
+    }
+    return (uint16_t)(hi - lo);
+}
+
+/* Same Schmitt-trigger ZC as zc_freq_hz but also reports crossing count. */
+static uint16_t zc_count_only(const uint16_t *buf, uint16_t n)
+{
+    if (n < 2) return 0;
+    uint16_t lo = buf[0], hi = buf[0];
+    for (uint16_t i = 1; i < n; ++i) {
+        if (buf[i] < lo) lo = buf[i];
+        if (buf[i] > hi) hi = buf[i];
+    }
+    uint16_t pkpk = (uint16_t)(hi - lo);
+    if (pkpk < 40) return 0;
+    int32_t mid = ((int32_t)lo + (int32_t)hi) / 2;
+    int32_t hyst = (int32_t)pkpk / 4;
+    int32_t up = mid + hyst, dn = mid - hyst;
+    int state = (buf[0] > (uint16_t)mid) ? 1 : -1;
+    uint16_t crossings = 0;
+    for (uint16_t i = 1; i < n; ++i) {
+        int32_t v = (int32_t)buf[i];
+        if (state > 0 && v < dn) { state = -1; crossings++; }
+        else if (state < 0 && v > up) { state = 1; crossings++; }
+    }
+    return crossings;
+}
+
+static void cmd_sweep(const char *shape, int amp_pct,
+                      uint32_t p_start_ms, uint32_t p_end_ms,
+                      uint32_t duration_ms)
+{
+    if (amp_pct < 0)  amp_pct = 0;
+    if (amp_pct > 80) amp_pct = 80;
+    if (p_start_ms < 100u)   p_start_ms = 100u;
+    if (p_start_ms > 10000u) p_start_ms = 10000u;
+    if (p_end_ms   < 100u)   p_end_ms   = 100u;
+    if (p_end_ms   > 10000u) p_end_ms   = 10000u;
+    if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
+    bool is_sin = (strcmp(shape, "SIN") == 0);
+    bool is_trap = (strcmp(shape, "TRAP") == 0);
+    if (!is_sin && !is_trap) {
+        Serial.println("ERR sweep shape must be SIN or TRAP");
+        return;
+    }
+
+    /* Baseline with motor off */
+    biba_hal_motor_pwm_left(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline capture timeout");
+        return;
+    }
+    uint32_t bl_sum = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
+    float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
+
+    Serial.printf("SWEEP_START shape=%s amp=%d p_start=%lu p_end=%lu duration=%lu baseline_adc=%.1f\n",
+                  shape, amp_pct,
+                  (unsigned long)p_start_ms, (unsigned long)p_end_ms,
+                  (unsigned long)duration_ms, baseline_adc);
+    Serial.println("SWEEP_DATA t_ms,duty_cmd_pct,meas_hz,curr_a,pkpk_adc,zc_count");
+
+    float amp = amp_pct / 100.0f;
+    uint32_t t_start = millis();
+
+    while (true) {
+        uint32_t t_now = millis() - t_start;
+        if (t_now >= duration_ms) break;
+
+        /* Linear chirp: period(t) = p_start + (p_end - p_start) * t/duration */
+        float frac = (float)t_now / (float)duration_ms;
+        float period_ms = (float)p_start_ms + frac * ((float)p_end_ms - (float)p_start_ms);
+        if (period_ms < 50.0f) period_ms = 50.0f;
+        /* Phase in [0, 1) within current period */
+        float phase = fmodf((float)t_now, period_ms) / period_ms;
+
+        float duty;
+        if (is_sin) {
+            duty = amp * sinf(2.0f * (float)M_PI * phase);
+        } else {
+            /* Trapezoid cycle: 0 → +amp → +hold → 0 → -amp → -hold → 0
+             * Eight equal phase slices (0.125 each):
+             *   [0.000,0.125)  rise  0 → +amp
+             *   [0.125,0.375)  hold  +amp
+             *   [0.375,0.500)  fall  +amp → 0
+             *   [0.500,0.625)  fall  0 → -amp
+             *   [0.625,0.875)  hold  -amp
+             *   [0.875,1.000]  rise  -amp → 0   */
+            if      (phase < 0.125f) duty =  amp * (phase / 0.125f);
+            else if (phase < 0.375f) duty =  amp;
+            else if (phase < 0.500f) duty =  amp * (1.0f - (phase - 0.375f) / 0.125f);
+            else if (phase < 0.625f) duty = -amp * ((phase - 0.500f) / 0.125f);
+            else if (phase < 0.875f) duty = -amp;
+            else                     duty = -amp * (1.0f - (phase - 0.875f) / 0.125f);
+        }
+        biba_hal_motor_pwm_left(duty);
+
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+            Serial.println("ERROR capture timeout");
+            break;
+        }
+        /* No transient blank in raw diagnostic mode — we WANT to see the
+         * commutation spike behaviour during fast duty changes. */
+        float meas_hz = zc_freq_hz(s_buf, RPMRUN_N_SAMPLES, RPMRUN_SPS);
+        uint16_t zc_n = zc_count_only(s_buf, RPMRUN_N_SAMPLES);
+        uint16_t pkpk = adc_pkpk(s_buf, RPMRUN_N_SAMPLES);
+        uint32_t sum = 0;
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) sum += s_buf[i];
+        float curr_a = adc_to_amps((float)sum / (float)RPMRUN_N_SAMPLES - baseline_adc);
+
+        Serial.printf("SWEEP_DATA %lu,%.1f,%.2f,%.2f,%u,%u\n",
+                      (unsigned long)t_now,
+                      duty * 100.0f, meas_hz, curr_a,
+                      (unsigned)pkpk, (unsigned)zc_n);
+
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n');
+            ln.trim();
+            if (ln == "STOP") { Serial.println("SWEEP_ABORT stop requested"); break; }
+        }
+    }
+
+    biba_hal_motor_pwm_left(0.0f);
+    Serial.println("SWEEP_END");
+}
+
+/* --- SWEEPRAW --------------------------------------------------------
+ * Single-period sweep with FULL raw waveform dump for offline algorithm
+ * benchmarking.  Captures N consecutive 1024-sample windows into a big
+ * RAM buffer (max 30 windows = 60 KB), then streams them out.
+ *
+ * Usage: SWEEPRAW <SIN|TRAP> <amp_pct> <period_ms> <n_windows>
+ *
+ * Output:
+ *   SWEEPRAW_START shape=<S> amp=<p> period_ms=<m> n_windows=<n> baseline_adc=<f>
+ *   SWEEPRAW_WIN <idx> <t_ms> <duty_pct>
+ *   <1024 comma-separated ADC values>
+ *   ... (repeat per window)
+ *   SWEEPRAW_END
+ */
+#define SWEEPRAW_MAX_WINDOWS  30u
+static uint16_t s_raw_buf[SWEEPRAW_MAX_WINDOWS * RPMRUN_N_SAMPLES];
+static uint32_t s_raw_t_ms[SWEEPRAW_MAX_WINDOWS];
+static float    s_raw_duty[SWEEPRAW_MAX_WINDOWS];
+
+static void cmd_sweepraw(const char *shape, int amp_pct,
+                         uint32_t period_ms, uint16_t n_windows)
+{
+    if (amp_pct < 0)  amp_pct = 0;
+    if (amp_pct > 80) amp_pct = 80;
+    if (period_ms < 200u)   period_ms = 200u;
+    if (period_ms > 10000u) period_ms = 10000u;
+    if (n_windows < 1u) n_windows = 1u;
+    if (n_windows > SWEEPRAW_MAX_WINDOWS) n_windows = SWEEPRAW_MAX_WINDOWS;
+    bool is_sin = (strcmp(shape, "SIN") == 0);
+    bool is_trap = (strcmp(shape, "TRAP") == 0);
+    if (!is_sin && !is_trap) {
+        Serial.println("ERR sweepraw shape must be SIN or TRAP");
+        return;
+    }
+
+    /* Baseline */
+    biba_hal_motor_pwm_left(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline capture timeout");
+        return;
+    }
+    uint32_t bl_sum = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
+    float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
+
+    float amp = amp_pct / 100.0f;
+    uint32_t t_start = millis();
+
+    /* === Capture phase: drive duty, burst into buffer, repeat. === */
+    for (uint16_t w = 0; w < n_windows; ++w) {
+        uint32_t t_now = millis() - t_start;
+        float phase = fmodf((float)t_now, (float)period_ms) / (float)period_ms;
+
+        float duty;
+        if (is_sin) {
+            duty = amp * sinf(2.0f * (float)M_PI * phase);
+        } else {
+            if      (phase < 0.125f) duty =  amp * (phase / 0.125f);
+            else if (phase < 0.375f) duty =  amp;
+            else if (phase < 0.500f) duty =  amp * (1.0f - (phase - 0.375f) / 0.125f);
+            else if (phase < 0.625f) duty = -amp * ((phase - 0.500f) / 0.125f);
+            else if (phase < 0.875f) duty = -amp;
+            else                     duty = -amp * (1.0f - (phase - 0.875f) / 0.125f);
+        }
+        biba_hal_motor_pwm_left(duty);
+
+        uint16_t *win = &s_raw_buf[w * RPMRUN_N_SAMPLES];
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, win)) {
+            biba_hal_motor_pwm_left(0.0f);
+            Serial.println("ERROR capture timeout");
+            return;
+        }
+        s_raw_t_ms[w] = t_now;
+        s_raw_duty[w] = duty * 100.0f;
+
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n');
+            ln.trim();
+            if (ln == "STOP") {
+                biba_hal_motor_pwm_left(0.0f);
+                Serial.println("SWEEPRAW_ABORT stop requested");
+                return;
+            }
+        }
+    }
+    biba_hal_motor_pwm_left(0.0f);
+
+    /* === Dump phase: stream all windows. === */
+    Serial.printf("SWEEPRAW_START shape=%s amp=%d period_ms=%lu n_windows=%u baseline_adc=%.1f\n",
+                  shape, amp_pct, (unsigned long)period_ms,
+                  (unsigned)n_windows, baseline_adc);
+    for (uint16_t w = 0; w < n_windows; ++w) {
+        Serial.printf("SWEEPRAW_WIN %u %lu %.1f\n",
+                      (unsigned)w,
+                      (unsigned long)s_raw_t_ms[w],
+                      s_raw_duty[w]);
+        const uint16_t *win = &s_raw_buf[w * RPMRUN_N_SAMPLES];
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) {
+            Serial.print(win[i]);
+            Serial.print((i + 1) < RPMRUN_N_SAMPLES ? ',' : '\n');
+        }
+    }
+    Serial.println("SWEEPRAW_END");
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -540,6 +803,29 @@ void loop(void)
         int pre = 5, post = 15;
         sscanf(rest.c_str(), "%d %d %d %d", &ds, &de, &pre, &post);
         cmd_steprun(ds, de, (uint16_t)pre, (uint16_t)post);
+        return;
+    }
+
+    if (line.startsWith("SWEEP ")) {
+        /* "SWEEP <SIN|TRAP> <amp_pct> <p_start_ms> <p_end_ms> <duration_ms>" */
+        String rest = line.substring(6);
+        char shape[8] = {0};
+        int amp = 30;
+        unsigned long p0 = 3000, p1 = 500, dur = 15000;
+        sscanf(rest.c_str(), "%7s %d %lu %lu %lu", shape, &amp, &p0, &p1, &dur);
+        cmd_sweep(shape, amp, (uint32_t)p0, (uint32_t)p1, (uint32_t)dur);
+        return;
+    }
+
+    if (line.startsWith("SWEEPRAW ")) {
+        /* "SWEEPRAW <SIN|TRAP> <amp_pct> <period_ms> <n_windows>" */
+        String rest = line.substring(9);
+        char shape[8] = {0};
+        int amp = 30;
+        unsigned long per = 2000;
+        unsigned n_win = 20;
+        sscanf(rest.c_str(), "%7s %d %lu %u", shape, &amp, &per, &n_win);
+        cmd_sweepraw(shape, amp, (uint32_t)per, (uint16_t)n_win);
         return;
     }
 
