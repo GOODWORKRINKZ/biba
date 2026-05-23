@@ -373,6 +373,199 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
     Serial.println("RPMRUN_END");
 }
 
+/* --- Closed-loop tracking: time-varying setpoint --------------------- */
+/* RPMTRACK <SIN|TRAP> <base_hz> <amp_hz> <p_start_ms> <p_end_ms>
+ *          <duration_ms> [kp_x1000000 ki_x1000000 [stiction_x100]]
+ *
+ * Same PI+FF controller as RPMRUN but the setpoint follows a sin or
+ * trapezoidal profile with a linear chirp on the period.  Useful to
+ * stress-test the closed-loop response to ramp/step/hold sequences.
+ *
+ * target_hz(t) = base_hz + amp_hz × shape(phase(t))
+ * period(t)    = p_start + (p_end - p_start) × t / duration     (linear chirp)
+ *
+ * Output: same format as RPMRUN (RPM_DATA t,target,meas,duty,curr,err,i,p)
+ */
+static void cmd_rpmtrack(const char *shape,
+                         float base_hz, float amp_hz,
+                         uint32_t p_start_ms, uint32_t p_end_ms,
+                         uint32_t duration_ms,
+                         float kp, float ki, float stiction_floor,
+                         float ff_slope, float ff_dead)
+{
+    bool is_sin  = (strcmp(shape, "SIN")  == 0);
+    bool is_trap = (strcmp(shape, "TRAP") == 0);
+    if (!is_sin && !is_trap) {
+        Serial.println("ERR rpmtrack shape must be SIN or TRAP");
+        return;
+    }
+    if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
+    if (p_start_ms < 200u)   p_start_ms = 200u;
+    if (p_end_ms   < 200u)   p_end_ms   = 200u;
+
+    /* Baseline */
+    biba_hal_motor_pwm_left(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline capture timeout");
+        return;
+    }
+    uint32_t bl_sum = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
+    float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
+
+    Serial.printf("RPMTRACK_START shape=%s base=%.1f amp=%.1f p_start=%lu p_end=%lu"
+                  " duration=%lu kp=%.4f ki=%.4f stiction=%.2f baseline_adc=%.1f\n",
+                  shape, base_hz, amp_hz,
+                  (unsigned long)p_start_ms, (unsigned long)p_end_ms,
+                  (unsigned long)duration_ms, kp, ki, stiction_floor, baseline_adc);
+    Serial.println("RPM_DATA t_ms,target_hz,meas_hz,duty_pct,curr_a,err_hz,i_term,p_term");
+
+    float duty       = 0.0f;
+    float prev_duty  = 0.0f;
+    float integral   = 0.0f;
+    float meas_ema   = 0.0f;
+    float prev_dir   = 1.0f;   /* last commanded direction (+1 / -1) */
+    const float EMA_ALPHA = 0.7f;
+    uint32_t t_start = millis();
+
+    while (true) {
+        uint32_t t_now = millis() - t_start;
+        if (t_now >= duration_ms) break;
+
+        /* Time-varying setpoint with linear period chirp */
+        float frac = (float)t_now / (float)duration_ms;
+        float period_ms = (float)p_start_ms
+                          + frac * ((float)p_end_ms - (float)p_start_ms);
+        if (period_ms < 200.0f) period_ms = 200.0f;
+        float phase = fmodf((float)t_now, period_ms) / period_ms;
+        float shape_val;
+        if (is_sin) {
+            shape_val = sinf(2.0f * (float)M_PI * phase);
+        } else {
+            if      (phase < 0.125f) shape_val =  (phase / 0.125f);
+            else if (phase < 0.375f) shape_val =  1.0f;
+            else if (phase < 0.500f) shape_val =  (1.0f - (phase - 0.375f) / 0.125f);
+            else if (phase < 0.625f) shape_val = -((phase - 0.500f) / 0.125f);
+            else if (phase < 0.875f) shape_val = -1.0f;
+            else                     shape_val = -(1.0f - (phase - 0.875f) / 0.125f);
+        }
+        float target_hz = base_hz + amp_hz * shape_val;
+        if (target_hz >  2000.0f) target_hz =  2000.0f;
+        if (target_hz < -2000.0f) target_hz = -2000.0f;
+
+        /* Direction and magnitude of signed setpoint */
+        float tdir = (target_hz >= 0.0f) ? 1.0f : -1.0f;
+        float target_mag = fabsf(target_hz);
+
+        /* Direction change → reset integral + EMA so the controller starts
+         * clean in the new direction.  Motor coasts (duty=0) this window. */
+        if (tdir != prev_dir) {
+            integral  = 0.0f;
+            meas_ema  = 0.0f;
+            duty      = 0.0f;
+            prev_duty = 0.0f;
+            biba_hal_motor_pwm_left(0.0f);
+            prev_dir  = tdir;
+            /* Still run ADC so we keep time, but skip ZC computation. */
+            adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf);
+            uint32_t s2 = 0;
+            for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) s2 += s_buf[i];
+            float curr_a2 = adc_to_amps((float)s2 / (float)RPMRUN_N_SAMPLES - baseline_adc);
+            Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f,%.2f,%.3f,%.3f\n",
+                          (unsigned long)t_now,
+                          target_hz, 0.0f, 0.0f, curr_a2, target_hz, 0.0f, 0.0f);
+            continue;
+        }
+
+        /* FF — magnitude, then apply direction sign */
+        float ff_duty = 0.0f;
+        if (ff_slope > 0.0f && target_mag > 0.0f) {
+            ff_duty = tdir * (target_mag + ff_dead) / (ff_slope * 100.0f);
+            if (ff_duty >  1.0f) ff_duty =  1.0f;
+            if (ff_duty < -1.0f) ff_duty = -1.0f;
+        }
+
+        /* Capture */
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+            Serial.println("ERROR capture timeout");
+            break;
+        }
+
+        /* Transient blanking — use signed duty change magnitude */
+        float d_step = fabsf(duty - prev_duty);
+        uint16_t zc_skip = 0u;
+        if      (d_step > 0.08f) zc_skip = 512u;
+        else if (d_step > 0.03f) zc_skip = 256u;
+        float meas_raw = zc_freq_hz(s_buf + zc_skip,
+                                    RPMRUN_N_SAMPLES - zc_skip,
+                                    RPMRUN_SPS);
+
+        /* EMA (magnitude) + validity gate */
+        const float ZC_MIN_VALID_HZ = 80.0f;
+        const float ZC_MAX_VALID_HZ = (target_mag > 0.0f ? target_mag : amp_hz)
+                                      * 2.5f + 300.0f;
+        if (meas_raw >= ZC_MIN_VALID_HZ && meas_raw <= ZC_MAX_VALID_HZ) {
+            meas_ema = EMA_ALPHA * meas_raw + (1.0f - EMA_ALPHA) * meas_ema;
+        } else if (meas_raw == 0.0f) {
+            meas_ema *= 0.9f;
+        }
+        /* Signed measurement: attribute ZC magnitude to commanded direction */
+        float meas_hz = tdir * meas_ema;
+
+        uint32_t sum = 0;
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) sum += s_buf[i];
+        float curr_a = adc_to_amps((float)sum / (float)RPMRUN_N_SAMPLES - baseline_adc);
+
+        /* Signed PI */
+        float err = target_hz - meas_hz;
+        bool sat_high = duty >= 0.999f;
+        bool sat_low  = duty <= -0.999f;
+        bool can_integrate =
+            !(sat_high && err > 0.0f) &&
+            !(sat_low  && err < 0.0f);
+        if (can_integrate && fabsf(meas_hz) > 50.0f)
+            integral += err * RPMRUN_DT_S;
+        /* Symmetric I-clamp (directional integral handled by sign of err) */
+        float i_clamp = 0.03f / (ki + 1e-6f);
+        if (integral >  i_clamp) integral =  i_clamp;
+        if (integral < -i_clamp) integral = -i_clamp;
+        float p_term = kp * err;
+        float i_term = ki * integral;
+        if (meas_ema == 0.0f) p_term = 0.0f;   /* no P when wheel stopped */
+        if (p_term >  0.05f) p_term =  0.05f;
+        if (p_term < -0.05f) p_term = -0.05f;
+        duty = ff_duty + p_term + i_term;
+        /* Stiction floor: snap to ±floor when in deadband */
+        bool wheel_spinning = (meas_ema > 0.0f);
+        float duty_abs = fabsf(duty);
+        if (target_mag > 0.0f && duty_abs > 0.0f && duty_abs < stiction_floor)
+            duty = tdir * stiction_floor;
+        if (target_mag > 0.0f && wheel_spinning && duty_abs < stiction_floor)
+            duty = tdir * stiction_floor;
+        if (duty >  1.0f) duty =  1.0f;
+        if (duty < -1.0f) duty = -1.0f;
+        prev_duty = duty;
+        biba_hal_motor_pwm_left(duty);
+
+        Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f,%.2f,%.3f,%.3f\n",
+                      (unsigned long)t_now,
+                      target_hz, meas_hz, duty * 100.0f, curr_a,
+                      err, i_term, p_term);
+        if (meas_raw != meas_ema)
+            Serial.printf("# raw_hz=%.2f\n", meas_raw);
+
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n');
+            ln.trim();
+            if (ln == "STOP") { Serial.println("RPMTRACK_ABORT stop requested"); break; }
+        }
+    }
+    biba_hal_motor_pwm_left(0.0f);
+    Serial.println("RPMTRACK_END");
+}
+
 /* --- Open-loop step response ----------------------------------------- */
 /* STEPRUN <duty_start_pct> <duty_end_pct> <pre_windows> <post_windows>
  *
@@ -793,6 +986,31 @@ void loop(void)
                    (float)stiction_pct / 100.0f,
                    (float)ff_slope_x100 / 100.0f,
                    (float)ff_dead_x10   / 10.0f);
+        return;
+    }
+
+    if (line.startsWith("RPMTRACK ")) {
+        /* "RPMTRACK <SIN|TRAP> <base_hz> <amp_hz> <p_start_ms> <p_end_ms>
+         *           <duration_ms> [kp_x1000000 ki_x1000000 [stiction_x100]]" */
+        String rest = line.substring(9);
+        char shape[8] = {0};
+        float base_hz = 300.0f, amp_hz = 150.0f;
+        unsigned long p0 = 3000, p1 = 1000, dur = 20000;
+        int kp_mil = 2000, ki_mil = 10000, stiction_pct = 12;
+        int ff_slope_x100 = (int)(RPMRUN_FF_SLOPE_DEFAULT * 100.0f + 0.5f);
+        int ff_dead_x10   = (int)(RPMRUN_FF_DEAD_DEFAULT  * 10.0f  + 0.5f);
+        sscanf(rest.c_str(), "%7s %f %f %lu %lu %lu %d %d %d %d %d",
+               shape, &base_hz, &amp_hz, &p0, &p1, &dur,
+               &kp_mil, &ki_mil, &stiction_pct, &ff_slope_x100, &ff_dead_x10);
+        if (stiction_pct < 0)  stiction_pct = 0;
+        if (stiction_pct > 50) stiction_pct = 50;
+        cmd_rpmtrack(shape, base_hz, amp_hz, (uint32_t)p0, (uint32_t)p1,
+                     (uint32_t)dur,
+                     (float)kp_mil       / 1000000.0f,
+                     (float)ki_mil       / 1000000.0f,
+                     (float)stiction_pct / 100.0f,
+                     (float)ff_slope_x100 / 100.0f,
+                     (float)ff_dead_x10   / 10.0f);
         return;
     }
 
