@@ -373,19 +373,13 @@ void biba_mode_standalone_tick(void)
         speed_scale = BIBA_SPEED_MODE_MEDIUM_SCALE;
     }
 
-    /* Scale drive inputs: tank-mix → scale → un-mix  (≡ Python
-     * _scale_drive_inputs_for_speed_mode).  Without clamping this
-     * simplifies to throttle *= s, steering *= s, but the full form
-     * handles corner cases at the unit-circle boundary correctly. */
-    float throttle, steering;
-    {
-        float ml = biba_clamp_unit(raw_throttle + raw_steering);
-        float mr = biba_clamp_unit(raw_throttle - raw_steering);
-        float sl = ml * speed_scale;
-        float sr = mr * speed_scale;
-        throttle = (sl + sr) * 0.5f;
-        steering = (sl - sr) * 0.5f;
-    }
+    /* Drive inputs pass through unscaled — the speed_scale is applied
+     * AFTER the mixer on left_out/right_out (see below).  This keeps
+     * steering authority constant regardless of throttle level, which
+     * feels more predictable to the operator than the Python-era
+     * envelope-limiter that bled steering when throttle saturated. */
+    float throttle = raw_throttle;
+    float steering = raw_steering;
 
     /* ------------------------------------------------------------------ *
      * Drive mode  (low position = MANUAL, else = STABILIZED)
@@ -402,20 +396,8 @@ void biba_mode_standalone_tick(void)
         biba_pid_reset(&s_heading_pid);
     }
 
-    /* Limit throttle + steering to the speed-mode envelope (≡ Python
-     * _limit_drive_output_for_speed_mode). */
-    {
-        float lim_thr = throttle;
-        if (lim_thr >  speed_scale) lim_thr =  speed_scale;
-        if (lim_thr < -speed_scale) lim_thr = -speed_scale;
-        float steer_lim = speed_scale - (lim_thr < 0.0f ? -lim_thr : lim_thr);
-        if (steer_lim < 0.0f) steer_lim = 0.0f;
-        float lim_str = steering;
-        if (lim_str >  steer_lim) lim_str =  steer_lim;
-        if (lim_str < -steer_lim) lim_str = -steer_lim;
-        throttle = lim_thr;
-        steering = lim_str;
-    }
+    /* (Envelope limiter removed — output-side scaling below preserves
+     *  the full steering authority at any throttle level.) */
 
     /* ------------------------------------------------------------------ *
      * Motor trim  (ported from biba-controller/main.py)
@@ -478,19 +460,30 @@ void biba_mode_standalone_tick(void)
     bool left_limited = false, right_limited = false;
 
     if (armed) {
-        biba_mix_output_t mix = biba_mix_differential(throttle, steering);
+        /* Vector-style mix: treat (throttle, steer) as a 2-D command and
+         * project onto the L∞ ball of radius speed_scale.  L_raw=T+S and
+         * R_raw=T−S together define the desired wheel-vector; we shrink
+         * BOTH proportionally so neither exceeds speed_scale, preserving
+         * the L:R ratio (≡ direction of motion).  This avoids the
+         * envelope-limiter's behaviour where steering authority collapsed
+         * once throttle saturated. */
+        float t = biba_clamp_unit(throttle);
+        float s = biba_clamp_unit(steering);
+        float l_raw = t + s;
+        float r_raw = t - s;
+        float al = l_raw < 0.0f ? -l_raw : l_raw;
+        float ar = r_raw < 0.0f ? -r_raw : r_raw;
+        float peak = al > ar ? al : ar;
+        float denom = peak > 1.0f ? peak : 1.0f;
+        biba_mix_output_t mix;
+        mix.left  = l_raw * speed_scale / denom;
+        mix.right = r_raw * speed_scale / denom;
         biba_limit_result_t out = apply_drive_current_limits(mix);
         left_limited  = out.left_limited;
         right_limited = out.right_limited;
         left_out  = out.left;
         right_out = out.right;
-
-        /* Apply trim */
-        if (trim > 0.0f) {
-            right_out *= (1.0f - trim);
-        } else if (trim < 0.0f) {
-            left_out *= (1.0f + trim);   /* trim is negative → reduces left */
-        }
+        (void)trim;  /* trim disabled — see TODO above */
     }
 
     /* RPM closed-loop (forward) + open-loop pass-through (reverse).
