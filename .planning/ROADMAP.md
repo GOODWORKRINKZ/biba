@@ -138,9 +138,14 @@ Plans:
   5. Pi Python пересчитывает rpm_hz → m/s с WHEEL_RADIUS_M + GEAR_RATIO из config
   6. Калибровочный скрипт `scripts/is_rpm_calibrate.py` производит K-коэффициент с R² > 0.95
   7. Unity C unit-тесты покрывают ZC-детектор и PI-модуль
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
+- [ ] 07-01-PLAN.md — ZC Detector C module (zc_detector.h/c) + async ADC capture (adc_capture.h/c moved + extended) + Unity test_zc_detector
+- [ ] 07-02-PLAN.md — Proto extension (biba_proto.h + telemetry.h/c) + Python decoder (protocol.py + config.py + main.py) + test_stm32_link_protocol
+- [ ] 07-03-PLAN.md — CALRUN command in PoC firmware + scripts/is_rpm_calibrate.py calibration script
+- [ ] 07-04-PLAN.md — RPM PI C module (rpm_pi.h/c) + Unity test_rpm_pi (wave 2, depends on 07-01)
+- [ ] 07-05-PLAN.md — Wire PI into mode_standalone.c (replaces ramp), DMA IRQ state machine, build + smoke test (wave 3)
 
 ---
 
