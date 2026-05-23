@@ -14,7 +14,7 @@
 - [x] **Phase 3: Field Ready** — Thermal protection + Hardware variant matrix + field validation (completed 2026-05-19)
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
 - [x] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry (completed 2026-05-22)
-- [ ] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts
+- [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
 
 ---
 

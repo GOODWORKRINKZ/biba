@@ -6,10 +6,10 @@ status: in_progress
 last_updated: "2026-05-22T00:00:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 13
   completed_plans: 13
-  percent: 83
+  percent: 100
 ---
 
 # Project State
@@ -17,12 +17,12 @@ progress:
 **Project:** BiBa
 **Milestone:** RP2040 Port
 **Phase:** Phase 6 — IS-Signal RPM Proof-of-Concept
-**Status:** Phase 6 in progress — plan committed, implementation not started.
-**Last updated:** 2026-05-22
+**Status:** Phase 6 COMPLETE — all must_haves passed, findings documented in 06-FINDINGS.md.
+**Last updated:** 2026-05-23
 
 ## Current Phase
 
-Phase 6: IS-Signal RPM Proof-of-Concept — план написан (06-PLAN.md), реализация не начата.
+All phases complete. Next: Phase 7 — интеграция IS-RPM ZC-детектора в основную прошивку.
 
 ## Completed Phases
 
@@ -30,6 +30,7 @@ Phase 6: IS-Signal RPM Proof-of-Concept — план написан (06-PLAN.md)
 - Phase 3: Field Ready — complete
 - Phase 4: Thermal Hardening & ESC Architecture — complete (UAT passed 2026-05-19)
 - Phase 5: Current Sensing & ADC Architecture — complete (2026-05-22)
+- Phase 6: IS-Signal RPM Proof-of-Concept — complete (2026-05-23)
 
 ## Notes
 
