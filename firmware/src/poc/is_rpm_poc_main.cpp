@@ -905,6 +905,60 @@ static void cmd_sweepraw(const char *shape, int amp_pct,
     Serial.println("SWEEPRAW_END");
 }
 
+/* CALRUN <duty_pct> <settle_ms>
+ * Drive IS_LEFT motor at duty_pct% forward, wait settle_ms, then capture
+ * 1024 samples @ 10 kSPS five times, compute median ZC frequency, and
+ * report "IS_HZ <duty_pct> <median_hz_x100>" (×100 for 0.01 Hz resolution).
+ * Always stops the motor before returning. */
+static void cmd_calrun(int duty_pct, uint32_t settle_ms)
+{
+    if (duty_pct < 0 || duty_pct > 100 ||
+        settle_ms < 100u || settle_ms > IS_POC_MAX_SETTLE_MS) {
+        Serial.println("ERROR bad args");
+        return;
+    }
+
+    const uint16_t n_samples = 1024u;
+    const uint32_t sps = 10000u;
+
+    biba_hal_motor_pwm_left((float)duty_pct / 100.0f);
+    delay(settle_ms);
+
+    adc_capture_init(sps);
+
+    float hz[5];
+    bool any_fail = false;
+    for (int i = 0; i < 5; ++i) {
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, n_samples, s_buf)) {
+            any_fail = true;
+            break;
+        }
+        hz[i] = zc_freq_hz(s_buf, n_samples, sps);
+    }
+
+    biba_hal_motor_pwm_left(0.0f);
+
+    if (any_fail) {
+        Serial.println("ERROR capture timeout");
+        return;
+    }
+
+    /* Insertion-sort the 5 values, take the middle (median). */
+    for (int i = 1; i < 5; ++i) {
+        float v = hz[i];
+        int j = i - 1;
+        while (j >= 0 && hz[j] > v) {
+            hz[j + 1] = hz[j];
+            --j;
+        }
+        hz[j + 1] = v;
+    }
+    float median_hz = hz[2];
+
+    Serial.printf("IS_HZ %d %d\n",
+                  duty_pct, (int)(median_hz * 100.0f + 0.5f));
+}
+
 void setup(void)
 {
     Serial.begin(115200);
@@ -1021,6 +1075,16 @@ void loop(void)
         int pre = 5, post = 15;
         sscanf(rest.c_str(), "%d %d %d %d", &ds, &de, &pre, &post);
         cmd_steprun(ds, de, (uint16_t)pre, (uint16_t)post);
+        return;
+    }
+
+    if (line.startsWith("CALRUN ")) {
+        /* "CALRUN <duty_pct> <settle_ms>" */
+        String rest = line.substring(7);
+        int duty_pct = 50;
+        unsigned long settle_ms = 3000;
+        sscanf(rest.c_str(), "%d %lu", &duty_pct, &settle_ms);
+        cmd_calrun(duty_pct, (uint32_t)settle_ms);
         return;
     }
 
