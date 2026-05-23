@@ -286,3 +286,55 @@ def test_telemetry_struct_is_still_48_bytes() -> None:
     assert TELEMETRY_SIZE == 48
     assert _struct.calcsize(TELEMETRY_STRUCT) == 48
 
+
+# ---------------------------------------------------------------------------
+# Phase 07: wheel_rpm telemetry (IS-RPM ZC frequency carved from reserved[11])
+# ---------------------------------------------------------------------------
+
+def test_telemetry_size_still_48() -> None:
+    """Phase 07: adding wheel_rpm fields must not drift struct size."""
+    from stm32_link.protocol import TELEMETRY_SIZE
+    assert TELEMETRY_SIZE == 48
+
+
+def test_wheel_rpm_decode_300hz() -> None:
+    """fields[20]=3000, fields[21]=1500 must decode to 300.0 / 150.0 Hz."""
+    tlm = Telemetry(wheel_rpm_left_hz=300.0, wheel_rpm_right_hz=150.0)
+    raw = TelemetryFrame(seq=11, flags=0, telemetry=tlm).to_bytes()
+    rt = TelemetryFrame.from_bytes(raw)
+    assert rt.telemetry.wheel_rpm_left_hz == pytest.approx(300.0, abs=0.05)
+    assert rt.telemetry.wheel_rpm_right_hz == pytest.approx(150.0, abs=0.05)
+
+
+def test_wheel_rpm_decode_zero() -> None:
+    """Default zeros decode to 0.0 Hz (invalid / stopped sentinel)."""
+    raw = TelemetryFrame(seq=0, flags=0, telemetry=Telemetry()).to_bytes()
+    rt = TelemetryFrame.from_bytes(raw)
+    assert rt.telemetry.wheel_rpm_left_hz == 0.0
+    assert rt.telemetry.wheel_rpm_right_hz == 0.0
+
+
+def test_wheel_rpm_encode_roundtrip() -> None:
+    """Non-integer Hz values survive a to_bytes -> from_bytes cycle within 0.1 Hz."""
+    tlm = Telemetry(wheel_rpm_left_hz=432.7, wheel_rpm_right_hz=428.1)
+    rt = TelemetryFrame.from_bytes(
+        TelemetryFrame(seq=3, flags=0, telemetry=tlm).to_bytes()
+    )
+    assert rt.telemetry.wheel_rpm_left_hz == pytest.approx(432.7, abs=0.1)
+    assert rt.telemetry.wheel_rpm_right_hz == pytest.approx(428.1, abs=0.1)
+
+
+def test_wheel_rpm_zero_invalid_encodes_zero_bytes() -> None:
+    """Telemetry(wheel_rpm_left_hz=0.0) must place 0x0000 at the wheel_rpm slot.
+
+    Layout inside packed payload "<hhhhHHhhhhhhBBbBIhhBHH7s":
+      36 bytes precede the humidity_q8 byte; wheel_rpm_left_hz10 lives at
+      payload offset 37, wheel_rpm_right_hz10 at 39. Frame header is 6 bytes
+      (sync0, sync1, version, cmd, seq, flags), so absolute offsets are 43/45.
+    """
+    raw = TelemetryFrame(seq=0, flags=0, telemetry=Telemetry()).to_bytes()
+    left_hz10 = struct.unpack("<H", raw[6 + 37 : 6 + 39])[0]
+    right_hz10 = struct.unpack("<H", raw[6 + 39 : 6 + 41])[0]
+    assert left_hz10 == 0
+    assert right_hz10 == 0
+
