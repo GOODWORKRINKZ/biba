@@ -36,6 +36,20 @@ void biba_telemetry_collect(const biba_telemetry_input_t *inputs,
                           : (inputs->humidity_pct < 0.0f)   ? 0u
                           : (uint8_t)inputs->humidity_pct;
 
+    /* IS-signal wheel RPM (ZC frequency x10 for 0.1 Hz resolution). 0 = invalid. */
+    {
+        float lhz = inputs->wheel_rpm_left_hz;
+        float rhz = inputs->wheel_rpm_right_hz;
+        if (lhz < 0.0f) lhz = 0.0f;
+        if (rhz < 0.0f) rhz = 0.0f;
+        uint32_t lq = (uint32_t)(lhz * 10.0f + 0.5f);
+        uint32_t rq = (uint32_t)(rhz * 10.0f + 0.5f);
+        if (lq > 0xFFFFu) lq = 0xFFFFu;
+        if (rq > 0xFFFFu) rq = 0xFFFFu;
+        out->wheel_rpm_left_hz10  = (uint16_t)lq;
+        out->wheel_rpm_right_hz10 = (uint16_t)rq;
+    }
+
     biba_imu_sample_t imu;
     if (biba_imu_read(&imu)) {
         out->gyro_x_cdps = imu.gyro_x_cdps;
