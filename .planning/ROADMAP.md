@@ -15,6 +15,7 @@
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
 - [x] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry (completed 2026-05-22)
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
+- [ ] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow
 
 ---
 
@@ -125,6 +126,24 @@ Plans:
 
 ---
 
+### Phase 7: IS-RPM Integration
+**Goal**: Перенести A2 Sub-window ZC-детектор и FF+PI контур RPM из PoC в основную прошивку. Оба мотора управляются по замкнутому контуру скорости на RP2040, wheel_rpm_hz уходит в biba_proto телеметрию.
+**Depends on**: Phase 6
+**Requirements**: RPM-INT-01, RPM-INT-02, RPM-INT-03
+**Success Criteria** (what must be TRUE):
+  1. A2 Schmitt ZC-детектор работает для IS_LEFT и IS_RIGHT в `rpico_rp2040_standalone` — оба канала валидны при 25–100% duty
+  2. FF+PI loop на RP2040 удерживает target RPM ±10% SS error при 200–900 Hz (все 4 duty-точки)
+  3. Gain scheduling снижает OS при target < 200 Hz до < 30%
+  4. `wheel_rpm_left_hz10` и `wheel_rpm_right_hz10` появляются в biba_proto телеметрии и декодируются в Python
+  5. Pi Python пересчитывает rpm_hz → m/s с WHEEL_RADIUS_M + GEAR_RATIO из config
+  6. Калибровочный скрипт `scripts/is_rpm_calibrate.py` производит K-коэффициент с R² > 0.95
+  7. Unity C unit-тесты покрывают ZC-детектор и PI-модуль
+**Plans**: TBD
+
+Plans:
+
+---
+
 ## Backlog
 
 Features deferred beyond current milestone (v2+):
@@ -164,3 +183,5 @@ Plans:
 | 3. Field Ready | 3/3 | complete | 2026-05-19 |
 | 4. Thermal Hardening | 4/4 | complete (UAT ✓) | 2026-05-19 |
 | 5. Current Sensing & ADC | 0/TBD | not started | - |
+| 6. IS-Signal RPM PoC | 1/1 | complete | 2026-05-23 |
+| 7. IS-RPM Integration | 0/TBD | not started | - |
