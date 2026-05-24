@@ -29,6 +29,13 @@ void  biba_ramp_reset(biba_ramp_t *r);
  * Returns the new current value (also stored in r->current). */
 float biba_ramp_update(biba_ramp_t *r, float target, float dt);
 
+/* Same ramp logic with caller-provided rates. Useful when a control mode needs
+ * a softer command shaper than the global open-loop motor ramp constants. */
+float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
+                                  float accel_rate, float decel_rate,
+                                  float reverse_decel_rate,
+                                  uint32_t zero_hold_ms);
+
 #ifdef __cplusplus
 }
 #endif

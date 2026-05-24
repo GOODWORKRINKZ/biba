@@ -16,6 +16,7 @@
 #include "app/control_loop.h"
 #include "app/failsafe.h"
 #include "app/adc_capture.h"
+#include "app/ramp.h"
 #include "app/zc_detector.h"
 #include "app/rpm_spectral_estimator.h"
 #include "app/rpm_pi.h"
@@ -85,10 +86,14 @@ static const biba_pid_config_t s_heading_cfg = {
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
 static bool s_last_failsafe;
 
-/* RPM closed-loop state (per-channel). Replaces the open-loop slew
- * ramp from Phase ≤6. DMA IRQ writes s_rpm_duty_*; tick reads them. */
+/* RPM closed-loop state (per-channel). The PI replaces the old open-loop
+ * duty ramp; the separate setpoint ramp below only softens commanded RPM
+ * changes before they enter the controller. DMA IRQ writes s_rpm_duty_*;
+ * tick reads them. */
 static biba_rpm_pi_state_t  s_rpm_pi_left;
 static biba_rpm_pi_state_t  s_rpm_pi_right;
+static biba_ramp_t          s_rpm_setpoint_ramp_left;
+static biba_ramp_t          s_rpm_setpoint_ramp_right;
 static volatile float       s_rpm_duty_left;
 static volatile float       s_rpm_duty_right;
 static volatile float       s_target_hz_left;   /* tick writes, ADC callback reads */
@@ -390,6 +395,8 @@ void biba_mode_standalone_init(void)
 
     biba_rpm_pi_reset(&s_rpm_pi_left);
     biba_rpm_pi_reset(&s_rpm_pi_right);
+    biba_ramp_init(&s_rpm_setpoint_ramp_left);
+    biba_ramp_init(&s_rpm_setpoint_ramp_right);
     s_rpm_duty_left   = 0.0f;
     s_rpm_duty_right  = 0.0f;
     s_target_hz_left  = 0.0f;
@@ -489,6 +496,8 @@ void biba_mode_standalone_tick(void)
         biba_melody_player_start(&s_player, &biba_melody_failsafe);
         biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on failsafe edge */
         biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
         s_rpm_duty_left   = 0.0f;
         s_rpm_duty_right  = 0.0f;
         s_target_hz_left  = 0.0f;
@@ -513,6 +522,8 @@ void biba_mode_standalone_tick(void)
         s_trim_mode_active = false;
         biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on disarm edge */
         biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
         s_rpm_duty_left   = 0.0f;
         s_rpm_duty_right  = 0.0f;
         s_target_hz_left  = 0.0f;
@@ -650,6 +661,24 @@ void biba_mode_standalone_tick(void)
      * overwritten with the final duty below). */
     const float mix_l_log = left_out;
     const float mix_r_log = right_out;
+
+    if (armed && !(s_dbg_active && s_dbg_open_loop)) {
+        left_out = biba_ramp_update_with_rates(&s_rpm_setpoint_ramp_left,
+                                               left_out, dt,
+                                               BIBA_RPM_SETPOINT_ACCEL_RATE,
+                                               BIBA_RPM_SETPOINT_DECEL_RATE,
+                                               BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE,
+                                               BIBA_RPM_SETPOINT_ZERO_HOLD_MS);
+        right_out = biba_ramp_update_with_rates(&s_rpm_setpoint_ramp_right,
+                                                right_out, dt,
+                                                BIBA_RPM_SETPOINT_ACCEL_RATE,
+                                                BIBA_RPM_SETPOINT_DECEL_RATE,
+                                                BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE,
+                                                BIBA_RPM_SETPOINT_ZERO_HOLD_MS);
+    } else {
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
+    }
 
     /* Bidirectional RPM closed-loop.
      * The IS estimators return frequency magnitude only — they cannot infer
