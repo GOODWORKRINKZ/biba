@@ -106,6 +106,15 @@ static volatile float s_meas_hz_left;
 static volatile float s_meas_hz_right;
 static volatile float s_meas_raw_hz_left;
 static volatile float s_meas_raw_hz_right;
+static zc_detector_result_t s_freqdet_left;
+static volatile uint16_t s_freqdet_blocks_left;
+static volatile uint16_t s_freqdet_blocks_right;
+static volatile uint16_t s_freqdet_cross_left;
+static volatile uint16_t s_freqdet_cross_right;
+static volatile uint16_t s_freqdet_pkpk_left;
+static volatile uint16_t s_freqdet_pkpk_right;
+static volatile float s_freqdet_std_left;
+static volatile float s_freqdet_std_right;
 static float s_telem_meas_ema_left;
 static float s_telem_meas_ema_right;
 
@@ -202,6 +211,11 @@ static void process_debug_serial(void)
     if (strcmp(line, "DBGON") == 0) {
         s_dbg_active = true;
         printf("[biba] DBG mode ON\r\n");
+        printf("DRIVE_HEADER t_ms,thr,str,mix_L,mix_R,"
+               "tgt_L_hz,tgt_R_hz,meas_L_hz,meas_R_hz,"
+               "duty_L,duty_R,int_L,int_R,freqdet_L_hz,freqdet_R_hz,"
+               "zc_blocks_L,zc_blocks_R,zc_cross_L,zc_cross_R,"
+               "zc_pkpk_L,zc_pkpk_R,zc_std_L,zc_std_R\r\n");
     } else if (strcmp(line, "DBGOFF") == 0) {
         s_dbg_active = false;
         s_dbg_arm    = false;
@@ -243,9 +257,11 @@ static float rc_to_unit(uint16_t v)
 static void on_adc_done(uint8_t channel, const uint16_t *buf, uint16_t n)
 {
     (void)channel;
-    float raw_hz = zc_freq_hz(buf, n, 10000u);
+    zc_detector_result_t freqdet = zc_freq_analyze(buf, n, 10000u);
+    float raw_hz = freqdet.freq_hz;
 
     if (s_adc_state == ADC_CAPTURING_LEFT) {
+        s_freqdet_left = freqdet;
         s_raw_hz_left = s_meas_left_enabled ? raw_hz : 0.0f;
         s_adc_state = ADC_CAPTURING_RIGHT;
         (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_RIGHT, 1024u, s_adc_buf, on_adc_done);
@@ -254,6 +270,14 @@ static void on_adc_done(uint8_t channel, const uint16_t *buf, uint16_t n)
         float raw_hz_left  = s_raw_hz_left;
         s_meas_raw_hz_left  = raw_hz_left;
         s_meas_raw_hz_right = raw_hz_right;
+        s_freqdet_blocks_left  = s_meas_left_enabled  ? s_freqdet_left.active_blocks : 0u;
+        s_freqdet_blocks_right = s_meas_right_enabled ? freqdet.active_blocks : 0u;
+        s_freqdet_cross_left   = s_meas_left_enabled  ? s_freqdet_left.total_crossings : 0u;
+        s_freqdet_cross_right  = s_meas_right_enabled ? freqdet.total_crossings : 0u;
+        s_freqdet_pkpk_left    = s_meas_left_enabled  ? s_freqdet_left.max_pkpk : 0u;
+        s_freqdet_pkpk_right   = s_meas_right_enabled ? freqdet.max_pkpk : 0u;
+        s_freqdet_std_left     = s_meas_left_enabled  ? s_freqdet_left.max_std : 0.0f;
+        s_freqdet_std_right    = s_meas_right_enabled ? freqdet.max_std : 0.0f;
         (void)zc_ema_update(&s_telem_meas_ema_left, raw_hz_left, s_meas_target_hz_left);
         (void)zc_ema_update(&s_telem_meas_ema_right, raw_hz_right, s_meas_target_hz_right);
         s_meas_hz_left  = s_meas_left_reverse  ? -s_telem_meas_ema_left  : s_telem_meas_ema_left;
@@ -632,9 +656,11 @@ void biba_mode_standalone_tick(void)
 
     /* Debug telemetry: emit per-tick line when debug override is active.
     * Format (CSV): DRIVE_DATA t_ms,thr,str,mix_L,mix_R,tgt_L,tgt_R,
-    *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R,raw_L,raw_R
+    *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R,freqdet_L,freqdet_R,
+    *                           zc_blocks_L/R,zc_cross_L/R,zc_pkpk_L/R,zc_std_L/R
     * tgt is signed (negative = reverse command). meas is the interpreted,
-    * signed EMA frequency used for graph tracking; raw is the gated ZC output. */
+    * signed EMA frequency used for graph tracking; freqdet is the gated ZC
+    * frequency-detector output, not raw ADC samples. */
     if (s_dbg_active) {
         bool rev_l_telem = (mix_l_log < -BIBA_MOTOR_DEADBAND);
         bool rev_r_telem = (mix_r_log < -BIBA_MOTOR_DEADBAND);
@@ -644,7 +670,7 @@ void biba_mode_standalone_tick(void)
         float tgt_r_signed  = rev_r_telem ? mix_r_log * STANDALONE_RPM_MAX_HZ : s_target_hz_right;
         float meas_l_signed = s_meas_hz_left;
         float meas_r_signed = s_meas_hz_right;
-         printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f,%.1f,%.1f\r\n",
+           printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f,%.1f,%.1f,%u,%u,%u,%u,%u,%u,%.1f,%.1f\r\n",
                now,
                throttle, steering,
                mix_l_log, mix_r_log,
@@ -652,7 +678,11 @@ void biba_mode_standalone_tick(void)
                meas_l_signed, meas_r_signed,
                left_out, right_out,
              s_rpm_pi_left.integral, s_rpm_pi_right.integral,
-             s_meas_raw_hz_left, s_meas_raw_hz_right);
+                         s_meas_raw_hz_left, s_meas_raw_hz_right,
+                         (unsigned)s_freqdet_blocks_left, (unsigned)s_freqdet_blocks_right,
+                         (unsigned)s_freqdet_cross_left, (unsigned)s_freqdet_cross_right,
+                         (unsigned)s_freqdet_pkpk_left, (unsigned)s_freqdet_pkpk_right,
+                         s_freqdet_std_left, s_freqdet_std_right);
     }
 
     /* If actively driving, motors are needed — interrupt melodies.

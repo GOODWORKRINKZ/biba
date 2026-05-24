@@ -6,9 +6,10 @@
 
 #include <math.h>
 
-float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
+zc_detector_result_t zc_freq_analyze(const uint16_t *buf, uint16_t n, uint32_t sps)
 {
-    if (n < ZC_SUBWIN_K * 4u) return 0.0f;
+    zc_detector_result_t result = { 0.0f, 0u, 0u, 0u, 0.0f };
+    if (n < ZC_SUBWIN_K * 4u) return result;
     uint16_t blk = n / (uint16_t)ZC_SUBWIN_K;
     uint16_t total = 0;
     uint16_t active_blocks = 0;
@@ -25,6 +26,7 @@ float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
             sum_sq += (uint64_t)v * (uint64_t)v;
         }
         uint16_t pkpk = (uint16_t)(mx - mn);
+        if (pkpk > result.max_pkpk) result.max_pkpk = pkpk;
         if (pkpk < ZC_SUBWIN_MIN_PKPK) continue;
         /* Per-block std-dev gate: rejects PWM/EMI noise that has high pkpk
          * (single switching edges) but low overall variability. */
@@ -32,6 +34,7 @@ float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
         float var_f  = ((float)sum_sq / (float)blk) - (mean_f * mean_f);
         if (var_f < 0.0f) var_f = 0.0f;
         float std_f  = sqrtf(var_f);
+        if (std_f > result.max_std) result.max_std = std_f;
         if (std_f < ZC_SUBWIN_MIN_STD) continue;
         active_blocks++;
         int32_t mid  = ((int32_t)mn + (int32_t)mx) / 2;
@@ -45,8 +48,16 @@ float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
         }
     }
     /* Require evidence from at least 2 blocks to call it real signal. */
-    if (active_blocks < 2u || total < 2u) return 0.0f;
-    return (float)total * 0.5f * (float)sps / (float)n;
+    result.active_blocks = active_blocks;
+    result.total_crossings = total;
+    if (active_blocks < 2u || total < 2u) return result;
+    result.freq_hz = (float)total * 0.5f * (float)sps / (float)n;
+    return result;
+}
+
+float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
+{
+    return zc_freq_analyze(buf, n, sps).freq_hz;
 }
 
 float zc_ema_update(float *ema, float meas_raw, float target_hz)

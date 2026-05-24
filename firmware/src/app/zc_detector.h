@@ -55,10 +55,21 @@ extern "C" {
  * on the new reading). Two-cycle (~200 ms @ 10 Hz loop) step response. */
 #define ZC_EMA_ALPHA         0.7f
 
+typedef struct {
+	float freq_hz;
+	uint16_t active_blocks;
+	uint16_t total_crossings;
+	uint16_t max_pkpk;
+	float max_std;
+} zc_detector_result_t;
+
 /* Compute the dominant frequency in `buf` (n samples at `sps` SPS) using
  * the A2 Sub-window Schmitt detector. Returns 0.0f when n is too small
  * (< ZC_SUBWIN_K * 4) or when fewer than 2 blocks contain AC content. */
 float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps);
+
+/* Same detector as zc_freq_hz(), with diagnostic counters for bench logs. */
+zc_detector_result_t zc_freq_analyze(const uint16_t *buf, uint16_t n, uint32_t sps);
 
 /* Update the EMA filter `*ema` with a new raw measurement, gated by a
  * two-sided validity window:
