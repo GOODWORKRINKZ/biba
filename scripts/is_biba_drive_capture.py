@@ -8,7 +8,8 @@ plots all channels.
 
 DRIVE_DATA format (firmware):
   t_ms, thr, str, mix_L, mix_R, tgt_L_hz, tgt_R_hz,
-        meas_L_hz, meas_R_hz, duty_L, duty_R, int_L, int_R, freqdet_L_hz, freqdet_R_hz
+        meas_L_hz, meas_R_hz, duty_L, duty_R, int_L, int_R, freqdet_L_hz, freqdet_R_hz,
+        spec_L_hz, spec_R_hz, spec_q_L, spec_q_R, spec_peak_L, spec_peak_R
 
 Usage examples:
   # Built-in profile: hold throttle=30%, sweep steering 0→50→-50→0
@@ -63,6 +64,11 @@ COLUMNS = [
     "duty_L", "duty_R",
     "int_L", "int_R",
     "freqdet_L_hz", "freqdet_R_hz",
+    "spec_L_hz", "spec_R_hz",
+    "spec_q_L", "spec_q_R",
+    "spec_peak_L", "spec_peak_R",
+    "spec_cand_L", "spec_cand_R",
+    "spec_reason_L", "spec_reason_R",
     "zc_blocks_L", "zc_blocks_R",
     "zc_cross_L", "zc_cross_R",
     "zc_pkpk_L", "zc_pkpk_R",
@@ -233,6 +239,12 @@ class BiBaDebug:
     def set_inputs(self, thr_pct: int, str_pct: int):
         self.send(f"SET T={thr_pct} S={str_pct}")
 
+    def set_open_loop(self, enabled: bool):
+        self.send("OLON" if enabled else "OLOFF")
+        keyword = "open-loop ON" if enabled else "open-loop OFF"
+        if not self.wait_for(keyword, timeout_s=2.0):
+            sys.exit(f"Firmware did not acknowledge {keyword}.")
+
     def close(self):
         self.ser.close()
 
@@ -273,13 +285,17 @@ def run_sequence(dbg: BiBaDebug, sequence: list, out_csv: str):
             raw = dbg.ser.readline().decode(errors="replace").strip()
             if raw.startswith("DRIVE_DATA "):
                 parts = raw[len("DRIVE_DATA "):].split(",")
-                if len(parts) in (13, 15, len(COLUMNS)):
+                if len(parts) in (13, 15, 23, 29, len(COLUMNS)):
                     try:
                         row = [float(p) for p in parts]
                         if len(row) == 13:
                             row.extend([row[7], row[8]])
                         if len(row) == 15:
                             row.extend([0.0] * (len(COLUMNS) - len(row)))
+                        if len(row) == 23:
+                            row[15:15] = [0.0] * 10
+                        if len(row) == 29:
+                            row[21:21] = [0.0] * 4
                         # Inject commanded values for easy correlation
                         rows.append(row)
                         print(f"\r  t={row[0]/1000:.1f}s  "
@@ -287,7 +303,10 @@ def run_sequence(dbg: BiBaDebug, sequence: list, out_csv: str):
                               f"tgt_L={row[5]:.0f}Hz tgt_R={row[6]:.0f}Hz | "
                               f"meas_L={row[7]:.0f}Hz meas_R={row[8]:.0f}Hz | "
                               f"freqdet_L={row[13]:.0f}Hz freqdet_R={row[14]:.0f}Hz | "
-                              f"zc_cross_L={row[17]:.0f} zc_cross_R={row[18]:.0f} | "
+                              f"spec_L={row[15]:.0f}Hz spec_R={row[16]:.0f}Hz | "
+                              f"cand_L={row[21]:.0f}Hz cand_R={row[22]:.0f}Hz | "
+                              f"reason_L={row[23]:.0f} reason_R={row[24]:.0f} | "
+                              f"zc_cross_L={row[27]:.0f} zc_cross_R={row[28]:.0f} | "
                               f"duty_L={row[9]*100:.0f}% duty_R={row[10]*100:.0f}% | "
                               f"int_L={row[11]:.2f} int_R={row[12]:.2f}",
                               end="", flush=True)
@@ -337,6 +356,8 @@ def plot_data(rows: list, out_csv: str, skip_s: float = 0.0):
     ax.plot(t, data[:, 7], "--",  linewidth=2.0, label="meas_L interpreted Hz")
     if data.shape[1] > 13:
         ax.plot(t, data[:, 13], ":", alpha=0.35, label="freqdet_L ZC Hz")
+    if data.shape[1] > 15:
+        ax.plot(t, data[:, 15], "-.", alpha=0.75, label="spec_L Hz")
     ax.set_ylabel("Hz / mix %"); ax.legend(); ax.grid(True)
 
     # Row 2 — LEFT control effort
@@ -356,6 +377,8 @@ def plot_data(rows: list, out_csv: str, skip_s: float = 0.0):
     ax.plot(t, data[:, 8], "--",  linewidth=2.0, label="meas_R interpreted Hz")
     if data.shape[1] > 14:
         ax.plot(t, data[:, 14], ":", alpha=0.35, label="freqdet_R ZC Hz")
+    if data.shape[1] > 16:
+        ax.plot(t, data[:, 16], "-.", alpha=0.75, label="spec_R Hz")
     ax.set_ylabel("Hz / mix %"); ax.legend(); ax.grid(True)
 
     # Row 4 — RIGHT control effort
@@ -393,6 +416,8 @@ def main():
                         help="Total run duration in seconds (default: 20)")
     parser.add_argument("--no-plot", action="store_true",
                         help="Skip matplotlib plot after capture")
+    parser.add_argument("--open-loop", action="store_true",
+                        help="Debug mode only: bypass RPM PI and drive mixer duty directly")
     parser.add_argument("--plot-skip", type=float, default=2.0,
                         help="Skip first N seconds in the plot to hide arm transient (default: 2.0)")
     parser.add_argument("--out", help="Output CSV path (default: auto-generated)")
@@ -422,6 +447,9 @@ def main():
 
         print("Arming (wheels must be in the air!) …")
         dbg.arm()
+        if args.open_loop:
+            print("Enabling debug open-loop passthrough …")
+            dbg.set_open_loop(True)
         time.sleep(0.3)
 
         rows = run_sequence(dbg, sequence, out_csv)
@@ -432,6 +460,8 @@ def main():
         print("Disarming + disabling debug mode …")
         dbg.set_inputs(0, 0)
         time.sleep(0.1)
+        if args.open_loop:
+            dbg.set_open_loop(False)
         dbg.disarm()
         dbg.disable_debug()
         dbg.close()

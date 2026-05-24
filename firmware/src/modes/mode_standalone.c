@@ -17,6 +17,7 @@
 #include "app/failsafe.h"
 #include "app/adc_capture.h"
 #include "app/zc_detector.h"
+#include "app/rpm_spectral_estimator.h"
 #include "app/rpm_pi.h"
 #include "app/telemetry.h"
 #include "drivers/bts7960.h"
@@ -90,7 +91,7 @@ static biba_rpm_pi_state_t  s_rpm_pi_left;
 static biba_rpm_pi_state_t  s_rpm_pi_right;
 static volatile float       s_rpm_duty_left;
 static volatile float       s_rpm_duty_right;
-static volatile float       s_target_hz_left;   /* tick writes, on_adc_done reads */
+static volatile float       s_target_hz_left;   /* tick writes, ADC callback reads */
 static volatile float       s_target_hz_right;
 static volatile bool        s_meas_left_enabled;
 static volatile bool        s_meas_right_enabled;
@@ -98,15 +99,29 @@ static volatile bool        s_meas_left_reverse;
 static volatile bool        s_meas_right_reverse;
 static volatile float       s_meas_target_hz_left;
 static volatile float       s_meas_target_hz_right;
-static float                s_raw_hz_left;       /* LEFT ZC held until RIGHT branch */
-static uint16_t             s_adc_buf[1024];     /* shared DMA buffer (L then R) */
+#define STANDALONE_RPM_SAMPLES_PER_WHEEL 512u
+#define STANDALONE_RPM_ADC_AGGREGATE_SPS 20000u
+#define STANDALONE_RPM_WHEEL_SPS         10000u
 
-/* Interpreted and raw Hz per channel (set by on_adc_done IRQ, read for DRIVE_DATA telem). */
+static uint16_t             s_adc_buf[STANDALONE_RPM_SAMPLES_PER_WHEEL * 2u];
+static uint16_t             s_adc_left_buf[STANDALONE_RPM_SAMPLES_PER_WHEEL];
+static uint16_t             s_adc_right_buf[STANDALONE_RPM_SAMPLES_PER_WHEEL];
+
+/* Interpreted and raw Hz per channel (set by ADC IRQ, read for DRIVE_DATA telemetry). */
 static volatile float s_meas_hz_left;
 static volatile float s_meas_hz_right;
 static volatile float s_meas_raw_hz_left;
 static volatile float s_meas_raw_hz_right;
-static zc_detector_result_t s_freqdet_left;
+static volatile float s_spec_hz_left;
+static volatile float s_spec_hz_right;
+static volatile float s_spec_quality_left;
+static volatile float s_spec_quality_right;
+static volatile float s_spec_peak_left;
+static volatile float s_spec_peak_right;
+static volatile float s_spec_candidate_left;
+static volatile float s_spec_candidate_right;
+static volatile uint8_t s_spec_reason_left;
+static volatile uint8_t s_spec_reason_right;
 static volatile uint16_t s_freqdet_blocks_left;
 static volatile uint16_t s_freqdet_blocks_right;
 static volatile uint16_t s_freqdet_cross_left;
@@ -123,16 +138,15 @@ static float s_telem_meas_ema_right;
  * ARM    : set s_dbg_arm (only when debug active).
  * DISARM : clear s_dbg_arm, zero throttle/steering.
  * SET T=<-100..100> S=<-100..100> : set throttle/steering overrides.
+ * OLON   : debug-only open-loop motor duty passthrough for detector tests.
+ * OLOFF  : return debug mode to normal RPM PI control.
  * DBGOFF : disable override mode.
  * While active, DRIVE_DATA telemetry is emitted every tick. */
 static bool  s_dbg_active;
 static bool  s_dbg_arm;
+static bool  s_dbg_open_loop;
 static float s_dbg_thr;
 static float s_dbg_str;
-
-/* ADC capture state machine. */
-typedef enum { ADC_IDLE, ADC_CAPTURING_LEFT, ADC_CAPTURING_RIGHT } adc_state_t;
-static volatile adc_state_t s_adc_state = ADC_IDLE;
 
 /* PI config initialised in biba_mode_standalone_init(). */
 static biba_rpm_pi_config_t s_rpm_cfg;
@@ -214,11 +228,14 @@ static void process_debug_serial(void)
         printf("DRIVE_HEADER t_ms,thr,str,mix_L,mix_R,"
                "tgt_L_hz,tgt_R_hz,meas_L_hz,meas_R_hz,"
                "duty_L,duty_R,int_L,int_R,freqdet_L_hz,freqdet_R_hz,"
+             "spec_L_hz,spec_R_hz,spec_q_L,spec_q_R,spec_peak_L,spec_peak_R,"
+             "spec_cand_L,spec_cand_R,spec_reason_L,spec_reason_R,"
                "zc_blocks_L,zc_blocks_R,zc_cross_L,zc_cross_R,"
                "zc_pkpk_L,zc_pkpk_R,zc_std_L,zc_std_R\r\n");
     } else if (strcmp(line, "DBGOFF") == 0) {
         s_dbg_active = false;
         s_dbg_arm    = false;
+        s_dbg_open_loop = false;
         s_dbg_thr    = 0.0f;
         s_dbg_str    = 0.0f;
         printf("[biba] DBG mode OFF\r\n");
@@ -227,9 +244,24 @@ static void process_debug_serial(void)
         printf("[biba] DBG armed\r\n");
     } else if (s_dbg_active && (strcmp(line, "DISARM") == 0)) {
         s_dbg_arm = false;
+        s_dbg_open_loop = false;
         s_dbg_thr = 0.0f;
         s_dbg_str = 0.0f;
         printf("[biba] DBG disarmed\r\n");
+    } else if (s_dbg_active && strcmp(line, "OLON") == 0) {
+        s_dbg_open_loop = true;
+        biba_rpm_pi_reset(&s_rpm_pi_left);
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        s_rpm_duty_left = 0.0f;
+        s_rpm_duty_right = 0.0f;
+        printf("[biba] DBG open-loop ON\r\n");
+    } else if (s_dbg_active && strcmp(line, "OLOFF") == 0) {
+        s_dbg_open_loop = false;
+        biba_rpm_pi_reset(&s_rpm_pi_left);
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        s_rpm_duty_left = 0.0f;
+        s_rpm_duty_right = 0.0f;
+        printf("[biba] DBG open-loop OFF\r\n");
     } else if (s_dbg_active) {
         int thr_pct = 0, str_pct = 0;
         if (sscanf(line, "SET T=%d S=%d", &thr_pct, &str_pct) == 2) {
@@ -250,45 +282,67 @@ static float rc_to_unit(uint16_t v)
     return biba_clamp_unit(normalised);
 }
 
-/* DMA IRQ callback: a 1024-sample capture just finished on `channel`.
- * Compute the ZC frequency, advance the L->R state machine, and once both
- * channels are sampled run the PI step for both motors. Writes to the
- * volatile s_rpm_duty_* are picked up by the next biba_mode_standalone_tick. */
-static void on_adc_done(uint8_t channel, const uint16_t *buf, uint16_t n)
+static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
 {
-    (void)channel;
-    zc_detector_result_t freqdet = zc_freq_analyze(buf, n, 10000u);
-    float raw_hz = freqdet.freq_hz;
-
-    if (s_adc_state == ADC_CAPTURING_LEFT) {
-        s_freqdet_left = freqdet;
-        s_raw_hz_left = s_meas_left_enabled ? raw_hz : 0.0f;
-        s_adc_state = ADC_CAPTURING_RIGHT;
-        (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_RIGHT, 1024u, s_adc_buf, on_adc_done);
-    } else if (s_adc_state == ADC_CAPTURING_RIGHT) {
-        float raw_hz_right = s_meas_right_enabled ? raw_hz : 0.0f;
-        float raw_hz_left  = s_raw_hz_left;
-        s_meas_raw_hz_left  = raw_hz_left;
-        s_meas_raw_hz_right = raw_hz_right;
-        s_freqdet_blocks_left  = s_meas_left_enabled  ? s_freqdet_left.active_blocks : 0u;
-        s_freqdet_blocks_right = s_meas_right_enabled ? freqdet.active_blocks : 0u;
-        s_freqdet_cross_left   = s_meas_left_enabled  ? s_freqdet_left.total_crossings : 0u;
-        s_freqdet_cross_right  = s_meas_right_enabled ? freqdet.total_crossings : 0u;
-        s_freqdet_pkpk_left    = s_meas_left_enabled  ? s_freqdet_left.max_pkpk : 0u;
-        s_freqdet_pkpk_right   = s_meas_right_enabled ? freqdet.max_pkpk : 0u;
-        s_freqdet_std_left     = s_meas_left_enabled  ? s_freqdet_left.max_std : 0.0f;
-        s_freqdet_std_right    = s_meas_right_enabled ? freqdet.max_std : 0.0f;
-        (void)zc_ema_update(&s_telem_meas_ema_left, raw_hz_left, s_meas_target_hz_left);
-        (void)zc_ema_update(&s_telem_meas_ema_right, raw_hz_right, s_meas_target_hz_right);
-        s_meas_hz_left  = s_meas_left_reverse  ? -s_telem_meas_ema_left  : s_telem_meas_ema_left;
-        s_meas_hz_right = s_meas_right_reverse ? -s_telem_meas_ema_right : s_telem_meas_ema_right;
-        s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
-                                            s_target_hz_left,  raw_hz_left);
-        s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
-                                            s_target_hz_right, raw_hz_right);
-        s_adc_state = ADC_CAPTURING_LEFT;
-        (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_LEFT, 1024u, s_adc_buf, on_adc_done);
+    if (samples_per_channel > STANDALONE_RPM_SAMPLES_PER_WHEEL) {
+        samples_per_channel = STANDALONE_RPM_SAMPLES_PER_WHEEL;
     }
+    for (uint16_t i = 0; i < samples_per_channel; ++i) {
+        s_adc_left_buf[i] = buf[(uint32_t)i * 2u];
+        s_adc_right_buf[i] = buf[(uint32_t)i * 2u + 1u];
+    }
+
+    zc_detector_result_t zc_left = zc_freq_analyze(s_adc_left_buf,
+                                                   samples_per_channel,
+                                                   STANDALONE_RPM_WHEEL_SPS);
+    zc_detector_result_t zc_right = zc_freq_analyze(s_adc_right_buf,
+                                                    samples_per_channel,
+                                                    STANDALONE_RPM_WHEEL_SPS);
+    biba_rpm_spectral_result_t spec_left = biba_rpm_spectral_estimate(
+        s_adc_left_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
+        s_meas_target_hz_left);
+    biba_rpm_spectral_result_t spec_right = biba_rpm_spectral_estimate(
+        s_adc_right_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
+        s_meas_target_hz_right);
+
+    float raw_hz_left = s_meas_left_enabled ? zc_left.freq_hz : 0.0f;
+    float raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;
+    s_meas_raw_hz_left = raw_hz_left;
+    s_meas_raw_hz_right = raw_hz_right;
+    s_spec_hz_left = (s_meas_left_enabled && spec_left.valid) ? spec_left.freq_hz : 0.0f;
+    s_spec_hz_right = (s_meas_right_enabled && spec_right.valid) ? spec_right.freq_hz : 0.0f;
+    s_spec_quality_left = s_meas_left_enabled ? spec_left.quality : 0.0f;
+    s_spec_quality_right = s_meas_right_enabled ? spec_right.quality : 0.0f;
+    s_spec_peak_left = s_meas_left_enabled ? spec_left.peak_amp_lsb : 0.0f;
+    s_spec_peak_right = s_meas_right_enabled ? spec_right.peak_amp_lsb : 0.0f;
+    s_spec_candidate_left = s_meas_left_enabled ? spec_left.candidate_hz : 0.0f;
+    s_spec_candidate_right = s_meas_right_enabled ? spec_right.candidate_hz : 0.0f;
+    s_spec_reason_left = s_meas_left_enabled ? (uint8_t)spec_left.invalid_reason : 0u;
+    s_spec_reason_right = s_meas_right_enabled ? (uint8_t)spec_right.invalid_reason : 0u;
+
+    s_freqdet_blocks_left  = s_meas_left_enabled  ? zc_left.active_blocks : 0u;
+    s_freqdet_blocks_right = s_meas_right_enabled ? zc_right.active_blocks : 0u;
+    s_freqdet_cross_left   = s_meas_left_enabled  ? zc_left.total_crossings : 0u;
+    s_freqdet_cross_right  = s_meas_right_enabled ? zc_right.total_crossings : 0u;
+    s_freqdet_pkpk_left    = s_meas_left_enabled  ? zc_left.max_pkpk : 0u;
+    s_freqdet_pkpk_right   = s_meas_right_enabled ? zc_right.max_pkpk : 0u;
+    s_freqdet_std_left     = s_meas_left_enabled  ? zc_left.max_std : 0.0f;
+    s_freqdet_std_right    = s_meas_right_enabled ? zc_right.max_std : 0.0f;
+
+    (void)zc_ema_update(&s_telem_meas_ema_left, raw_hz_left, s_meas_target_hz_left);
+    (void)zc_ema_update(&s_telem_meas_ema_right, raw_hz_right, s_meas_target_hz_right);
+    s_meas_hz_left  = s_meas_left_reverse  ? -s_telem_meas_ema_left  : s_telem_meas_ema_left;
+    s_meas_hz_right = s_meas_right_reverse ? -s_telem_meas_ema_right : s_telem_meas_ema_right;
+    s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
+                                        s_target_hz_left,  raw_hz_left);
+    s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
+                                        s_target_hz_right, raw_hz_right);
+
+    (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
+                                       BIBA_ADC_CHAN_IS_RIGHT,
+                                       STANDALONE_RPM_SAMPLES_PER_WHEEL,
+                                       s_adc_buf,
+                                       on_adc_pair_done);
 }
 
 static biba_limit_result_t apply_drive_current_limits(biba_mix_output_t mix)
@@ -336,12 +390,13 @@ void biba_mode_standalone_init(void)
     s_rpm_duty_right  = 0.0f;
     s_target_hz_left  = 0.0f;
     s_target_hz_right = 0.0f;
-    s_raw_hz_left     = 0.0f;
 
-    /* Start the LEFT->RIGHT ADC capture state machine. */
-    adc_capture_init(10000u);
-    s_adc_state = ADC_CAPTURING_LEFT;
-    (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_LEFT, 1024u, s_adc_buf, on_adc_done);
+    adc_capture_init(STANDALONE_RPM_ADC_AGGREGATE_SPS);
+    (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
+                                       BIBA_ADC_CHAN_IS_RIGHT,
+                                       STANDALONE_RPM_SAMPLES_PER_WHEEL,
+                                       s_adc_buf,
+                                       on_adc_pair_done);
 
     /* Play startup fanfare through motor coils. */
     biba_melody_player_start(&s_player, &biba_melody_startup);
@@ -643,8 +698,10 @@ void biba_mode_standalone_tick(void)
         s_target_hz_right = (!rev_right && right_out > BIBA_MOTOR_DEADBAND)
                             ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
 
-        float duty_left  = rev_left  ? left_out  : s_rpm_duty_left;
-        float duty_right = rev_right ? right_out : s_rpm_duty_right;
+        float duty_left  = (s_dbg_active && s_dbg_open_loop) ? left_out
+                   : (rev_left ? left_out : s_rpm_duty_left);
+        float duty_right = (s_dbg_active && s_dbg_open_loop) ? right_out
+                   : (rev_right ? right_out : s_rpm_duty_right);
         if (failsafe || !armed) {
             duty_left  = 0.0f;
             duty_right = 0.0f;
@@ -657,6 +714,7 @@ void biba_mode_standalone_tick(void)
     /* Debug telemetry: emit per-tick line when debug override is active.
     * Format (CSV): DRIVE_DATA t_ms,thr,str,mix_L,mix_R,tgt_L,tgt_R,
     *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R,freqdet_L,freqdet_R,
+    *                           spec_L/R,spec_q_L/R,spec_peak_L/R,spec_cand_L/R,spec_reason_L/R,
     *                           zc_blocks_L/R,zc_cross_L/R,zc_pkpk_L/R,zc_std_L/R
     * tgt is signed (negative = reverse command). meas is the interpreted,
     * signed EMA frequency used for graph tracking; freqdet is the gated ZC
@@ -670,19 +728,24 @@ void biba_mode_standalone_tick(void)
         float tgt_r_signed  = rev_r_telem ? mix_r_log * STANDALONE_RPM_MAX_HZ : s_target_hz_right;
         float meas_l_signed = s_meas_hz_left;
         float meas_r_signed = s_meas_hz_right;
-           printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f,%.1f,%.1f,%u,%u,%u,%u,%u,%u,%.1f,%.1f\r\n",
+       printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f,%.1f,%.1f,%.1f,%.1f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%u,%u,%u,%u,%u,%u,%u,%u,%.1f,%.1f\r\n",
                now,
                throttle, steering,
                mix_l_log, mix_r_log,
                tgt_l_signed, tgt_r_signed,
                meas_l_signed, meas_r_signed,
                left_out, right_out,
-             s_rpm_pi_left.integral, s_rpm_pi_right.integral,
-                         s_meas_raw_hz_left, s_meas_raw_hz_right,
-                         (unsigned)s_freqdet_blocks_left, (unsigned)s_freqdet_blocks_right,
-                         (unsigned)s_freqdet_cross_left, (unsigned)s_freqdet_cross_right,
-                         (unsigned)s_freqdet_pkpk_left, (unsigned)s_freqdet_pkpk_right,
-                         s_freqdet_std_left, s_freqdet_std_right);
+            s_rpm_pi_left.integral, s_rpm_pi_right.integral,
+            s_meas_raw_hz_left, s_meas_raw_hz_right,
+            s_spec_hz_left, s_spec_hz_right,
+            s_spec_quality_left, s_spec_quality_right,
+            s_spec_peak_left, s_spec_peak_right,
+            s_spec_candidate_left, s_spec_candidate_right,
+            (unsigned)s_spec_reason_left, (unsigned)s_spec_reason_right,
+            (unsigned)s_freqdet_blocks_left, (unsigned)s_freqdet_blocks_right,
+            (unsigned)s_freqdet_cross_left, (unsigned)s_freqdet_cross_right,
+            (unsigned)s_freqdet_pkpk_left, (unsigned)s_freqdet_pkpk_right,
+            s_freqdet_std_left, s_freqdet_std_right);
     }
 
     /* If actively driving, motors are needed — interrupt melodies.

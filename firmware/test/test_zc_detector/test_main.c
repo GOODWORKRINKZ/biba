@@ -51,6 +51,19 @@ static void test_pure_sine_500hz(void)
     TEST_ASSERT_FLOAT_WITHIN(25.0f, 500.0f, hz);
 }
 
+static void test_analyze_matches_frequency_api(void)
+{
+    static uint16_t buf[1024];
+    fill_sine(buf, 1024, 10000u, 300.0f, 2048, 800);
+    float hz = zc_freq_hz(buf, 1024, 10000u);
+    zc_detector_result_t result = zc_freq_analyze(buf, 1024, 10000u);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, hz, result.freq_hz);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT16(2u, result.active_blocks);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT16(2u, result.total_crossings);
+    TEST_ASSERT_GREATER_THAN_UINT16(ZC_SUBWIN_MIN_PKPK, result.max_pkpk);
+    TEST_ASSERT_TRUE(result.max_std >= ZC_SUBWIN_MIN_STD);
+}
+
 /* -----------------------------------------------------------------------
  * Test 3: DC-only buffer → 0.0f (no active blocks)
  * ----------------------------------------------------------------------- */
@@ -106,6 +119,7 @@ static void run_all(void)
 {
     RUN_TEST(test_pure_sine_300hz);
     RUN_TEST(test_pure_sine_500hz);
+    RUN_TEST(test_analyze_matches_frequency_api);
     RUN_TEST(test_dc_only_returns_zero);
     RUN_TEST(test_sparse_switching_noise_returns_zero);
     RUN_TEST(test_too_short_returns_zero);

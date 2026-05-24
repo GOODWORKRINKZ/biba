@@ -9,10 +9,13 @@
  * s_dma_ch == -1 marks "idle" (no DMA claimed). All other state is only
  * valid while s_dma_ch >= 0. */
 static adc_capture_done_cb_t s_done_cb;
+static adc_capture_pair_done_cb_t s_pair_done_cb;
 static int      s_dma_ch  = -1;
 static uint8_t  s_last_ch;
 static uint16_t s_last_n;
+static uint16_t s_pair_samples_per_channel;
 static uint16_t *s_buf_ptr;
+static bool     s_pair_mode;
 
 static void dma_irq_handler(void);
 
@@ -21,9 +24,7 @@ void adc_capture_init(uint32_t sample_rate_sps)
     adc_init();
     adc_gpio_init(26);  /* GP26 = IS_LEFT  (BIBA_ADC_CHAN_IS_LEFT)  */
     adc_gpio_init(27);  /* GP27 = IS_RIGHT (BIBA_ADC_CHAN_IS_RIGHT) */
-    /* Single-channel mode only. Multi-channel interleaving is intentionally
-     * disabled — it would distort the single-channel time-domain signal
-     * needed for RPM frequency analysis. */
+    adc_set_round_robin(0u);
     adc_fifo_setup(
         true,   /* en: enable FIFO */
         true,   /* shift: shift 8-bit result into FIFO (dreq_en) */
@@ -57,6 +58,8 @@ bool adc_capture_burst(uint8_t channel, uint16_t n_samples, uint16_t *out_buf)
     }
 
     adc_select_input(channel);
+    adc_set_round_robin(0u);
+    adc_fifo_drain();
 
     int dma_ch = dma_claim_unused_channel(true);
 
@@ -104,11 +107,15 @@ static void dma_irq_handler(void)
     if (s_dma_ch >= 0 && dma_channel_get_irq0_status(s_dma_ch)) {
         dma_channel_acknowledge_irq0(s_dma_ch);
         adc_run(false);
+        adc_set_round_robin(0u);
         adc_fifo_drain();
         int ch = s_dma_ch;
         s_dma_ch = -1;
         dma_channel_unclaim(ch);
-        if (s_done_cb) {
+        if (s_pair_mode && s_pair_done_cb) {
+            s_pair_mode = false;
+            s_pair_done_cb(s_buf_ptr, s_pair_samples_per_channel);
+        } else if (s_done_cb) {
             s_done_cb(s_last_ch, s_buf_ptr, s_last_n);
         }
     }
@@ -127,7 +134,11 @@ bool adc_capture_start_async(uint8_t channel, uint16_t n_samples,
     s_last_n  = n_samples;
     s_buf_ptr = out_buf;
     s_done_cb = callback;
+    s_pair_done_cb = 0;
+    s_pair_mode = false;
 
+    adc_set_round_robin(0u);
+    adc_fifo_drain();
     adc_select_input(channel);
 
     s_dma_ch = dma_claim_unused_channel(true);
@@ -151,6 +162,55 @@ bool adc_capture_start_async(uint8_t channel, uint16_t n_samples,
      * installed once in adc_capture_init() — calling irq_add_shared_handler
      * from here would deadlock when the IRQ callback re-arms the next
      * capture (same IRQ vector is still active on this core). */
+    dma_channel_set_irq0_enabled(s_dma_ch, true);
+
+    dma_channel_start(s_dma_ch);
+    adc_run(true);
+    return true;
+}
+
+bool adc_capture_start_async_pair(uint8_t channel_a, uint8_t channel_b,
+                                  uint16_t samples_per_channel,
+                                  uint16_t *out_interleaved_buf,
+                                  adc_capture_pair_done_cb_t callback)
+{
+    if (s_dma_ch >= 0) return false;
+    uint32_t total = (uint32_t)samples_per_channel * 2u;
+    if (total > ADC_CAPTURE_MAX_SAMPLES) {
+        samples_per_channel = ADC_CAPTURE_MAX_SAMPLES / 2u;
+        total = (uint32_t)samples_per_channel * 2u;
+    }
+
+    s_last_ch = channel_a;
+    s_last_n = (uint16_t)total;
+    s_pair_samples_per_channel = samples_per_channel;
+    s_buf_ptr = out_interleaved_buf;
+    s_done_cb = 0;
+    s_pair_done_cb = callback;
+    s_pair_mode = true;
+
+    adc_run(false);
+    adc_fifo_drain();
+    adc_select_input(channel_a);
+    adc_set_round_robin((1u << channel_a) | (1u << channel_b));
+
+    s_dma_ch = dma_claim_unused_channel(true);
+
+    dma_channel_config cfg = dma_channel_get_default_config(s_dma_ch);
+    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
+    channel_config_set_read_increment(&cfg, false);
+    channel_config_set_write_increment(&cfg, true);
+    channel_config_set_dreq(&cfg, DREQ_ADC);
+
+    dma_channel_configure(
+        s_dma_ch,
+        &cfg,
+        out_interleaved_buf,
+        &adc_hw->fifo,
+        total,
+        false
+    );
+
     dma_channel_set_irq0_enabled(s_dma_ch, true);
 
     dma_channel_start(s_dma_ch);

@@ -30,6 +30,8 @@ bool adc_capture_burst(uint8_t channel, uint16_t n_samples, uint16_t *out_buf);
  * buf:     same buffer passed in
  * n:       n_samples (number of valid uint16_t entries) */
 typedef void (*adc_capture_done_cb_t)(uint8_t channel, const uint16_t *buf, uint16_t n);
+typedef void (*adc_capture_pair_done_cb_t)(const uint16_t *interleaved_buf,
+                                           uint16_t samples_per_channel);
 
 /* Non-blocking variant — starts DMA and returns immediately. Calls callback
  * from DMA_IRQ_0 context (core0) when n_samples transferred.
@@ -37,6 +39,15 @@ typedef void (*adc_capture_done_cb_t)(uint8_t channel, const uint16_t *buf, uint
  * adc_capture_busy()). */
 bool adc_capture_start_async(uint8_t channel, uint16_t n_samples,
                              uint16_t *out_buf, adc_capture_done_cb_t callback);
+
+/* Non-blocking two-channel round-robin capture. The ADC runs at the aggregate
+ * rate configured by adc_capture_init(); for 10 kSPS per channel with two
+ * channels, call adc_capture_init(20000). The output buffer receives samples
+ * interleaved as A0,B0,A1,B1,... */
+bool adc_capture_start_async_pair(uint8_t channel_a, uint8_t channel_b,
+                                  uint16_t samples_per_channel,
+                                  uint16_t *out_interleaved_buf,
+                                  adc_capture_pair_done_cb_t callback);
 
 /* Returns true while an async capture is in flight (DMA channel still
  * claimed). False indicates the buffer from the last adc_capture_start_async()
