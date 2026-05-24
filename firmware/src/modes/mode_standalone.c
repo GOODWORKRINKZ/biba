@@ -307,10 +307,12 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
 
     float raw_hz_left = s_meas_left_enabled ? zc_left.freq_hz : 0.0f;
     float raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;
+    float pi_meas_hz_left = (s_meas_left_enabled && spec_left.valid) ? spec_left.freq_hz : 0.0f;
+    float pi_meas_hz_right = (s_meas_right_enabled && spec_right.valid) ? spec_right.freq_hz : 0.0f;
     s_meas_raw_hz_left = raw_hz_left;
     s_meas_raw_hz_right = raw_hz_right;
-    s_spec_hz_left = (s_meas_left_enabled && spec_left.valid) ? spec_left.freq_hz : 0.0f;
-    s_spec_hz_right = (s_meas_right_enabled && spec_right.valid) ? spec_right.freq_hz : 0.0f;
+    s_spec_hz_left = pi_meas_hz_left;
+    s_spec_hz_right = pi_meas_hz_right;
     s_spec_quality_left = s_meas_left_enabled ? spec_left.quality : 0.0f;
     s_spec_quality_right = s_meas_right_enabled ? spec_right.quality : 0.0f;
     s_spec_peak_left = s_meas_left_enabled ? spec_left.peak_amp_lsb : 0.0f;
@@ -329,14 +331,14 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
     s_freqdet_std_left     = s_meas_left_enabled  ? zc_left.max_std : 0.0f;
     s_freqdet_std_right    = s_meas_right_enabled ? zc_right.max_std : 0.0f;
 
-    (void)zc_ema_update(&s_telem_meas_ema_left, raw_hz_left, s_meas_target_hz_left);
-    (void)zc_ema_update(&s_telem_meas_ema_right, raw_hz_right, s_meas_target_hz_right);
+    (void)zc_ema_update(&s_telem_meas_ema_left, pi_meas_hz_left, s_meas_target_hz_left);
+    (void)zc_ema_update(&s_telem_meas_ema_right, pi_meas_hz_right, s_meas_target_hz_right);
     s_meas_hz_left  = s_meas_left_reverse  ? -s_telem_meas_ema_left  : s_telem_meas_ema_left;
     s_meas_hz_right = s_meas_right_reverse ? -s_telem_meas_ema_right : s_telem_meas_ema_right;
     s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
-                                        s_target_hz_left,  raw_hz_left);
+                                        s_target_hz_left,  pi_meas_hz_left);
     s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
-                                        s_target_hz_right, raw_hz_right);
+                                        s_target_hz_right, pi_meas_hz_right);
 
     (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
                                        BIBA_ADC_CHAN_IS_RIGHT,
