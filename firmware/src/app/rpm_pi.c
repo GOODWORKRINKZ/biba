@@ -15,10 +15,11 @@ static float clampf(float v, float lo, float hi)
 void biba_rpm_pi_reset(biba_rpm_pi_state_t *s)
 {
     if (s == NULL) return;
-    s->integral  = 0.0f;
-    s->meas_ema  = 0.0f;
-    s->prev_duty = 0.0f;
-    s->primed    = false;
+    s->integral    = 0.0f;
+    s->meas_ema    = 0.0f;
+    s->prev_duty   = 0.0f;
+    s->prev_target = 0.0f;
+    s->primed      = false;
 }
 
 float biba_rpm_pi_step(biba_rpm_pi_state_t *s,
@@ -30,6 +31,26 @@ float biba_rpm_pi_step(biba_rpm_pi_state_t *s,
 
     /* Phase 7: forward-only. Negative targets snap to 0. */
     if (target_hz < 0.0f) target_hz = 0.0f;
+
+    /* Setpoint-change integral rescaling.
+     *
+     * In steady state with FF+PI the integrator stores the residual FF
+     * model error, which is approximately proportional to target_hz.
+     * When the operator changes steering (and therefore left/right
+     * setpoints) the old integrator value is sized for the old target
+     * — leaving it intact creates a transient where one wheel keeps
+     * driving harder than the other for several seconds.
+     *
+     * Scaling the integrator by the target ratio approximates the
+     * "correct" steady-state I for the new target, so when steering
+     * returns to centre both wheels converge together. */
+    if (s->primed && s->prev_target > 1.0f && target_hz > 1.0f) {
+        s->integral *= target_hz / s->prev_target;
+    } else if (target_hz <= 1.0f) {
+        /* Heading to deadband — drop integrator so we don’t coast. */
+        s->integral = 0.0f;
+    }
+    s->prev_target = target_hz;
 
     /* EMA filter the raw measurement (delegated to zc_detector). */
     (void)zc_ema_update(&s->meas_ema, meas_raw_hz, target_hz);

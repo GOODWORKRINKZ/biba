@@ -33,6 +33,7 @@ typedef struct {
     float integral;
     float meas_ema;
     float prev_duty;
+    float prev_target;     /* last target_hz seen by step() (for I-rescaling) */
     bool  primed;
 } biba_rpm_pi_state_t;
 
