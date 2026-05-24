@@ -35,8 +35,8 @@
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
  *   GP25 GPIO OUT  Onboard LED (active high)
- *   GP26 ADC0      IS_LEFT  (1kΩ‖1kΩ RC filter from BTS7960 L IS pins — Phase 06)
- *   GP27 ADC1      IS_RIGHT (1kΩ‖1kΩ RC filter from BTS7960 R IS pins — Phase 06)
+ *   GP26 ADC0      IS_RIGHT (1kΩ‖1kΩ RC filter from BTS7960 R IS pins — Phase 06)
+ *   GP27 ADC1      IS_LEFT  (1kΩ‖1kΩ RC filter from BTS7960 L IS pins — Phase 06)
  *   GP20 I2C0_SDA  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *   GP21 I2C0_SCL  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *
@@ -126,14 +126,14 @@
  * BTS7960 IS signals for RPM PoC.  VBAT and IBAT (3DR Power Module) are
  * routed to ADS1115 AIN0/AIN1 via I2C0.
  *
- *   CH0 (GP26) — IS_LEFT  (1kΩ‖1kΩ + 0.1µF RC filter)
- *   CH1 (GP27) — IS_RIGHT (1kΩ‖1kΩ + 0.1µF RC filter)
+ *   CH0 (GP26) — IS_RIGHT (1kΩ‖1kΩ + 0.1µF RC filter)
+ *   CH1 (GP27) — IS_LEFT  (1kΩ‖1kΩ + 0.1µF RC filter)
  *
  * ADS1115 AIN0 — VBAT (3DR Power Module voltage output)
  * ADS1115 AIN1 — IBAT (3DR Power Module current output)
  */
-#define BIBA_ADC_CHAN_IS_RIGHT       0U   /* GP27 = ADC1, RC-filtered IS right */
-#define BIBA_ADC_CHAN_IS_LEFT        1U   /* GP26 = ADC0, RC-filtered IS left  */
+#define BIBA_ADC_CHAN_IS_RIGHT       0U   /* GP26 = ADC0, RC-filtered IS right */
+#define BIBA_ADC_CHAN_IS_LEFT        1U   /* GP27 = ADC1, RC-filtered IS left  */
 
 #define BIBA_ADC_SCAN_LEN           2U
 #define BIBA_ADC_CHANNEL_SEQ        { 0, 1 }

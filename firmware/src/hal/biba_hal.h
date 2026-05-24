@@ -160,6 +160,15 @@ bool biba_hal_spi_slave_poll(void);
 bool biba_hal_i2c_write(uint8_t addr, const uint8_t *data, size_t len);
 bool biba_hal_i2c_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
 
+/* --- USB-CDC serial readline (Arduino framework only) ------------------- */
+
+/* Non-blocking line reader.  Accumulates bytes from USB CDC into an internal
+ * 128-byte buffer; when a newline is received the line (without the newline)
+ * is copied into `buf` (NUL-terminated, at most max_len-1 chars) and true is
+ * returned.  Returns false when no complete line is available yet.
+ * Empty lines (\n\n) are silently discarded. */
+bool biba_hal_serial_readline(char *buf, size_t max_len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -95,6 +95,22 @@ static volatile float       s_target_hz_right;
 static float                s_raw_hz_left;       /* LEFT ZC held until RIGHT branch */
 static uint16_t             s_adc_buf[1024];     /* shared DMA buffer (L then R) */
 
+/* Measured Hz per channel (set by on_adc_done IRQ, read for DRIVE_DATA telem). */
+static volatile float s_meas_hz_left;
+static volatile float s_meas_hz_right;
+
+/* Debug override state — serial-controlled bench testing.
+ * DBGON  : enable override mode (CRSF inputs bypassed).
+ * ARM    : set s_dbg_arm (only when debug active).
+ * DISARM : clear s_dbg_arm, zero throttle/steering.
+ * SET T=<-100..100> S=<-100..100> : set throttle/steering overrides.
+ * DBGOFF : disable override mode.
+ * While active, DRIVE_DATA telemetry is emitted every tick. */
+static bool  s_dbg_active;
+static bool  s_dbg_arm;
+static float s_dbg_thr;
+static float s_dbg_str;
+
 /* ADC capture state machine. */
 typedef enum { ADC_IDLE, ADC_CAPTURING_LEFT, ADC_CAPTURING_RIGHT } adc_state_t;
 static volatile adc_state_t s_adc_state = ADC_IDLE;
@@ -167,6 +183,42 @@ static void update_rgb_led(bool failsafe, bool armed, bool trim_mode,
     biba_hal_rgb_led_set(r, g, b);
 }
 
+/* Process one line of serial debug input per tick (non-blocking).
+ * Commands: DBGON / DBGOFF / ARM / DISARM / SET T=<pct> S=<pct> */
+static void process_debug_serial(void)
+{
+    char line[64];
+    if (!biba_hal_serial_readline(line, sizeof(line))) return;
+    if (strcmp(line, "DBGON") == 0) {
+        s_dbg_active = true;
+        printf("[biba] DBG mode ON\r\n");
+    } else if (strcmp(line, "DBGOFF") == 0) {
+        s_dbg_active = false;
+        s_dbg_arm    = false;
+        s_dbg_thr    = 0.0f;
+        s_dbg_str    = 0.0f;
+        printf("[biba] DBG mode OFF\r\n");
+    } else if (s_dbg_active && strcmp(line, "ARM") == 0) {
+        s_dbg_arm = true;
+        printf("[biba] DBG armed\r\n");
+    } else if (s_dbg_active && (strcmp(line, "DISARM") == 0)) {
+        s_dbg_arm = false;
+        s_dbg_thr = 0.0f;
+        s_dbg_str = 0.0f;
+        printf("[biba] DBG disarmed\r\n");
+    } else if (s_dbg_active) {
+        int thr_pct = 0, str_pct = 0;
+        if (sscanf(line, "SET T=%d S=%d", &thr_pct, &str_pct) == 2) {
+            if (thr_pct < -100) thr_pct = -100;
+            if (thr_pct >  100) thr_pct =  100;
+            if (str_pct < -100) str_pct = -100;
+            if (str_pct >  100) str_pct =  100;
+            s_dbg_thr = (float)thr_pct / 100.0f;
+            s_dbg_str = (float)str_pct / 100.0f;
+        }
+    }
+}
+
 static float rc_to_unit(uint16_t v)
 {
     /* Standard CRSF channel: 172..1811 maps to -1..+1. */
@@ -186,17 +238,19 @@ static void on_adc_done(uint8_t channel, const uint16_t *buf, uint16_t n)
     if (s_adc_state == ADC_CAPTURING_LEFT) {
         s_raw_hz_left = raw_hz;
         s_adc_state = ADC_CAPTURING_RIGHT;
-        (void)adc_capture_start_async(1u, 1024u, s_adc_buf, on_adc_done);
+        (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_RIGHT, 1024u, s_adc_buf, on_adc_done);
     } else if (s_adc_state == ADC_CAPTURING_RIGHT) {
         float raw_hz_right = raw_hz;
         float raw_hz_left  = s_raw_hz_left;
-
+        /* Save raw measurements for DRIVE_DATA telemetry (debug mode). */
+        s_meas_hz_left  = raw_hz_left;
+        s_meas_hz_right = raw_hz_right;
         s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
                                             s_target_hz_left,  raw_hz_left);
         s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
                                             s_target_hz_right, raw_hz_right);
         s_adc_state = ADC_CAPTURING_LEFT;
-        (void)adc_capture_start_async(0u, 1024u, s_adc_buf, on_adc_done);
+        (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_LEFT, 1024u, s_adc_buf, on_adc_done);
     }
 }
 
@@ -250,7 +304,7 @@ void biba_mode_standalone_init(void)
     /* Start the LEFT->RIGHT ADC capture state machine. */
     adc_capture_init(10000u);
     s_adc_state = ADC_CAPTURING_LEFT;
-    (void)adc_capture_start_async(0u, 1024u, s_adc_buf, on_adc_done);
+    (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_LEFT, 1024u, s_adc_buf, on_adc_done);
 
     /* Play startup fanfare through motor coils. */
     biba_melody_player_start(&s_player, &biba_melody_startup);
@@ -292,6 +346,7 @@ static void ingest_crsf(void)
 
 void biba_mode_standalone_tick(void)
 {
+    process_debug_serial();
     ingest_crsf();
     uint32_t now = biba_hal_now_ms();
 
@@ -323,6 +378,15 @@ void biba_mode_standalone_tick(void)
      * Arm / disarm
      * ------------------------------------------------------------------ */
     bool armed = (!failsafe) && (arm_ch > BIBA_ARM_THRESHOLD);
+
+    /* Debug override: bypass CRSF inputs for bench testing with wheels
+     * in the air.  Activated via serial command DBGON. */
+    if (s_dbg_active) {
+        failsafe     = false;
+        armed        = s_dbg_arm;
+        raw_throttle = s_dbg_thr;
+        raw_steering = s_dbg_str;
+    }
 
     /* Failsafe rising edge: play warning (distinct from normal disarm). */
     if (failsafe && !s_last_failsafe) {
@@ -527,6 +591,27 @@ void biba_mode_standalone_tick(void)
         right_out = duty_right;
     }
     (void)dt;   /* PI dt is configured via cfg.dt_s; tick dt no longer used here */
+
+    /* Debug telemetry: emit per-tick line when debug override is active.
+     * Format (CSV): DRIVE_DATA t_ms,thr,str,mix_L,mix_R,tgt_L,tgt_R,
+     *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R
+     * Values: thr/str/mix/duty in [-1,1]; tgt/meas in Hz; int dimensionless. */
+    if (s_dbg_active) {
+        /* Reconstruct pre-RPM mixer outputs from target Hz (forward) or
+         * duty (reverse) — the signed mixer outputs before the PI block. */
+        float mix_l = s_target_hz_left  > 0.0f
+                      ? s_target_hz_left  / STANDALONE_RPM_MAX_HZ : left_out;
+        float mix_r = s_target_hz_right > 0.0f
+                      ? s_target_hz_right / STANDALONE_RPM_MAX_HZ : right_out;
+        printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f\r\n",
+               now,
+               throttle, steering,
+               mix_l, mix_r,
+               s_target_hz_left, s_target_hz_right,
+               s_meas_hz_left, s_meas_hz_right,
+               left_out, right_out,
+               s_rpm_pi_left.integral, s_rpm_pi_right.integral);
+    }
 
     /* If actively driving, motors are needed — interrupt melodies.
      * Exception: the intentional reverse backup pip must not be self-cancelled. */
