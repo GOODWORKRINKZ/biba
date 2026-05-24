@@ -55,6 +55,45 @@ static void test_ff_only_duty(void)
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.4685f, duty);
 }
 
+static void test_reverse_ff_only_returns_signed_duty(void)
+{
+    biba_rpm_pi_config_t cfg = make_default_cfg();
+    cfg.kp = 0.0f;
+    cfg.ki = 0.0f;
+    cfg.ki_low = 0.0f;
+    cfg.stiction_floor = 0.0f;
+
+    biba_rpm_pi_state_t forward;
+    biba_rpm_pi_state_t reverse;
+    biba_rpm_pi_reset(&forward);
+    biba_rpm_pi_reset(&reverse);
+
+    float duty_forward = biba_rpm_pi_step(&forward, &cfg, 400.0f, 0.0f);
+    float duty_reverse = biba_rpm_pi_step(&reverse, &cfg, -400.0f, 0.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, duty_forward, -duty_reverse);
+    TEST_ASSERT_TRUE(duty_reverse < 0.0f);
+}
+
+static void test_reverse_p_term_uses_signed_measurement(void)
+{
+    biba_rpm_pi_config_t cfg = make_default_cfg();
+    cfg.kp = 0.001f;
+    cfg.ki = 0.0f;
+    cfg.ki_low = 0.0f;
+    cfg.ff_slope = 0.0f;
+    cfg.p_clamp = 0.05f;
+    cfg.stiction_floor = 0.0f;
+
+    biba_rpm_pi_state_t s;
+    biba_rpm_pi_reset(&s);
+
+    float duty = biba_rpm_pi_step(&s, &cfg, -300.0f, -250.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, -0.05f, duty);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 175.0f, s.meas_ema);
+}
+
 static void test_gain_scheduling_below_200(void)
 {
     /* At target < ki_low_thresh, the integrator clamp uses ki_low (0.005),
@@ -136,6 +175,8 @@ static void run_all(void)
 {
     RUN_TEST(test_reset_zeroes_state);
     RUN_TEST(test_ff_only_duty);
+    RUN_TEST(test_reverse_ff_only_returns_signed_duty);
+    RUN_TEST(test_reverse_p_term_uses_signed_measurement);
     RUN_TEST(test_gain_scheduling_below_200);
     RUN_TEST(test_antiwindup_no_growth_at_saturation);
     RUN_TEST(test_p_clamp_limits_p_term);

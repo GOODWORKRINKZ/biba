@@ -6,8 +6,10 @@
  * No HAL dependency — portable for native_test under the standalone gcc
  * shim. Source: PoC is_rpm_poc_main.cpp cmd_rpmrun inner loop.
  *
- * Phase 7 is forward-only; negative target_hz values are clamped to 0.0f
- * on entry to biba_rpm_pi_step().
+ * The controller is direction-agnostic: target_hz and meas_raw_hz are signed
+ * at the API boundary, but the PI math regulates magnitude and restores the
+ * target sign on the returned duty. Motor/HAL code owns the physical mapping
+ * between signed duty and bridge pins.
  */
 
 #include <stdbool.h>
@@ -33,7 +35,7 @@ typedef struct {
     float integral;
     float meas_ema;
     float prev_duty;
-    float prev_target;     /* last target_hz seen by step() (for I-rescaling) */
+    float prev_target;     /* last |target_hz| seen by step() (for I-rescaling) */
     bool  primed;
 } biba_rpm_pi_state_t;
 
