@@ -41,6 +41,16 @@ extern "C" {
 
 static uint16_t s_buf[ADC_CAPTURE_MAX_SAMPLES];
 
+/* Re-arm the motor bridge (SSR + half-bridge enables).
+ * Called at the start of every motor command so that a prior STOP does not
+ * leave the hardware disarmed for the next run. */
+static void ensure_armed(void)
+{
+    biba_hal_ssr_set(true);
+    biba_hal_left_enable(true);
+    biba_hal_right_enable(true);
+}
+
 /* Default spin-up settle window before sampling. Motor inertia + RC-filter
  * settling on the IS line takes longer than initially assumed: bench scope
  * shows the IS waveform stabilises ~1 s after a duty step. Host can
@@ -57,6 +67,8 @@ static void cmd_capture(float signed_duty, bool is_fwd,
     if (n_samples > ADC_CAPTURE_MAX_SAMPLES) n_samples = ADC_CAPTURE_MAX_SAMPLES;
     if (settle_ms == 0u)               settle_ms = IS_POC_DEFAULT_SETTLE_MS;
     if (settle_ms > IS_POC_MAX_SETTLE_MS) settle_ms = IS_POC_MAX_SETTLE_MS;
+
+    ensure_armed();
 
     /* Issue 1 fix: use biba_hal_motor_pwm_left/right (the original plan
      * referenced a nonexistent HAL setter). */
@@ -125,7 +137,7 @@ static void cmd_capture(float signed_duty, bool is_fwd,
  * Returns 0.0 when no block has enough AC content.
  */
 #define ZC_SUBWIN_K          8u
-#define ZC_SUBWIN_MIN_PKPK   30u  /* per-block AC threshold (LSB) */
+#define ZC_SUBWIN_MIN_PKPK   120u /* per-block AC threshold (LSB); 30 was too low — PWM noise gives pkpk≈117 which produced ~110 Hz false readings */
 
 static float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
 {
@@ -175,17 +187,19 @@ static float adc_to_amps(float adc_mean)
 
 static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
                        float kp, float ki, float stiction_floor,
-                       float ff_slope, float ff_dead)
+                       float ff_slope, float ff_dead,
+                       uint8_t motor)   /* 0=LEFT, 1=RIGHT */
 {
     if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
     if (target_hz < 0.0f)    target_hz = 0.0f;
     if (target_hz > 2000.0f) target_hz = 2000.0f;
+    const uint8_t adc_chan = motor ? BIBA_ADC_CHAN_IS_RIGHT : BIBA_ADC_CHAN_IS_LEFT;
 
     /* 1. Baseline IS reading with motor off — DC offset on the IS line. */
-    biba_hal_motor_pwm_left(0.0f);
+    if (motor) biba_hal_motor_pwm_right(0.0f); else biba_hal_motor_pwm_left(0.0f);
     delay(200);
     adc_capture_init(RPMRUN_SPS);
-    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+    if (!adc_capture_burst(adc_chan, RPMRUN_N_SAMPLES, s_buf)) {
         Serial.println("ERROR baseline capture timeout");
         return;
     }
@@ -217,8 +231,8 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
     uint32_t t_start = millis();
 
     while ((millis() - t_start) < duration_ms) {
-        /* Capture window — drives loop period (200 ms @ N=2048, sps=10k). */
-        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        /* Capture window — drives loop period (100 ms @ N=1024, sps=10k). */
+        if (!adc_capture_burst(adc_chan, RPMRUN_N_SAMPLES, s_buf)) {
             Serial.println("ERROR capture timeout");
             break;
         }
@@ -347,7 +361,7 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         if (duty < 0.0f) duty = 0.0f;
         if (duty > 1.0f) duty = 1.0f;
         prev_duty = duty;
-        biba_hal_motor_pwm_left(duty);
+        if (motor) biba_hal_motor_pwm_right(duty); else biba_hal_motor_pwm_left(duty);
 
         Serial.printf("RPM_DATA %lu,%.2f,%.2f,%.1f,%.2f,%.2f,%.3f,%.3f\n",
                       (unsigned long)(millis() - t_start),
@@ -369,8 +383,244 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
         }
     }
 
-    biba_hal_motor_pwm_left(0.0f);
+    if (motor) biba_hal_motor_pwm_right(0.0f); else biba_hal_motor_pwm_left(0.0f);
     Serial.println("RPMRUN_END");
+}
+
+/* --- CAPTURE_BOTH: drives BOTH motors, captures raw waveform on each ----
+ * CAPTURE_BOTH <FWD|REV> <duty_pct> [n_samples [sps [settle_ms]]]
+ *
+ * Drives both motors at the same duty, waits settle_ms, then DMA-captures
+ * IS_LEFT (chan 0) and IS_RIGHT (chan 1) back-to-back while both motors
+ * remain running.  Both motors are stopped after the second capture.
+ *
+ * Response:
+ *   CAPTURE2_START duty=<pct> dir=<FWD|REV> sps=<sps> n=<n> settle_ms=<m>
+ *   CAPTURE2_CHAN 0
+ *   <n comma-separated 12-bit ADC values>
+ *   CAPTURE2_CHAN 1
+ *   <n comma-separated 12-bit ADC values>
+ *   CAPTURE2_END
+ */
+static void cmd_capture_both(float signed_duty, bool is_fwd,
+                              uint16_t n_samples, uint32_t sps,
+                              uint32_t settle_ms)
+{
+    if (signed_duty > 1.0f)  signed_duty = 1.0f;
+    if (signed_duty < -1.0f) signed_duty = -1.0f;
+    if (n_samples > ADC_CAPTURE_MAX_SAMPLES) n_samples = ADC_CAPTURE_MAX_SAMPLES;
+    if (settle_ms == 0u)                    settle_ms = IS_POC_DEFAULT_SETTLE_MS;
+    if (settle_ms > IS_POC_MAX_SETTLE_MS)   settle_ms = IS_POC_MAX_SETTLE_MS;
+
+    ensure_armed();
+
+    biba_hal_motor_pwm_left(signed_duty);
+    biba_hal_motor_pwm_right(signed_duty);
+    delay(settle_ms);
+
+    adc_capture_init(sps);
+
+    Serial.printf("CAPTURE2_START duty=%d dir=%s sps=%lu n=%u settle_ms=%lu\n",
+                  (int)(fabsf(signed_duty) * 100.0f),
+                  is_fwd ? "FWD" : "REV",
+                  (unsigned long)sps,
+                  (unsigned)n_samples,
+                  (unsigned long)settle_ms);
+
+    for (uint8_t ch = 0; ch < 2u; ++ch) {
+        bool ok = adc_capture_burst(ch, n_samples, s_buf);
+        if (!ok) {
+            biba_hal_motor_pwm_left(0.0f);
+            biba_hal_motor_pwm_right(0.0f);
+            Serial.println("ERROR capture timeout");
+            return;
+        }
+        Serial.printf("CAPTURE2_CHAN %u\n", (unsigned)ch);
+        for (uint16_t i = 0; i < n_samples; ++i) {
+            Serial.print(s_buf[i]);
+            Serial.print((i + 1) < n_samples ? ',' : '\n');
+        }
+    }
+
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+    Serial.println("CAPTURE2_END");
+}
+
+/* --- CHANTEST: drives one or both motors; captures BOTH ADC channels ----
+ * CHANTEST <L|R|BOTH> FWD <duty_pct> [settle_ms]
+ * Drives the specified motor(s), then captures ADC chan 0 AND chan 1 and
+ * reports ZC Hz + peak-to-peak for each — lets you confirm which physical
+ * ADC channel corresponds to which wheel's IS signal. */
+static void cmd_chantest(uint8_t run_left, uint8_t run_right,
+                         float signed_duty, uint32_t settle_ms)
+{
+    if (settle_ms == 0u) settle_ms = IS_POC_DEFAULT_SETTLE_MS;
+    if (settle_ms > IS_POC_MAX_SETTLE_MS) settle_ms = IS_POC_MAX_SETTLE_MS;
+    if (run_left)  biba_hal_motor_pwm_left(signed_duty);
+    if (run_right) biba_hal_motor_pwm_right(signed_duty);
+    delay(settle_ms);
+    adc_capture_init(RPMRUN_SPS);
+    Serial.printf("CHANTEST motors=%s%s duty=%.0f settle=%lu\n",
+                  run_left  ? "L" : "",
+                  run_right ? "R" : "",
+                  signed_duty * 100.0f,
+                  (unsigned long)settle_ms);
+    Serial.println("CHANTEST_DATA chan,hz,pkpk,label");
+    for (uint8_t ch = 0; ch < 2; ++ch) {
+        bool ok = adc_capture_burst(ch, RPMRUN_N_SAMPLES, s_buf);
+        if (!ok) { Serial.println("ERROR capture timeout"); break; }
+        float hz = zc_freq_hz(s_buf, RPMRUN_N_SAMPLES, RPMRUN_SPS);
+        uint16_t mn = s_buf[0], mx = s_buf[0];
+        for (uint16_t i = 1; i < RPMRUN_N_SAMPLES; ++i) {
+            if (s_buf[i] < mn) mn = s_buf[i];
+            if (s_buf[i] > mx) mx = s_buf[i];
+        }
+        uint16_t pkpk = (uint16_t)(mx - mn);
+        const char *label = (ch == BIBA_ADC_CHAN_IS_LEFT) ? "IS_LEFT" : "IS_RIGHT";
+        Serial.printf("CHANTEST_DATA %u,%.2f,%u,%s\n", (unsigned)ch, hz, (unsigned)pkpk, label);
+    }
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+    Serial.println("CHANTEST_END");
+}
+
+/* --- RPMRUN_BOTH: dual closed-loop PI on both wheels simultaneously ------
+ * RPMRUN_BOTH <L_target_hz> <R_target_hz> <duration_ms>
+ *             [kp_x1000000 ki_x1000000 [stiction_x100]]
+ *
+ * Captures LEFT then RIGHT IS channel each iteration (~200 ms loop @ 10 Hz
+ * per wheel).  Streams CSV:
+ *   RPM2_DATA t_ms,tgt_L,tgt_R,meas_L,meas_R,duty_L_pct,duty_R_pct
+ */
+static void cmd_rpmrun_both(float tgt_l, float tgt_r, uint32_t duration_ms,
+                             float kp, float ki, float stiction,
+                             float ff_slope, float ff_dead)
+{
+    if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
+    if (tgt_l < 0.0f) tgt_l = 0.0f;
+    if (tgt_r < 0.0f) tgt_r = 0.0f;
+    if (tgt_l > 2000.0f) tgt_l = 2000.0f;
+    if (tgt_r > 2000.0f) tgt_r = 2000.0f;
+
+    /* Baseline: both motors off */
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    /* baseline left */
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline_L"); return;
+    }
+    uint32_t bl = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
+    float bl_l = (float)bl / (float)RPMRUN_N_SAMPLES;
+    /* baseline right */
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline_R"); return;
+    }
+    bl = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
+    float bl_r = (float)bl / (float)RPMRUN_N_SAMPLES;
+
+    Serial.printf("RPMRUN2_START tgt_L=%.1f tgt_R=%.1f duration_ms=%lu kp=%.4f ki=%.4f stiction=%.2f bl_L=%.0f bl_R=%.0f\n",
+                  tgt_l, tgt_r, (unsigned long)duration_ms,
+                  kp, ki, stiction, bl_l, bl_r);
+    Serial.println("RPM2_DATA t_ms,tgt_L,tgt_R,meas_L,meas_R,duty_L_pct,duty_R_pct,raw_L,raw_R");
+
+    /* PI state */
+    float duty_l = 0.0f, duty_r = 0.0f;
+    float prev_l = 0.0f, prev_r = 0.0f;
+    float int_l  = 0.0f, int_r  = 0.0f;
+    float ema_l  = 0.0f, ema_r  = 0.0f;
+    const float EMA_A = 0.7f;
+    const float ff_l = (ff_slope > 0.0f && tgt_l > 0.0f)
+                       ? (tgt_l + ff_dead) / (ff_slope * 100.0f) : 0.0f;
+    const float ff_r = (ff_slope > 0.0f && tgt_r > 0.0f)
+                       ? (tgt_r + ff_dead) / (ff_slope * 100.0f) : 0.0f;
+    uint32_t t0 = millis();
+
+    while ((millis() - t0) < duration_ms) {
+        /* --- capture LEFT channel --- */
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+            Serial.println("ERROR cap_L"); break;
+        }
+        float dl = fabsf(duty_l - prev_l);
+        uint16_t sk = (dl > 0.08f) ? 512u : (dl > 0.03f) ? 256u : 0u;
+        float raw_l = zc_freq_hz(s_buf + sk, RPMRUN_N_SAMPLES - sk, RPMRUN_SPS);
+        const float hi_l = tgt_l * 2.5f + 300.0f;
+        if (raw_l >= 80.0f && raw_l <= hi_l) ema_l = EMA_A * raw_l + (1.0f - EMA_A) * ema_l;
+        else if (raw_l == 0.0f) ema_l *= 0.9f;
+
+        /* --- capture RIGHT channel --- */
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
+            Serial.println("ERROR cap_R"); break;
+        }
+        float dr = fabsf(duty_r - prev_r);
+        sk = (dr > 0.08f) ? 512u : (dr > 0.03f) ? 256u : 0u;
+        float raw_r = zc_freq_hz(s_buf + sk, RPMRUN_N_SAMPLES - sk, RPMRUN_SPS);
+        const float hi_r = tgt_r * 2.5f + 300.0f;
+        if (raw_r >= 80.0f && raw_r <= hi_r) ema_r = EMA_A * raw_r + (1.0f - EMA_A) * ema_r;
+        else if (raw_r == 0.0f) ema_r *= 0.9f;
+
+        /* --- PI update LEFT --- */
+        {
+            float err = tgt_l - ema_l;
+            float i_clamp_p = 0.03f / (ki + 1e-6f);
+            float i_clamp_n = 0.01f / (ki + 1e-6f);
+            bool sat_h = duty_l >= 0.999f, sat_l2 = duty_l <= 0.001f;
+            if (!(sat_h && err > 0.0f) && !(sat_l2 && err < 0.0f) && ema_l > 50.0f)
+                int_l += err * RPMRUN_DT_S;
+            if (int_l >  i_clamp_p) int_l =  i_clamp_p;
+            if (int_l < -i_clamp_n) int_l = -i_clamp_n;
+            float p = (ema_l == 0.0f) ? 0.0f : kp * err;
+            if (p >  0.05f) p =  0.05f;
+            if (p < -0.05f) p = -0.05f;
+            prev_l = duty_l;
+            duty_l = ff_l + p + ki * int_l;
+            if (tgt_l > 0.0f && duty_l > 0.0f && duty_l < stiction) duty_l = stiction;
+            if (tgt_l > 0.0f && ema_l > 0.0f && duty_l < stiction) duty_l = stiction;
+            if (duty_l < 0.0f) duty_l = 0.0f;
+            if (duty_l > 1.0f) duty_l = 1.0f;
+        }
+        /* --- PI update RIGHT --- */
+        {
+            float err = tgt_r - ema_r;
+            float i_clamp_p = 0.03f / (ki + 1e-6f);
+            float i_clamp_n = 0.01f / (ki + 1e-6f);
+            bool sat_h = duty_r >= 0.999f, sat_l2 = duty_r <= 0.001f;
+            if (!(sat_h && err > 0.0f) && !(sat_l2 && err < 0.0f) && ema_r > 50.0f)
+                int_r += err * RPMRUN_DT_S;
+            if (int_r >  i_clamp_p) int_r =  i_clamp_p;
+            if (int_r < -i_clamp_n) int_r = -i_clamp_n;
+            float p = (ema_r == 0.0f) ? 0.0f : kp * err;
+            if (p >  0.05f) p =  0.05f;
+            if (p < -0.05f) p = -0.05f;
+            prev_r = duty_r;
+            duty_r = ff_r + p + ki * int_r;
+            if (tgt_r > 0.0f && duty_r > 0.0f && duty_r < stiction) duty_r = stiction;
+            if (tgt_r > 0.0f && ema_r > 0.0f && duty_r < stiction) duty_r = stiction;
+            if (duty_r < 0.0f) duty_r = 0.0f;
+            if (duty_r > 1.0f) duty_r = 1.0f;
+        }
+        biba_hal_motor_pwm_left(duty_l);
+        biba_hal_motor_pwm_right(duty_r);
+
+        Serial.printf("RPM2_DATA %lu,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f\n",
+                      (unsigned long)(millis() - t0),
+                      tgt_l, tgt_r, ema_l, ema_r,
+                      duty_l * 100.0f, duty_r * 100.0f,
+                      raw_l, raw_r);
+
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n');
+            ln.trim();
+            if (ln == "STOP") { Serial.println("RPMRUN2_ABORT"); break; }
+        }
+    }
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+    Serial.println("RPMRUN2_END");
 }
 
 /* --- Closed-loop tracking: time-varying setpoint --------------------- */
@@ -812,97 +1062,213 @@ static void cmd_sweep(const char *shape, int amp_pct,
  *   ... (repeat per window)
  *   SWEEPRAW_END
  */
-#define SWEEPRAW_MAX_WINDOWS  30u
-static uint16_t s_raw_buf[SWEEPRAW_MAX_WINDOWS * RPMRUN_N_SAMPLES];
-static uint32_t s_raw_t_ms[SWEEPRAW_MAX_WINDOWS];
-static float    s_raw_duty[SWEEPRAW_MAX_WINDOWS];
+/* Streaming sweep: no big static buffers — each window is sent over USB
+ * immediately after capture.  n_windows can be up to 65535. */
+#define SWEEPRAW_N_MAX  65535u
+static uint16_t s_win_r[RPMRUN_N_SAMPLES]; /* RIGHT-channel window (BOTH mode) */
+
+/* Compute duty for one sweep window given elapsed time. */
+static float _sweep_duty(bool is_sin, float amp,
+                         uint32_t t_now, uint32_t period_ms)
+{
+    float phase = fmodf((float)t_now, (float)period_ms) / (float)period_ms;
+    if (is_sin) {
+        return amp * sinf(2.0f * (float)M_PI * phase);
+    }
+    /* TRAP */
+    if      (phase < 0.125f) return  amp * (phase / 0.125f);
+    else if (phase < 0.375f) return  amp;
+    else if (phase < 0.500f) return  amp * (1.0f - (phase - 0.375f) / 0.125f);
+    else if (phase < 0.625f) return -amp * ((phase - 0.500f) / 0.125f);
+    else if (phase < 0.875f) return -amp;
+    else                     return -amp * (1.0f - (phase - 0.875f) / 0.125f);
+}
+
+/* Stream one window's samples as a comma-separated line. */
+static void _print_win(const uint16_t *buf, uint16_t n)
+{
+    for (uint16_t i = 0; i < n; ++i) {
+        Serial.print(buf[i]);
+        Serial.print((i + 1) < n ? ',' : '\n');
+    }
+}
 
 static void cmd_sweepraw(const char *shape, int amp_pct,
-                         uint32_t period_ms, uint16_t n_windows)
+                         uint32_t period_ms, uint32_t n_windows)
 {
     if (amp_pct < 0)  amp_pct = 0;
     if (amp_pct > 80) amp_pct = 80;
-    if (period_ms < 200u)   period_ms = 200u;
-    if (period_ms > 10000u) period_ms = 10000u;
-    if (n_windows < 1u) n_windows = 1u;
-    if (n_windows > SWEEPRAW_MAX_WINDOWS) n_windows = SWEEPRAW_MAX_WINDOWS;
-    bool is_sin = (strcmp(shape, "SIN") == 0);
+    if (period_ms < 200u)    period_ms = 200u;
+    if (period_ms > 300000u) period_ms = 300000u;
+    if (n_windows < 1u)          n_windows = 1u;
+    if (n_windows > SWEEPRAW_N_MAX) n_windows = SWEEPRAW_N_MAX;
+    bool is_sin  = (strcmp(shape, "SIN")  == 0);
     bool is_trap = (strcmp(shape, "TRAP") == 0);
-    if (!is_sin && !is_trap) {
-        Serial.println("ERR sweepraw shape must be SIN or TRAP");
-        return;
-    }
+    if (!is_sin && !is_trap) { Serial.println("ERR sweepraw shape must be SIN or TRAP"); return; }
 
-    /* Baseline */
+    ensure_armed();
     biba_hal_motor_pwm_left(0.0f);
     delay(200);
     adc_capture_init(RPMRUN_SPS);
     if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
-        Serial.println("ERROR baseline capture timeout");
-        return;
+        Serial.println("ERROR baseline capture timeout"); return;
     }
-    uint32_t bl_sum = 0;
-    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl_sum += s_buf[i];
-    float baseline_adc = (float)bl_sum / (float)RPMRUN_N_SAMPLES;
+    uint32_t bl = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
+    float baseline_adc = (float)bl / RPMRUN_N_SAMPLES;
+
+    Serial.printf("SWEEPRAW_START shape=%s amp=%d period_ms=%lu n_windows=%lu baseline_adc=%.1f\n",
+                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, baseline_adc);
 
     float amp = amp_pct / 100.0f;
     uint32_t t_start = millis();
-
-    /* === Capture phase: drive duty, burst into buffer, repeat. === */
-    for (uint16_t w = 0; w < n_windows; ++w) {
+    for (uint32_t w = 0; w < n_windows; ++w) {
         uint32_t t_now = millis() - t_start;
-        float phase = fmodf((float)t_now, (float)period_ms) / (float)period_ms;
-
-        float duty;
-        if (is_sin) {
-            duty = amp * sinf(2.0f * (float)M_PI * phase);
-        } else {
-            if      (phase < 0.125f) duty =  amp * (phase / 0.125f);
-            else if (phase < 0.375f) duty =  amp;
-            else if (phase < 0.500f) duty =  amp * (1.0f - (phase - 0.375f) / 0.125f);
-            else if (phase < 0.625f) duty = -amp * ((phase - 0.500f) / 0.125f);
-            else if (phase < 0.875f) duty = -amp;
-            else                     duty = -amp * (1.0f - (phase - 0.875f) / 0.125f);
-        }
+        float duty = _sweep_duty(is_sin, amp, t_now, period_ms);
         biba_hal_motor_pwm_left(duty);
-
-        uint16_t *win = &s_raw_buf[w * RPMRUN_N_SAMPLES];
-        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, win)) {
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
             biba_hal_motor_pwm_left(0.0f);
-            Serial.println("ERROR capture timeout");
-            return;
+            Serial.println("ERROR capture timeout"); return;
         }
-        s_raw_t_ms[w] = t_now;
-        s_raw_duty[w] = duty * 100.0f;
-
+        Serial.printf("SWEEPRAW_WIN %lu %lu %.1f\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
+        _print_win(s_buf, RPMRUN_N_SAMPLES);
         if (Serial.available()) {
-            String ln = Serial.readStringUntil('\n');
-            ln.trim();
+            String ln = Serial.readStringUntil('\n'); ln.trim();
             if (ln == "STOP") {
                 biba_hal_motor_pwm_left(0.0f);
-                Serial.println("SWEEPRAW_ABORT stop requested");
-                return;
+                Serial.println("SWEEPRAW_ABORT stop requested"); return;
             }
         }
     }
     biba_hal_motor_pwm_left(0.0f);
+    Serial.println("SWEEPRAW_END");
+}
 
-    /* === Dump phase: stream all windows. === */
-    Serial.printf("SWEEPRAW_START shape=%s amp=%d period_ms=%lu n_windows=%u baseline_adc=%.1f\n",
-                  shape, amp_pct, (unsigned long)period_ms,
-                  (unsigned)n_windows, baseline_adc);
-    for (uint16_t w = 0; w < n_windows; ++w) {
-        Serial.printf("SWEEPRAW_WIN %u %lu %.1f\n",
-                      (unsigned)w,
-                      (unsigned long)s_raw_t_ms[w],
-                      s_raw_duty[w]);
-        const uint16_t *win = &s_raw_buf[w * RPMRUN_N_SAMPLES];
-        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) {
-            Serial.print(win[i]);
-            Serial.print((i + 1) < RPMRUN_N_SAMPLES ? ',' : '\n');
+/* SWEEPRAW_R: same protocol but RIGHT motor + IS_RIGHT channel */
+static void cmd_sweepraw_r(const char *shape, int amp_pct,
+                           uint32_t period_ms, uint32_t n_windows)
+{
+    if (amp_pct < 0)  amp_pct = 0;
+    if (amp_pct > 80) amp_pct = 80;
+    if (period_ms < 200u)    period_ms = 200u;
+    if (period_ms > 300000u) period_ms = 300000u;
+    if (n_windows < 1u)          n_windows = 1u;
+    if (n_windows > SWEEPRAW_N_MAX) n_windows = SWEEPRAW_N_MAX;
+    bool is_sin  = (strcmp(shape, "SIN")  == 0);
+    bool is_trap = (strcmp(shape, "TRAP") == 0);
+    if (!is_sin && !is_trap) { Serial.println("ERR shape must be SIN or TRAP"); return; }
+
+    ensure_armed();
+    biba_hal_motor_pwm_right(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline capture timeout"); return;
+    }
+    uint32_t bl = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
+    float baseline_adc = (float)bl / RPMRUN_N_SAMPLES;
+
+    Serial.printf("SWEEPRAW_START shape=%s amp=%d period_ms=%lu n_windows=%lu baseline_adc=%.1f\n",
+                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, baseline_adc);
+
+    float amp = amp_pct / 100.0f;
+    uint32_t t_start = millis();
+    for (uint32_t w = 0; w < n_windows; ++w) {
+        uint32_t t_now = millis() - t_start;
+        float duty = _sweep_duty(is_sin, amp, t_now, period_ms);
+        biba_hal_motor_pwm_right(duty);
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
+            biba_hal_motor_pwm_right(0.0f);
+            Serial.println("ERROR capture timeout"); return;
+        }
+        Serial.printf("SWEEPRAW_WIN %lu %lu %.1f\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
+        _print_win(s_buf, RPMRUN_N_SAMPLES);
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n'); ln.trim();
+            if (ln == "STOP") {
+                biba_hal_motor_pwm_right(0.0f);
+                Serial.println("SWEEPRAW_ABORT"); return;
+            }
         }
     }
+    biba_hal_motor_pwm_right(0.0f);
     Serial.println("SWEEPRAW_END");
+}
+
+/* SWEEPRAW_BOTH: BOTH motors simultaneously, stream L then R per window.
+ * Protocol: SWEEPRAW2_START / SWEEPRAW2_WIN <idx> <t> <duty> L / samples /
+ *            SWEEPRAW2_WIN <idx> <t> <duty> R / samples / ... / SWEEPRAW2_END */
+static void cmd_sweepraw_both(const char *shape, int amp_pct,
+                               uint32_t period_ms, uint32_t n_windows)
+{
+    if (amp_pct < 0)  amp_pct = 0;
+    if (amp_pct > 80) amp_pct = 80;
+    if (period_ms < 200u)    period_ms = 200u;
+    if (period_ms > 300000u) period_ms = 300000u;
+    if (n_windows < 1u)          n_windows = 1u;
+    if (n_windows > SWEEPRAW_N_MAX) n_windows = SWEEPRAW_N_MAX;
+    bool is_sin  = (strcmp(shape, "SIN")  == 0);
+    bool is_trap = (strcmp(shape, "TRAP") == 0);
+    if (!is_sin && !is_trap) { Serial.println("ERR shape must be SIN or TRAP"); return; }
+
+    ensure_armed();
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+    delay(200);
+    adc_capture_init(RPMRUN_SPS);
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline_L"); return;
+    }
+    uint32_t bl = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
+    float bl_l = (float)bl / RPMRUN_N_SAMPLES;
+    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline_R"); return;
+    }
+    bl = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
+    float bl_r = (float)bl / RPMRUN_N_SAMPLES;
+
+    Serial.printf("SWEEPRAW2_START shape=%s amp=%d period_ms=%lu n_windows=%lu bl_L=%.1f bl_R=%.1f\n",
+                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, bl_l, bl_r);
+
+    float amp = amp_pct / 100.0f;
+    uint32_t t_start = millis();
+    for (uint32_t w = 0; w < n_windows; ++w) {
+        uint32_t t_now = millis() - t_start;
+        float duty = _sweep_duty(is_sin, amp, t_now, period_ms);
+        biba_hal_motor_pwm_left(duty);
+        biba_hal_motor_pwm_right(duty);
+        /* capture LEFT into s_buf */
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+            biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
+            Serial.println("ERROR cap_L"); return;
+        }
+        /* capture RIGHT into s_win_r — both motors still running */
+        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_win_r)) {
+            biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
+            Serial.println("ERROR cap_R"); return;
+        }
+        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
+        _print_win(s_buf, RPMRUN_N_SAMPLES);
+        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f R\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
+        _print_win(s_win_r, RPMRUN_N_SAMPLES);
+        if (Serial.available()) {
+            String ln = Serial.readStringUntil('\n'); ln.trim();
+            if (ln == "STOP") {
+                biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
+                Serial.println("SWEEPRAW2_ABORT"); return;
+            }
+        }
+    }
+    biba_hal_motor_pwm_left(0.0f);
+    biba_hal_motor_pwm_right(0.0f);
+    Serial.println("SWEEPRAW2_END");
 }
 
 /* CALRUN <duty_pct> <settle_ms>
@@ -985,6 +1351,12 @@ void loop(void)
         return;
     }
 
+    if (line == "ARM") {
+        ensure_armed();
+        Serial.println("OK armed");
+        return;
+    }
+
     if (line == "STOP") {
         /* Issue 6 fix: disarm on STOP. */
         biba_hal_motor_pwm_left(0.0f);
@@ -1011,10 +1383,64 @@ void loop(void)
         if (duty_pct < 0)   duty_pct = 0;
         if (duty_pct > 100) duty_pct = 100;
         float signed_duty = is_fwd ? (duty_pct / 100.0f) : -(duty_pct / 100.0f);
-        /* The Python --motor left/right flag selects which unit to run;
-         * this firmware always drives the IS_LEFT channel. */
         uint8_t adc_chan = BIBA_ADC_CHAN_IS_LEFT;
         cmd_capture(signed_duty, is_fwd, adc_chan, n, sps, settle_ms);
+        return;
+    }
+
+    if (line.startsWith("CAPTURE_R ")) {
+        /* "CAPTURE_R <FWD|REV> <duty_pct> <n_samples> <sps> [settle_ms]" — right motor */
+        String rest = line.substring(10);
+        bool is_fwd = rest.startsWith("FWD");
+        rest = rest.substring(4);
+        int duty_pct = 50;
+        uint16_t n = 2048;
+        uint32_t sps = 10000;
+        uint32_t settle_ms = 0u;
+        sscanf(rest.c_str(), "%d %hu %lu %lu", &duty_pct, &n, &sps, &settle_ms);
+        if (duty_pct < 0)   duty_pct = 0;
+        if (duty_pct > 100) duty_pct = 100;
+        float signed_duty = is_fwd ? (duty_pct / 100.0f) : -(duty_pct / 100.0f);
+        cmd_capture(signed_duty, is_fwd, BIBA_ADC_CHAN_IS_RIGHT, n, sps, settle_ms);
+        return;
+    }
+
+    if (line.startsWith("CAPTURE_BOTH ")) {
+        /* "CAPTURE_BOTH <FWD|REV> <duty_pct> [n_samples [sps [settle_ms]]]"
+         * Drives BOTH motors and captures IS_LEFT then IS_RIGHT raw waveforms
+         * with both motors running throughout. */
+        String rest = line.substring(13);
+        bool is_fwd = rest.startsWith("FWD");
+        rest = rest.substring(4);
+        int duty_pct = 50;
+        uint16_t n = 4096;
+        uint32_t sps = 10000;
+        uint32_t settle_ms = 0u;
+        sscanf(rest.c_str(), "%d %hu %lu %lu", &duty_pct, &n, &sps, &settle_ms);
+        if (duty_pct < 0)   duty_pct = 0;
+        if (duty_pct > 100) duty_pct = 100;
+        float signed_duty = is_fwd ? (duty_pct / 100.0f) : -(duty_pct / 100.0f);
+        cmd_capture_both(signed_duty, is_fwd, n, sps, settle_ms);
+        return;
+    }
+
+    if (line.startsWith("CHANTEST ")) {
+        /* "CHANTEST <L|R|BOTH> <FWD|REV> <duty_pct> [settle_ms]" */
+        String rest = line.substring(9);
+        uint8_t run_l = 0, run_r = 0;
+        if (rest.startsWith("BOTH")) { run_l = 1; run_r = 1; rest = rest.substring(5); }
+        else if (rest.startsWith("L"))  { run_l = 1; rest = rest.substring(2); }
+        else if (rest.startsWith("R"))  { run_r = 1; rest = rest.substring(2); }
+        else { Serial.println("ERR: CHANTEST needs L/R/BOTH"); return; }
+        bool is_fwd = rest.startsWith("FWD");
+        rest = rest.substring(4);
+        int duty_pct = 40;
+        uint32_t settle_ms = 0;
+        sscanf(rest.c_str(), "%d %lu", &duty_pct, &settle_ms);
+        if (duty_pct < 0) duty_pct = 0;
+        if (duty_pct > 100) duty_pct = 100;
+        float sd = is_fwd ? (duty_pct / 100.0f) : -(duty_pct / 100.0f);
+        cmd_chantest(run_l, run_r, sd, settle_ms);
         return;
     }
 
@@ -1039,7 +1465,55 @@ void loop(void)
                    (float)ki_mil      / 1000000.0f,
                    (float)stiction_pct / 100.0f,
                    (float)ff_slope_x100 / 100.0f,
-                   (float)ff_dead_x10   / 10.0f);
+                   (float)ff_dead_x10   / 10.0f,
+                   0 /* motor=LEFT */);
+        return;
+    }
+
+    if (line.startsWith("RPMRUN_R ")) {
+        /* Same as RPMRUN but drives the RIGHT motor */
+        String rest = line.substring(9);
+        float target_hz = 10.0f;
+        uint32_t duration_ms = 10000;
+        int kp_mil = 2000, ki_mil = 10000, stiction_pct = 12;
+        int ff_slope_x100 = (int)(RPMRUN_FF_SLOPE_DEFAULT * 100.0f + 0.5f);
+        int ff_dead_x10   = (int)(RPMRUN_FF_DEAD_DEFAULT  * 10.0f  + 0.5f);
+        sscanf(rest.c_str(), "%f %lu %d %d %d %d %d",
+               &target_hz, &duration_ms, &kp_mil, &ki_mil,
+               &stiction_pct, &ff_slope_x100, &ff_dead_x10);
+        if (stiction_pct < 0) stiction_pct = 0;
+        if (stiction_pct > 50) stiction_pct = 50;
+        cmd_rpmrun(target_hz, duration_ms,
+                   (float)kp_mil      / 1000000.0f,
+                   (float)ki_mil      / 1000000.0f,
+                   (float)stiction_pct / 100.0f,
+                   (float)ff_slope_x100 / 100.0f,
+                   (float)ff_dead_x10   / 10.0f,
+                   1 /* motor=RIGHT */);
+        return;
+    }
+
+    if (line.startsWith("RPMRUN_BOTH ")) {
+        /* "RPMRUN_BOTH <L_hz> <R_hz> <duration_ms>
+         *              [kp_x1000000 ki_x1000000 [stiction_x100]]" */
+        String rest = line.substring(11);
+        float tgt_l = 300.0f, tgt_r = 300.0f;
+        uint32_t dur = 30000;
+        int kp_mil = 2000, ki_mil = 10000, stiction_pct = 12;
+        int ff_slope_x100 = (int)(RPMRUN_FF_SLOPE_DEFAULT * 100.0f + 0.5f);
+        int ff_dead_x10   = (int)(RPMRUN_FF_DEAD_DEFAULT  * 10.0f  + 0.5f);
+        sscanf(rest.c_str(), "%f %f %lu %d %d %d %d %d",
+               &tgt_l, &tgt_r, &dur,
+               &kp_mil, &ki_mil, &stiction_pct,
+               &ff_slope_x100, &ff_dead_x10);
+        if (stiction_pct < 0) stiction_pct = 0;
+        if (stiction_pct > 50) stiction_pct = 50;
+        cmd_rpmrun_both(tgt_l, tgt_r, dur,
+                        (float)kp_mil / 1000000.0f,
+                        (float)ki_mil / 1000000.0f,
+                        (float)stiction_pct / 100.0f,
+                        (float)ff_slope_x100 / 100.0f,
+                        (float)ff_dead_x10   / 10.0f);
         return;
     }
 
@@ -1104,10 +1578,31 @@ void loop(void)
         String rest = line.substring(9);
         char shape[8] = {0};
         int amp = 30;
-        unsigned long per = 2000;
-        unsigned n_win = 20;
-        sscanf(rest.c_str(), "%7s %d %lu %u", shape, &amp, &per, &n_win);
-        cmd_sweepraw(shape, amp, (uint32_t)per, (uint16_t)n_win);
+        unsigned long per = 2000, n_win = 20;
+        sscanf(rest.c_str(), "%7s %d %lu %lu", shape, &amp, &per, &n_win);
+        cmd_sweepraw(shape, amp, (uint32_t)per, (uint32_t)n_win);
+        return;
+    }
+
+    if (line.startsWith("SWEEPRAW_R ")) {
+        /* "SWEEPRAW_R <SIN|TRAP> <amp_pct> <period_ms> <n_windows>" */
+        String rest = line.substring(11);
+        char shape[8] = {0};
+        int amp = 30;
+        unsigned long per = 2000, n_win = 20;
+        sscanf(rest.c_str(), "%7s %d %lu %lu", shape, &amp, &per, &n_win);
+        cmd_sweepraw_r(shape, amp, (uint32_t)per, (uint32_t)n_win);
+        return;
+    }
+
+    if (line.startsWith("SWEEPRAW_BOTH ")) {
+        /* "SWEEPRAW_BOTH <SIN|TRAP> <amp_pct> <period_ms> <n_windows>" */
+        String rest = line.substring(14);
+        char shape[8] = {0};
+        int amp = 30;
+        unsigned long per = 2000, n_win = 20;
+        sscanf(rest.c_str(), "%7s %d %lu %lu", shape, &amp, &per, &n_win);
+        cmd_sweepraw_both(shape, amp, (uint32_t)per, (uint32_t)n_win);
         return;
     }
 
