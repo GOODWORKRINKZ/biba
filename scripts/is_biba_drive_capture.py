@@ -8,7 +8,7 @@ plots all channels.
 
 DRIVE_DATA format (firmware):
   t_ms, thr, str, mix_L, mix_R, tgt_L_hz, tgt_R_hz,
-  meas_L_hz, meas_R_hz, duty_L, duty_R, int_L, int_R
+    meas_L_hz, meas_R_hz, duty_L, duty_R, int_L, int_R, raw_L_hz, raw_R_hz
 
 Usage examples:
   # Built-in profile: hold throttle=30%, sweep steering 0→50→-50→0
@@ -28,12 +28,15 @@ Built-in profiles:
   steer-ramp   thr=<--thr>, steer ramps 0→100→-100→0 over <duration>s
   pivot        thr=0, steer 0→100→0→-100→0 (3s each)
   straight     thr=<--thr>, steer=0 for <duration>s
+  thr-sine     throttle oscillates as sine: center=<--thr>, amp=<--thr>*0.5, period=<--period>s
+  fullsine     bidirectional: center=0, amp=<--thr> (default 100), range -thr..+thr, period=<--period>s
 
 Safety: the script sends DISARM+DBGOFF on KeyboardInterrupt or any error.
 """
 
 import argparse
 import csv
+import math
 import sys
 import time
 import os
@@ -59,6 +62,7 @@ COLUMNS = [
     "meas_L_hz", "meas_R_hz",
     "duty_L", "duty_R",
     "int_L", "int_R",
+    "raw_L_hz", "raw_R_hz",
 ]
 
 
@@ -113,11 +117,45 @@ def profile_straight(thr: int, duration: float):
     return [(0.0, thr, 0), (duration, thr, 0)]
 
 
+def profile_thr_sine(thr: int, duration: float, period: float = 4.0):
+    """Throttle sine wave — tests PI tracking. center=thr, amp=thr//2, period=period."""
+    amp = max(5, thr // 2)
+    center = thr
+    step = 0.1          # waypoint every 100 ms (firmware outputs ~10 Hz)
+    points = []
+    t = 0.0
+    while t <= duration + 1e-9:
+        thr_now = int(round(center + amp * math.sin(2.0 * math.pi * t / period)))
+        thr_now = max(0, min(100, thr_now))
+        points.append((round(t, 3), thr_now, 0))
+        t += step
+    return points
+
+
+def profile_fullsine(thr: int, duration: float, period: float = 4.0):
+    """Full bidirectional sine: center=0, amp=thr (default 100). Range: -thr..+thr.
+    Tests PI tracking through zero crossing (FWD→REV→FWD)."""
+    amp = max(5, thr)
+    step = 0.1
+    points = []
+    t = 0.0
+    while t <= duration + 1e-9:
+        thr_now = int(round(amp * math.sin(2.0 * math.pi * t / period)))
+        thr_now = max(-100, min(100, thr_now))
+        points.append((round(t, 3), thr_now, 0))
+        t += step
+    return points
+
+
+_g_period: float = 4.0   # overwritten in main() before build_sequence
+
 PROFILES = {
     "steer-step":  lambda thr, dur: profile_steer_step(thr, dur),
     "steer-ramp":  lambda thr, dur: profile_steer_ramp(thr, dur),
     "pivot":       lambda thr, dur: profile_pivot(dur),
     "straight":    lambda thr, dur: profile_straight(thr, dur),
+    "thr-sine":    lambda thr, dur: profile_thr_sine(thr, dur, _g_period),
+    "fullsine":    lambda thr, dur: profile_fullsine(thr, dur, _g_period),
 }
 
 
@@ -231,15 +269,20 @@ def run_sequence(dbg: BiBaDebug, sequence: list, out_csv: str):
             raw = dbg.ser.readline().decode(errors="replace").strip()
             if raw.startswith("DRIVE_DATA "):
                 parts = raw[len("DRIVE_DATA "):].split(",")
-                if len(parts) == len(COLUMNS):
+                if len(parts) in (13, len(COLUMNS)):
                     try:
                         row = [float(p) for p in parts]
+                        if len(row) == 13:
+                            row.extend([row[7], row[8]])
                         # Inject commanded values for easy correlation
                         rows.append(row)
                         print(f"\r  t={row[0]/1000:.1f}s  "
                               f"thr={thr:+d}%  str={steer:+d}%  "
-                              f"meas_L={row[7]:.0f}Hz  meas_R={row[8]:.0f}Hz  "
-                              f"duty_L={row[9]*100:.0f}%  duty_R={row[10]*100:.0f}%",
+                              f"tgt_L={row[5]:.0f}Hz tgt_R={row[6]:.0f}Hz | "
+                              f"meas_L={row[7]:.0f}Hz meas_R={row[8]:.0f}Hz | "
+                              f"raw_L={row[13]:.0f}Hz raw_R={row[14]:.0f}Hz | "
+                              f"duty_L={row[9]*100:.0f}% duty_R={row[10]*100:.0f}% | "
+                              f"int_L={row[11]:.2f} int_R={row[12]:.2f}",
                               end="", flush=True)
                     except ValueError:
                         pass
@@ -258,41 +301,65 @@ def run_sequence(dbg: BiBaDebug, sequence: list, out_csv: str):
 
 
 # ---------------------------------------------------------------------------
-def plot_data(rows: list, out_csv: str):
+def plot_data(rows: list, out_csv: str, skip_s: float = 0.0):
     if not HAS_MATPLOTLIB:
         print("matplotlib not installed — skipping plot.")
         return
     import numpy as np
     data = np.array(rows)
     t = data[:, 0] / 1000.0   # ms → s
+    if skip_s > 0.0:
+        mask = t >= (t[0] + skip_s)
+        data = data[mask]
+        t = t[mask]
 
-    fig, axes = plt.subplots(4, 1, figsize=(12, 10), sharex=True)
+    fig, axes = plt.subplots(5, 1, figsize=(12, 14), sharex=True)
     fig.suptitle(f"BiBa Drive Capture — {Path(out_csv).name}")
 
+    # Row 0 — inputs
     ax = axes[0]
     ax.plot(t, data[:, 1] * 100, label="throttle %")
     ax.plot(t, data[:, 2] * 100, label="steering %")
     ax.set_ylabel("Input %"); ax.legend(); ax.grid(True)
 
+    # Row 1 — LEFT RPM
     ax = axes[1]
-    ax.plot(t, data[:, 4] * 100, label="mix_L %")
-    ax.plot(t, data[:, 5] * 100, label="mix_R %")
-    ax.set_ylabel("Mixer output %"); ax.legend(); ax.grid(True)
+    ax.set_title("LEFT motor", loc="left", fontsize=9, pad=2)
+    ax.plot(t, data[:, 3] * 100, ":", alpha=0.4, label="mix_L %")
+    ax.plot(t, data[:, 5],        label="tgt_L Hz")
+    ax.plot(t, data[:, 7], "--",  linewidth=2.0, label="meas_L interpreted Hz")
+    if data.shape[1] > 13:
+        ax.plot(t, data[:, 13], ":", alpha=0.35, label="raw_L ZC Hz")
+    ax.set_ylabel("Hz / mix %"); ax.legend(); ax.grid(True)
 
+    # Row 2 — LEFT control effort
     ax = axes[2]
-    ax.plot(t, data[:, 5], label="tgt_L Hz")
-    ax.plot(t, data[:, 6], label="tgt_R Hz")
-    ax.plot(t, data[:, 7], "--", label="meas_L Hz")
-    ax.plot(t, data[:, 8], "--", label="meas_R Hz")
-    ax.set_ylabel("RPM (Hz)"); ax.legend(); ax.grid(True)
+    l1, = ax.plot(t, data[:, 9]  * 100, "C0", label="duty_L %")
+    ax.set_ylabel("Duty %"); ax.set_ylim(-110, 110); ax.grid(True)
+    ax2 = ax.twinx()
+    l2, = ax2.plot(t, data[:, 11], "C1:", label="int_L")
+    ax2.set_ylabel("Integrator")
+    ax.legend(handles=[l1, l2], loc="upper left")
 
+    # Row 3 — RIGHT RPM
     ax = axes[3]
-    ax.plot(t, data[:, 9]  * 100, label="duty_L %")
-    ax.plot(t, data[:, 10] * 100, label="duty_R %")
-    ax.plot(t, data[:, 11] * 1000, ":", label="int_L ×1000")
-    ax.plot(t, data[:, 12] * 1000, ":", label="int_R ×1000")
-    ax.set_xlabel("Time (s)"); ax.set_ylabel("Duty / Integral")
-    ax.legend(); ax.grid(True)
+    ax.set_title("RIGHT motor", loc="left", fontsize=9, pad=2)
+    ax.plot(t, data[:, 4] * 100, ":", alpha=0.4, label="mix_R %")
+    ax.plot(t, data[:, 6],        label="tgt_R Hz")
+    ax.plot(t, data[:, 8], "--",  linewidth=2.0, label="meas_R interpreted Hz")
+    if data.shape[1] > 14:
+        ax.plot(t, data[:, 14], ":", alpha=0.35, label="raw_R ZC Hz")
+    ax.set_ylabel("Hz / mix %"); ax.legend(); ax.grid(True)
+
+    # Row 4 — RIGHT control effort
+    ax = axes[4]
+    l1, = ax.plot(t, data[:, 10] * 100, "C0", label="duty_R %")
+    ax.set_ylabel("Duty %"); ax.set_ylim(-110, 110); ax.grid(True)
+    ax2 = ax.twinx()
+    l2, = ax2.plot(t, data[:, 12], "C1:", label="int_R")
+    ax2.set_ylabel("Integrator")
+    ax.legend(handles=[l1, l2], loc="upper left")
+    ax.set_xlabel("Time (s)")
 
     plt.tight_layout()
     png = out_csv.replace(".csv", ".png")
@@ -313,16 +380,24 @@ def main():
     parser.add_argument("--script", help="CSV script file: rows of t_s,thr_pct,str_pct")
     parser.add_argument("--thr", type=int, default=30,
                         help="Base throttle %% for profiles (default: 30)")
+    parser.add_argument("--period", type=float, default=4.0,
+                        help="Sine period in seconds for thr-sine profile (default: 4.0)")
     parser.add_argument("--duration", type=float, default=20.0,
                         help="Total run duration in seconds (default: 20)")
     parser.add_argument("--no-plot", action="store_true",
                         help="Skip matplotlib plot after capture")
+    parser.add_argument("--plot-skip", type=float, default=2.0,
+                        help="Skip first N seconds in the plot to hide arm transient (default: 2.0)")
     parser.add_argument("--out", help="Output CSV path (default: auto-generated)")
     args = parser.parse_args()
 
+    global _g_period
+    _g_period = args.period
+
     sequence = build_sequence(args.profile, args.script, args.thr, args.duration)
     print(f"Profile '{args.profile}': {len(sequence)} waypoints, "
-          f"{sequence[-1][0]:.1f}s, base thr={args.thr}%")
+          f"{sequence[-1][0]:.1f}s, base thr={args.thr}%"
+          + (f", period={args.period}s" if args.profile == "thr-sine" else ""))
 
     # Output path
     out_dir = Path(__file__).parent / "artifacts" / "drive-capture"
@@ -355,7 +430,7 @@ def main():
         dbg.close()
 
     if rows and not args.no_plot:
-        plot_data(rows, out_csv)
+        plot_data(rows, out_csv, skip_s=args.plot_skip)
 
 
 if __name__ == "__main__":

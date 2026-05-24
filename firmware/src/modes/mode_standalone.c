@@ -92,12 +92,22 @@ static volatile float       s_rpm_duty_left;
 static volatile float       s_rpm_duty_right;
 static volatile float       s_target_hz_left;   /* tick writes, on_adc_done reads */
 static volatile float       s_target_hz_right;
+static volatile bool        s_meas_left_enabled;
+static volatile bool        s_meas_right_enabled;
+static volatile bool        s_meas_left_reverse;
+static volatile bool        s_meas_right_reverse;
+static volatile float       s_meas_target_hz_left;
+static volatile float       s_meas_target_hz_right;
 static float                s_raw_hz_left;       /* LEFT ZC held until RIGHT branch */
 static uint16_t             s_adc_buf[1024];     /* shared DMA buffer (L then R) */
 
-/* Measured Hz per channel (set by on_adc_done IRQ, read for DRIVE_DATA telem). */
+/* Interpreted and raw Hz per channel (set by on_adc_done IRQ, read for DRIVE_DATA telem). */
 static volatile float s_meas_hz_left;
 static volatile float s_meas_hz_right;
+static volatile float s_meas_raw_hz_left;
+static volatile float s_meas_raw_hz_right;
+static float s_telem_meas_ema_left;
+static float s_telem_meas_ema_right;
 
 /* Debug override state — serial-controlled bench testing.
  * DBGON  : enable override mode (CRSF inputs bypassed).
@@ -236,15 +246,18 @@ static void on_adc_done(uint8_t channel, const uint16_t *buf, uint16_t n)
     float raw_hz = zc_freq_hz(buf, n, 10000u);
 
     if (s_adc_state == ADC_CAPTURING_LEFT) {
-        s_raw_hz_left = raw_hz;
+        s_raw_hz_left = s_meas_left_enabled ? raw_hz : 0.0f;
         s_adc_state = ADC_CAPTURING_RIGHT;
         (void)adc_capture_start_async(BIBA_ADC_CHAN_IS_RIGHT, 1024u, s_adc_buf, on_adc_done);
     } else if (s_adc_state == ADC_CAPTURING_RIGHT) {
-        float raw_hz_right = raw_hz;
+        float raw_hz_right = s_meas_right_enabled ? raw_hz : 0.0f;
         float raw_hz_left  = s_raw_hz_left;
-        /* Save raw measurements for DRIVE_DATA telemetry (debug mode). */
-        s_meas_hz_left  = raw_hz_left;
-        s_meas_hz_right = raw_hz_right;
+        s_meas_raw_hz_left  = raw_hz_left;
+        s_meas_raw_hz_right = raw_hz_right;
+        (void)zc_ema_update(&s_telem_meas_ema_left, raw_hz_left, s_meas_target_hz_left);
+        (void)zc_ema_update(&s_telem_meas_ema_right, raw_hz_right, s_meas_target_hz_right);
+        s_meas_hz_left  = s_meas_left_reverse  ? -s_telem_meas_ema_left  : s_telem_meas_ema_left;
+        s_meas_hz_right = s_meas_right_reverse ? -s_telem_meas_ema_right : s_telem_meas_ema_right;
         s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
                                             s_target_hz_left,  raw_hz_left);
         s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
@@ -550,11 +563,19 @@ void biba_mode_standalone_tick(void)
         (void)trim;  /* trim disabled — see TODO above */
     }
 
-    /* RPM closed-loop (forward) + open-loop pass-through (reverse).
-     * Forward: IS ZC closes the loop via on_adc_done() IRQ.
-     * Reverse: ZC only detects magnitude, not direction — pass raw mixer
-     *          duty directly.  Reset PI on direction flip so the integrator
-     *          starts clean when returning to forward. */
+    /* Save pre-PI mixer output for telemetry (left_out/right_out will be
+     * overwritten with the final duty below). */
+    const float mix_l_log = left_out;
+    const float mix_r_log = right_out;
+
+    /* Bidirectional RPM closed-loop.
+     * The ZC detector returns frequency magnitude only — it cannot detect
+     * rotation direction.  We run the PI on |target| vs |meas|, then
+     * restore the direction sign from the mixer output when writing the
+     * final motor duty.  This closes the loop in both forward and reverse
+     * without a second IS channel or an encoder.
+     * Direction flip → reset PI + clear stale duty so the integrator
+     * starts clean from the correct side. */
     {
         static bool s_prev_rev_left  = false;
         static bool s_prev_rev_right = false;
@@ -562,25 +583,42 @@ void biba_mode_standalone_tick(void)
         bool rev_left  = (left_out  < -BIBA_MOTOR_DEADBAND);
         bool rev_right = (right_out < -BIBA_MOTOR_DEADBAND);
 
-        /* Direction flip → reset PI + clear stale duty */
         if (rev_left != s_prev_rev_left) {
             biba_rpm_pi_reset(&s_rpm_pi_left);
             s_rpm_duty_left = 0.0f;
+            s_telem_meas_ema_left = 0.0f;
+            s_meas_hz_left = 0.0f;
+            s_meas_raw_hz_left = 0.0f;
         }
         if (rev_right != s_prev_rev_right) {
             biba_rpm_pi_reset(&s_rpm_pi_right);
             s_rpm_duty_right = 0.0f;
+            s_telem_meas_ema_right = 0.0f;
+            s_meas_hz_right = 0.0f;
+            s_meas_raw_hz_right = 0.0f;
         }
         s_prev_rev_left  = rev_left;
         s_prev_rev_right = rev_right;
 
-        /* Forward target (deadband guard prevents stiction snap at neutral) */
+        /* IS sensing is hardware-observable only in wired quadrants.  LEFT has
+         * only the forward BTS7960 IS wired, so LEFT reverse ADC content is PWM
+         * coupling, not wheel speed.  RIGHT has valid IS evidence in both dirs.
+         * Forward: PI closed-loop on |target| → correct duty (unsigned).
+         * Reverse: open-loop passthrough of raw mixer duty (same as original). */
+        s_meas_left_enabled  = (!rev_left && left_out > BIBA_MOTOR_DEADBAND);
+        s_meas_right_enabled = ((right_out > BIBA_MOTOR_DEADBAND) ||
+                    (right_out < -BIBA_MOTOR_DEADBAND));
+        s_meas_left_reverse  = rev_left;
+        s_meas_right_reverse = rev_right;
+        s_meas_target_hz_left  = s_meas_left_enabled  ? left_out * STANDALONE_RPM_MAX_HZ : 0.0f;
+        s_meas_target_hz_right = s_meas_right_enabled
+                     ? ((right_out < 0.0f ? -right_out : right_out) * STANDALONE_RPM_MAX_HZ)
+                     : 0.0f;
         s_target_hz_left  = (!rev_left  && left_out  > BIBA_MOTOR_DEADBAND)
                             ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
         s_target_hz_right = (!rev_right && right_out > BIBA_MOTOR_DEADBAND)
                             ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
 
-        /* Reverse: bypass PI, use raw mixer duty directly */
         float duty_left  = rev_left  ? left_out  : s_rpm_duty_left;
         float duty_right = rev_right ? right_out : s_rpm_duty_right;
         if (failsafe || !armed) {
@@ -593,24 +631,28 @@ void biba_mode_standalone_tick(void)
     (void)dt;   /* PI dt is configured via cfg.dt_s; tick dt no longer used here */
 
     /* Debug telemetry: emit per-tick line when debug override is active.
-     * Format (CSV): DRIVE_DATA t_ms,thr,str,mix_L,mix_R,tgt_L,tgt_R,
-     *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R
-     * Values: thr/str/mix/duty in [-1,1]; tgt/meas in Hz; int dimensionless. */
+    * Format (CSV): DRIVE_DATA t_ms,thr,str,mix_L,mix_R,tgt_L,tgt_R,
+    *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R,raw_L,raw_R
+    * tgt is signed (negative = reverse command). meas is the interpreted,
+    * signed EMA frequency used for graph tracking; raw is the gated ZC output. */
     if (s_dbg_active) {
-        /* Reconstruct pre-RPM mixer outputs from target Hz (forward) or
-         * duty (reverse) — the signed mixer outputs before the PI block. */
-        float mix_l = s_target_hz_left  > 0.0f
-                      ? s_target_hz_left  / STANDALONE_RPM_MAX_HZ : left_out;
-        float mix_r = s_target_hz_right > 0.0f
-                      ? s_target_hz_right / STANDALONE_RPM_MAX_HZ : right_out;
-        printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f\r\n",
+        bool rev_l_telem = (mix_l_log < -BIBA_MOTOR_DEADBAND);
+        bool rev_r_telem = (mix_r_log < -BIBA_MOTOR_DEADBAND);
+        /* In reverse PI is off (s_target_hz = 0), so derive target from mixer
+         * to get a proper full-sine on the graph: mix * MAX_HZ. */
+        float tgt_l_signed  = rev_l_telem ? mix_l_log * STANDALONE_RPM_MAX_HZ : s_target_hz_left;
+        float tgt_r_signed  = rev_r_telem ? mix_r_log * STANDALONE_RPM_MAX_HZ : s_target_hz_right;
+        float meas_l_signed = s_meas_hz_left;
+        float meas_r_signed = s_meas_hz_right;
+         printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f,%.1f,%.1f\r\n",
                now,
                throttle, steering,
-               mix_l, mix_r,
-               s_target_hz_left, s_target_hz_right,
-               s_meas_hz_left, s_meas_hz_right,
+               mix_l_log, mix_r_log,
+               tgt_l_signed, tgt_r_signed,
+               meas_l_signed, meas_r_signed,
                left_out, right_out,
-               s_rpm_pi_left.integral, s_rpm_pi_right.integral);
+             s_rpm_pi_left.integral, s_rpm_pi_right.integral,
+             s_meas_raw_hz_left, s_meas_raw_hz_right);
     }
 
     /* If actively driving, motors are needed — interrupt melodies.

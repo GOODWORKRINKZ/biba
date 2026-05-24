@@ -63,7 +63,21 @@ static void test_dc_only_returns_zero(void)
 }
 
 /* -----------------------------------------------------------------------
- * Test 4: Too-short input (n < ZC_SUBWIN_K * 4 = 32) → 0.0f
+ * Test 4: Sparse switching spikes can have high pkpk, but low per-block
+ * std-dev.  They are PWM/EMI evidence, not wheel rotation.
+ * ----------------------------------------------------------------------- */
+static void test_sparse_switching_noise_returns_zero(void)
+{
+    static uint16_t buf[1024];
+    for (uint16_t i = 0; i < 1024; ++i) {
+        buf[i] = (i % 64u == 0u) ? 2190u : 2048u;
+    }
+    float hz = zc_freq_hz(buf, 1024, 10000u);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, hz);
+}
+
+/* -----------------------------------------------------------------------
+ * Test 5: Too-short input (n < ZC_SUBWIN_K * 4 = 32) → 0.0f
  * ----------------------------------------------------------------------- */
 static void test_too_short_returns_zero(void)
 {
@@ -74,7 +88,7 @@ static void test_too_short_returns_zero(void)
 }
 
 /* -----------------------------------------------------------------------
- * Test 5: EMA update on a valid in-range reading
+ * Test 6: EMA update on a valid in-range reading
  * meas_raw=300, ema=0, target=300 → alpha=0.7 → 0.7*300 + 0.3*0 = 210
  * ----------------------------------------------------------------------- */
 static void test_ema_update_valid_range(void)
@@ -93,6 +107,7 @@ static void run_all(void)
     RUN_TEST(test_pure_sine_300hz);
     RUN_TEST(test_pure_sine_500hz);
     RUN_TEST(test_dc_only_returns_zero);
+    RUN_TEST(test_sparse_switching_noise_returns_zero);
     RUN_TEST(test_too_short_returns_zero);
     RUN_TEST(test_ema_update_valid_range);
 }

@@ -33,6 +33,19 @@ extern "C" {
  * at ~110 Hz — above the ZC_MIN_VALID_HZ=80 gate — corrupting the EMA. */
 #define ZC_SUBWIN_MIN_PKPK   120u
 
+/* Minimum per-block sample standard deviation (LSB) to consider a block
+ * "active". This is a much stronger discriminator than pkpk alone because
+ * pkpk picks up single PWM switching edges, while std measures variability
+ * across the whole sub-window — real BEMF/current oscillation produces
+ * std ≥ 50, whereas PWM/EMI noise on a stopped motor stays at std ≤ 25.
+ *
+ * Calibrated from fullsine sweepraw n=157 (amp100 per8000) where the LEFT
+ * H-bridge reverse chip's IS pin is physically disconnected:
+ *   - Motor STOPPED (LEFT in REV, only PWM noise):  std = 10–26 LSB
+ *   - Motor RUNNING (LEFT FWD / RIGHT both dirs):   std = 50–450 LSB
+ * Threshold 40 cleanly separates the two regimes. */
+#define ZC_SUBWIN_MIN_STD    40.0f
+
 /* Low-side validity gate for zc_ema_update: readings below this are treated
  * as noise-floor (back-EMF saturation / no IS current) rather than real
  * commutation frequency. */

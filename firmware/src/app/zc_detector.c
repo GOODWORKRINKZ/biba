@@ -4,6 +4,8 @@
 
 #include "zc_detector.h"
 
+#include <math.h>
+
 float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
 {
     if (n < ZC_SUBWIN_K * 4u) return 0.0f;
@@ -13,12 +15,24 @@ float zc_freq_hz(const uint16_t *buf, uint16_t n, uint32_t sps)
     for (uint16_t b = 0; b < ZC_SUBWIN_K; ++b) {
         const uint16_t *seg = buf + (uint32_t)b * blk;
         uint16_t mn = seg[0], mx = seg[0];
+        uint64_t sum = seg[0];
+        uint64_t sum_sq = (uint64_t)seg[0] * (uint64_t)seg[0];
         for (uint16_t i = 1; i < blk; ++i) {
-            if (seg[i] < mn) mn = seg[i];
-            if (seg[i] > mx) mx = seg[i];
+            uint16_t v = seg[i];
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+            sum += v;
+            sum_sq += (uint64_t)v * (uint64_t)v;
         }
         uint16_t pkpk = (uint16_t)(mx - mn);
         if (pkpk < ZC_SUBWIN_MIN_PKPK) continue;
+        /* Per-block std-dev gate: rejects PWM/EMI noise that has high pkpk
+         * (single switching edges) but low overall variability. */
+        float mean_f = (float)sum / (float)blk;
+        float var_f  = ((float)sum_sq / (float)blk) - (mean_f * mean_f);
+        if (var_f < 0.0f) var_f = 0.0f;
+        float std_f  = sqrtf(var_f);
+        if (std_f < ZC_SUBWIN_MIN_STD) continue;
         active_blocks++;
         int32_t mid  = ((int32_t)mn + (int32_t)mx) / 2;
         int32_t hyst = (int32_t)pkpk / 4;

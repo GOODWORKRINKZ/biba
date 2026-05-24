@@ -154,13 +154,15 @@ bool biba_melody_player_tick(biba_melody_player_t *p, uint32_t now_ms)
         return false;
     }
 
-    /* Emit next note. */
+    /* Emit next note.
+     * Audio duty < 0.5 reduces push-pull symmetry → lower coil current →
+     * quieter tone.  0.35 ≈ half the current amplitude of symmetric 0.5. */
     biba_note_t ln = p->melody->left [p->pos];
     biba_note_t rn = p->melody->right[p->pos];
     p->pos++;
 
     uint32_t freq[4] = { ln.freq_hz, 0u, rn.freq_hz, 0u };
-    float    duty[4] = { 0.5f,       0.0f, 0.5f,     0.0f };
+    float    duty[4] = { 0.35f,      0.0f, 0.35f,    0.0f };
     biba_hal_motor_audio_set_all(freq, duty);
 
     uint16_t dur = (ln.dur_ms > rn.dur_ms) ? ln.dur_ms : rn.dur_ms;
