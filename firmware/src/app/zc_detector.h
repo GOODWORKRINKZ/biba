@@ -23,8 +23,15 @@ extern "C" {
 #define ZC_SUBWIN_K          8u
 
 /* Minimum per-block peak-to-peak (LSB) to consider a block "active" — blocks
- * with less AC content are skipped (DC-only or noise-floor segments). */
-#define ZC_SUBWIN_MIN_PKPK   30u
+ * with less AC content are skipped (DC-only or noise-floor segments).
+ *
+ * Calibrated from bench data (sweepraw n=196 SIN amp35):
+ *   - Motor STOPPED (PWM noise only):  pkpk = 87–170 LSB, median 117
+ *   - Motor RUNNING at >15% duty:       pkpk = 100–613 LSB, median 264
+ * Threshold 120 gives 0% false positives (stopped) while keeping 84% of
+ * real-signal windows.  The previous value of 30 allowed PWM noise through
+ * at ~110 Hz — above the ZC_MIN_VALID_HZ=80 gate — corrupting the EMA. */
+#define ZC_SUBWIN_MIN_PKPK   120u
 
 /* Low-side validity gate for zc_ema_update: readings below this are treated
  * as noise-floor (back-EMF saturation / no IS current) rather than real
