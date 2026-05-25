@@ -160,7 +160,12 @@ Plans:
   3. Файл содержит все поля: timestamp, throttle, rudder, duty L/R, rpm L/R, active_blocks, mean_is, latch_resets, vbat, PI state
   4. При полном flash: звук ошибки при первом CH8; второй CH8 — удаляет старейшую сессию
   5. `python3 scripts/biba_blackbox_download.py` скачивает файлы и конвертирует в CSV без ручных команд
-**Plans**: TBD
+**Plans**: 3 plans, 3 waves
+
+Plans:
+- [ ] 08-01-PLAN.md — LittleFS C++ wrapper (blackbox.h/cpp), config defines, biba_hal serial write, native Unity tests (wave 1)
+- [ ] 08-02-PLAN.md — mode_standalone.c integration: CH8 state machine, session lifecycle, per-tick record write, flash-full flow (wave 2, depends on 08-01)
+- [ ] 08-03-PLAN.md — CDC bb shell commands + scripts/biba_blackbox_download.py (wave 3, depends on 08-01, 08-02)
 
 Features deferred beyond current milestone (v2+):
 
