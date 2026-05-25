@@ -174,6 +174,26 @@ static float    s_saved_motor_trim;
 static uint32_t s_trim_gesture_start_ms;
 static bool     s_trim_gesture_consumed;
 
+/* BTS7960 thermal-latch auto-recovery detector ---------------------------
+ * Condition (all three, in DMA IRQ): duty > 0.05, active_blocks == 0,
+ * mean IS raw > LATCH_IS_RAW_MIN.  LATCH_BLOCKS_CONFIRM consecutive DMA
+ * windows (≈150 ms) required before the flag is set.
+ *
+ * active_blocks == 0 is the key discriminator: a real stalled motor still
+ * has 20 kHz PWM ripple visible on IS → active_blocks > 0.  A latched
+ * chip outputs a flat fault-current DC → active_blocks = 0.
+ *
+ * The flag is consumed in the main-context tick (not the IRQ) so that
+ * biba_bts7960_thermal_reset() / sleep_us() never run inside an ISR. */
+#define LATCH_IS_RAW_MIN      3500u  /* ≈2.82 V; empirical: normal high-load mean ≈3400,
+                                      * latch saturates ADC to 4095.  Margin: ~600 LSB. */
+#define LATCH_BLOCKS_CONFIRM     3u   /* 3 × ~51 ms DMA window ≈ 150 ms confirmation */
+#define LATCH_COOLDOWN_WINDOWS  20u   /* 20 × ~51 ms ≈ 1 s spin-up grace after reset */
+static volatile uint8_t s_latch_cnt_left;
+static volatile uint8_t s_latch_cnt_right;
+static volatile bool    s_latch_reset_pending;
+static volatile uint8_t s_latch_cooldown;   /* windows remaining in post-reset cooldown */
+
 /* RGB LED state machine -------------------------------------------------- */
 static uint32_t s_led_blink_ms;   /* last blink toggle timestamp */
 static bool     s_led_blink_on;
@@ -346,6 +366,55 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
                                         s_target_hz_left,  pi_meas_hz_left);
     s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
                                         s_target_hz_right, pi_meas_hz_right);
+
+    /* --- Thermal-latch auto-recovery (ISR context) ----------------------
+     * Compute mean IS raw for each channel and check for fault signature:
+     * high DC (fault-current) + no AC blocks (no commutation ripple) +
+     * non-trivial commanded duty.  Gate on s_meas_*_enabled so disarmed /
+     * measurement-off channels never trigger a false reset. */
+    uint32_t sum_l = 0u, sum_r = 0u;
+    for (uint16_t i = 0; i < samples_per_channel; ++i) {
+        sum_l += s_adc_left_buf[i];
+        sum_r += s_adc_right_buf[i];
+    }
+    uint16_t mean_is_left  = (uint16_t)(sum_l / samples_per_channel);
+    uint16_t mean_is_right = (uint16_t)(sum_r / samples_per_channel);
+
+    float duty_l = s_rpm_duty_left;
+    float duty_r = s_rpm_duty_right;
+    /* Skip detection during post-reset cooldown: motor spinning up from zero
+     * has high IS current and low active_blocks — identical to latch signature.
+     * Cooldown of ~1 s lets commutation ripple become visible before re-arming. */
+    if (s_latch_cooldown > 0u) {
+        --s_latch_cooldown;
+        s_latch_cnt_left  = 0u;
+        s_latch_cnt_right = 0u;
+    } else {
+        if (s_meas_left_enabled
+            && (duty_l > 0.05f || duty_l < -0.05f)
+            && zc_left.active_blocks == 0u
+            && mean_is_left > LATCH_IS_RAW_MIN) {
+            if (++s_latch_cnt_left >= LATCH_BLOCKS_CONFIRM) {
+                s_latch_cnt_left      = 0u;
+                s_latch_reset_pending = true;
+                s_latch_cooldown      = LATCH_COOLDOWN_WINDOWS;
+            }
+        } else {
+            s_latch_cnt_left = 0u;
+        }
+        if (s_meas_right_enabled
+            && (duty_r > 0.05f || duty_r < -0.05f)
+            && zc_right.active_blocks == 0u
+            && mean_is_right > LATCH_IS_RAW_MIN) {
+            if (++s_latch_cnt_right >= LATCH_BLOCKS_CONFIRM) {
+                s_latch_cnt_right     = 0u;
+                s_latch_reset_pending = true;
+                s_latch_cooldown      = LATCH_COOLDOWN_WINDOWS;
+            }
+        } else {
+            s_latch_cnt_right = 0u;
+        }
+    }
 
     (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
                                        BIBA_ADC_CHAN_IS_RIGHT,
@@ -531,6 +600,18 @@ void biba_mode_standalone_tick(void)
     }
     s_armed = armed;
     biba_hal_ssr_set(armed);              /* D-10: SSR HIGH=armed, LOW=disarmed */
+
+    /* Thermal-latch auto-recovery: flag set by ADC IRQ, consumed here.
+     * Only act while armed; discard stale flag on disarm. */
+    if (s_latch_reset_pending) {
+        s_latch_reset_pending = false;
+        if (armed) {
+            biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+            biba_rpm_pi_reset(&s_rpm_pi_left);
+            biba_rpm_pi_reset(&s_rpm_pi_right);
+            printf("[biba] LATCH RESET\r\n");
+        }
+    }
 
     /* ------------------------------------------------------------------ *
      * Speed mode  (3-position switch → 1/3 / 2/3 / full scale)
