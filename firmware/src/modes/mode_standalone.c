@@ -299,6 +299,22 @@ static void process_debug_serial(void)
         s_rpm_duty_left = 0.0f;
         s_rpm_duty_right = 0.0f;
         printf("[biba] DBG open-loop OFF\r\n");
+    } else if (strcmp(line, "bb list") == 0) {
+        blackbox_list_sessions();
+    } else if (strncmp(line, "bb get ", 7) == 0) {
+        if (s_bb_recording) {
+            printf("ERR:RECORDING_ACTIVE\r\n");
+        } else {
+            blackbox_send_session(line + 7);
+        }
+    } else if (strncmp(line, "bb del ", 7) == 0) {
+        if (s_bb_recording) {
+            printf("ERR:RECORDING_ACTIVE\r\n");
+        } else {
+            blackbox_delete_session(line + 7);
+        }
+    } else if (strcmp(line, "bb info") == 0) {
+        blackbox_info();
     } else if (s_dbg_active) {
         int thr_pct = 0, str_pct = 0;
         if (sscanf(line, "SET T=%d S=%d", &thr_pct, &str_pct) == 2) {
