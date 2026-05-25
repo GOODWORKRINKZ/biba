@@ -16,8 +16,8 @@ progress:
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 7 — IS-RPM Integration
-**Status:** Phase 7 COMPLETE — PI loop integrated, latch auto-recovery implemented and field-validated.
+**Phase:** Phase 8 — Session Flight Recorder
+**Status:** Phase 8 context captured — ready for research + planning.
 **Last updated:** 2026-05-25
 
 ## Current Phase

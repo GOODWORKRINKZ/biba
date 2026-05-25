@@ -16,6 +16,7 @@
 - [x] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry (completed 2026-05-22)
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
 - [x] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow (completed 2026-05-25)
+- [ ] **Phase 8: Session Flight Recorder** — LittleFS black box on RP2040 flash, CH8 trigger + SOS tone, binary .bbd session files, Python download script via USB CDC
 
 ---
 
@@ -149,7 +150,17 @@ Plans:
 
 ---
 
-## Backlog
+### Phase 8: Session Flight Recorder
+**Goal**: Чёрный ящик на RP2040 — запись телеметрии сессии в LittleFS flash + чтение через USB CDC Python-скрипт
+**Depends on**: Phase 7
+**Requirements**: BB-01, BB-02, BB-03
+**Success Criteria** (what must be TRUE):
+  1. CH8 HIGH — биба играет SOS-мелодию, режим записи активирован
+  2. При арминге с активным BB — открывается session_NNNN.bbd, запись с BIBA_BLACKBOX_RATE_HZ
+  3. Файл содержит все поля: timestamp, throttle, rudder, duty L/R, rpm L/R, active_blocks, mean_is, latch_resets, vbat, PI state
+  4. При полном flash: звук ошибки при первом CH8; второй CH8 — удаляет старейшую сессию
+  5. `python3 scripts/biba_blackbox_download.py` скачивает файлы и конвертирует в CSV без ручных команд
+**Plans**: TBD
 
 Features deferred beyond current milestone (v2+):
 
