@@ -190,6 +190,12 @@
 #  define BIBA_MOTOR_DEADBAND               0.05f
 #endif
 
+/* Operator steering input deadband. The transmitter stick can mechanically
+ * stick near center; below this threshold straight throttle must remain straight. */
+#ifndef BIBA_STEERING_DEADBAND
+#  define BIBA_STEERING_DEADBAND            0.20f
+#endif
+
 /* Trim gesture: hold the first 4 RC channels above this threshold
  * for BIBA_TRIM_CONFIRM_HOLD_MS (while disarmed) to enter/exit trim mode.
  * Matches biba-controller/main.py _TRIM_GESTURE_HIGH_THRESHOLD / MOTOR_TRIM_CONFIRM_HOLD_S. */

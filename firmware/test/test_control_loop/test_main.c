@@ -33,6 +33,20 @@ static void test_clamp_unit_bounds(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-6, 0.3f, biba_clamp_unit(0.3f));
 }
 
+static void test_deadband_zeroes_stuck_neutral_input(void)
+{
+    TEST_ASSERT_FLOAT_WITHIN(1e-6, 0.0f, biba_apply_deadband(0.19f, 0.20f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6, 0.0f, biba_apply_deadband(0.20f, 0.20f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6, 0.0f, biba_apply_deadband(-0.20f, 0.20f));
+}
+
+static void test_deadband_rescales_remaining_range_proportionally(void)
+{
+    TEST_ASSERT_FLOAT_WITHIN(1e-6, 0.5f, biba_apply_deadband(0.60f, 0.20f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6, -0.5f, biba_apply_deadband(-0.60f, 0.20f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6, 1.0f, biba_apply_deadband(1.0f, 0.20f));
+}
+
 static void test_limiter_passes_through_when_below_limits(void)
 {
     biba_limit_result_t r = biba_apply_motor_limits(
@@ -177,6 +191,8 @@ static void test_failsafe_reactivates_after_timeout(void)
 static void run_all(void)
 {
     RUN_TEST(test_clamp_unit_bounds);
+    RUN_TEST(test_deadband_zeroes_stuck_neutral_input);
+    RUN_TEST(test_deadband_rescales_remaining_range_proportionally);
     RUN_TEST(test_limiter_passes_through_when_below_limits);
     RUN_TEST(test_limiter_scales_each_motor_independently_by_current);
     RUN_TEST(test_limiter_scales_by_power_using_supply_voltage);

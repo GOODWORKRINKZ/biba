@@ -37,6 +37,9 @@ typedef struct {
 /* Clamp `value` into [-1.0, 1.0]. Exposed for tests. */
 float biba_clamp_unit(float value);
 
+/* Apply a centered input deadband and rescale the remaining range to [-1, 1]. */
+float biba_apply_deadband(float value, float deadband);
+
 /* Apply independent current/power limits to a pair of motor commands. */
 biba_limit_result_t biba_apply_motor_limits(float requested_left,
                                             float requested_right,

@@ -10,6 +10,19 @@ float biba_clamp_unit(float value)
     return value;
 }
 
+float biba_apply_deadband(float value, float deadband)
+{
+    value = biba_clamp_unit(value);
+    if (deadband <= 0.0f) return value;
+    if (deadband >= 1.0f) return 0.0f;
+
+    float magnitude = value < 0.0f ? -value : value;
+    if (magnitude <= deadband) return 0.0f;
+
+    float scaled = (magnitude - deadband) / (1.0f - deadband);
+    return value < 0.0f ? -scaled : scaled;
+}
+
 static float clamp_abs(float value, float limit)
 {
     if (limit <= 0.0f) return value;
