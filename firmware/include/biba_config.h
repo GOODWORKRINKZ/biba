@@ -251,4 +251,17 @@
 #  define BIBA_RPM_SETPOINT_ZERO_HOLD_MS 150u
 #endif
 
+/* Motor calibration — MY1016Z3 24V 350W, 2-pole 4-brush
+ * G=9:1 planetary gearbox, N_comm=16 commutator bars
+ * Verified: 798.4 Hz @ 329 RPM wheel → G*N = 144.0 (1.1% err vs 145.6 measured) */
+#ifndef BIBA_RPM_GEAR_RATIO
+#  define BIBA_RPM_GEAR_RATIO             9
+#endif
+#ifndef BIBA_RPM_COMMUTATOR_BARS
+#  define BIBA_RPM_COMMUTATOR_BARS        16
+#endif
+#ifndef BIBA_RPM_PULSES_PER_WHEEL_REV
+#  define BIBA_RPM_PULSES_PER_WHEEL_REV   (BIBA_RPM_GEAR_RATIO * BIBA_RPM_COMMUTATOR_BARS)  /* 144 */
+#endif
+
 #endif /* BIBA_CONFIG_H */
