@@ -13,7 +13,6 @@
 #include "biba_board.h"
 #include "biba_config.h"
 #include "biba_proto.h"
-#include "drivers/ads1115.h"
 #include "drivers/aht30.h"
 
 #include "pico/stdlib.h"
@@ -54,6 +53,7 @@ static void crsf_uart_isr(void)
 
 static volatile uint32_t s_adc_scan_count;
 
+#if BIBA_TARGET_HAS_SPI_SLAVE
 /* --- SPI slave (DMA-driven, non-blocking) ------------------------------- */
 
 static int  s_spi_dma_tx = -1;
@@ -94,6 +94,7 @@ static void spi_slave_init(void)
 /* --- Mode-select latch -------------------------------------------------- */
 
 static bool s_mode_sel_latched_companion;
+#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
 /* --- WS2812 forward declaration ---------------------------------------- */
 
@@ -119,6 +120,7 @@ void biba_hal_init(void)
         gpio_put(en_pins[i], 0);
     }
 
+#if BIBA_TARGET_HAS_SPI_SLAVE
     /* DATA_READY output, start low. */
     gpio_init(BIBA_PIN_DATA_READY_GPIO);
     gpio_set_dir(BIBA_PIN_DATA_READY_GPIO, GPIO_OUT);
@@ -129,6 +131,7 @@ void biba_hal_init(void)
     gpio_set_dir(BIBA_PIN_MODE_SEL_GPIO, GPIO_IN);
     gpio_pull_up(BIBA_PIN_MODE_SEL_GPIO);
     s_mode_sel_latched_companion = !gpio_get(BIBA_PIN_MODE_SEL_GPIO);
+#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
     /* IMU interrupt input, no pull (external pull on board). */
     gpio_init(BIBA_PIN_IMU_INT1_GPIO);
@@ -140,19 +143,18 @@ void biba_hal_init(void)
 
     /* ADC --------------------------------------------------------------- */
     adc_init();
-    /* Phase 06: GP26 = ADC0 = IS_LEFT (RC-filtered), GP27 = ADC1 = IS_RIGHT (RC-filtered). */
-    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_LEFT  */
-    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_RIGHT */
+    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_RIGHT */
+    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_LEFT  */
+    adc_gpio_init(28u);   /* GP28 = ADC2 = BIBA_ADC_CHAN_VBAT     */
+    adc_gpio_init(29u);   /* GP29 = ADC3 = BIBA_ADC_CHAN_IBAT     */
 
-    /* I2C0 for IMU, ADS1115 (0x48), AHT30 (0x38) ----------------------- */
+    /* I2C0 for IMU and AHT30 (0x38) ------------------------------------ */
     i2c_init(BIBA_I2C_INST, 400000u);
     gpio_set_function(BIBA_PIN_I2C_SDA_GPIO, GPIO_FUNC_I2C);
     gpio_set_function(BIBA_PIN_I2C_SCL_GPIO, GPIO_FUNC_I2C);
     gpio_pull_up(BIBA_PIN_I2C_SDA_GPIO);
     gpio_pull_up(BIBA_PIN_I2C_SCL_GPIO);
 
-    /* Initialise ADS1115 (Phase 06: VBAT/IBAT via AIN0/AIN1) and AHT30 (temp/humidity). */
-    (void)ads1115_init(ADS1115_ADDR, ADS1115_FSR_4096MV);
     (void)aht30_init();
 
     /* CRSF and SPI slave are initialised lazily on first use. */
@@ -242,7 +244,11 @@ void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
 
 void biba_hal_data_ready_set(bool on)
 {
+#if BIBA_TARGET_HAS_SPI_SLAVE
     gpio_put(BIBA_PIN_DATA_READY_GPIO, on ? 1u : 0u);
+#else
+    (void)on;
+#endif
 }
 
 void biba_hal_data_ready_pulse(void)
@@ -254,7 +260,11 @@ void biba_hal_data_ready_pulse(void)
 
 bool biba_hal_mode_sel_is_companion(void)
 {
+#if BIBA_TARGET_HAS_SPI_SLAVE
     return s_mode_sel_latched_companion;
+#else
+    return false;  /* no SPI slave — always standalone */
+#endif
 }
 
 void biba_hal_left_enable(bool enabled)
@@ -348,6 +358,7 @@ biba_hal_crsf_diag_t biba_hal_crsf_diag(void)
 
 /* --- SPI2 slave --------------------------------------------------------- */
 
+#if BIBA_TARGET_HAS_SPI_SLAVE
 void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx)
 {
     if (!s_spi_init_done) {
@@ -385,6 +396,10 @@ bool biba_hal_spi_slave_poll(void)
 {
     return !s_spi_busy;
 }
+#else
+void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx) { (void)tx; (void)rx; }
+bool biba_hal_spi_slave_poll(void) { return true; }
+#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
 /* --- I2C0 (IMU) --------------------------------------------------------- */
 
