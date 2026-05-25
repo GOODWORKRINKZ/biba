@@ -239,7 +239,7 @@
 #endif
 
 #ifndef BIBA_RPM_SETPOINT_ACCEL_RATE
-#  define BIBA_RPM_SETPOINT_ACCEL_RATE   0.6f   /* full-scale command / second */
+#  define BIBA_RPM_SETPOINT_ACCEL_RATE   2.0f   /* was 0.6 — ramp faster than physics so PI uses full duty */
 #endif
 #ifndef BIBA_RPM_SETPOINT_DECEL_RATE
 #  define BIBA_RPM_SETPOINT_DECEL_RATE   1.0f   /* 1.0 = full→zero in 1s */
