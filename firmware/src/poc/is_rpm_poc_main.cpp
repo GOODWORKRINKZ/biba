@@ -36,19 +36,28 @@ extern "C" {
 #include "hal/biba_hal.h"
 #include "biba_board.h"
 #include "biba_config.h"
+#include "app/motor_bridge.h"
+#include "app/adc_capture.h"
 }
-#include "poc/adc_capture.h"
 
 static uint16_t s_buf[ADC_CAPTURE_MAX_SAMPLES];
+static uint16_t s_pair_buf[ADC_CAPTURE_MAX_SAMPLES];
+static volatile bool s_capture_pair_done;
 
-/* Re-arm the motor bridge (SSR + half-bridge enables).
- * Called at the start of every motor command so that a prior STOP does not
- * leave the hardware disarmed for the next run. */
+static void on_capture_pair_done(const uint16_t *, uint16_t)
+{
+    s_capture_pair_done = true;
+}
+
+#define IS_POC_REARM_SETTLE_MS  5u
+
+/* Re-arm the motor bridge for the next command. This mirrors the
+ * standalone arm edge by pulsing BTS7960 enables first, which clears a
+ * possible thermal latch after a stalled/aborted previous run. */
 static void ensure_armed(void)
 {
-    biba_hal_ssr_set(true);
-    biba_hal_left_enable(true);
-    biba_hal_right_enable(true);
+    biba_motor_bridge_rearm();
+    delay(IS_POC_REARM_SETTLE_MS);
 }
 
 /* Default spin-up settle window before sampling. Motor inertia + RC-filter
@@ -194,6 +203,8 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
     if (target_hz < 0.0f)    target_hz = 0.0f;
     if (target_hz > 2000.0f) target_hz = 2000.0f;
     const uint8_t adc_chan = motor ? BIBA_ADC_CHAN_IS_RIGHT : BIBA_ADC_CHAN_IS_LEFT;
+
+    ensure_armed();
 
     /* 1. Baseline IS reading with motor off — DC offset on the IS line. */
     if (motor) biba_hal_motor_pwm_right(0.0f); else biba_hal_motor_pwm_left(0.0f);
@@ -408,7 +419,9 @@ static void cmd_capture_both(float signed_duty, bool is_fwd,
 {
     if (signed_duty > 1.0f)  signed_duty = 1.0f;
     if (signed_duty < -1.0f) signed_duty = -1.0f;
-    if (n_samples > ADC_CAPTURE_MAX_SAMPLES) n_samples = ADC_CAPTURE_MAX_SAMPLES;
+    if (n_samples > (ADC_CAPTURE_MAX_SAMPLES / 2u)) {
+        n_samples = ADC_CAPTURE_MAX_SAMPLES / 2u;
+    }
     if (settle_ms == 0u)                    settle_ms = IS_POC_DEFAULT_SETTLE_MS;
     if (settle_ms > IS_POC_MAX_SETTLE_MS)   settle_ms = IS_POC_MAX_SETTLE_MS;
 
@@ -418,7 +431,7 @@ static void cmd_capture_both(float signed_duty, bool is_fwd,
     biba_hal_motor_pwm_right(signed_duty);
     delay(settle_ms);
 
-    adc_capture_init(sps);
+    adc_capture_init(sps * 2u);
 
     Serial.printf("CAPTURE2_START duty=%d dir=%s sps=%lu n=%u settle_ms=%lu\n",
                   (int)(fabsf(signed_duty) * 100.0f),
@@ -427,18 +440,34 @@ static void cmd_capture_both(float signed_duty, bool is_fwd,
                   (unsigned)n_samples,
                   (unsigned long)settle_ms);
 
-    for (uint8_t ch = 0; ch < 2u; ++ch) {
-        bool ok = adc_capture_burst(ch, n_samples, s_buf);
-        if (!ok) {
+    s_capture_pair_done = false;
+    if (!adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
+                                      BIBA_ADC_CHAN_IS_RIGHT,
+                                      n_samples,
+                                      s_pair_buf,
+                                      on_capture_pair_done)) {
+        biba_hal_motor_pwm_left(0.0f);
+        biba_hal_motor_pwm_right(0.0f);
+        Serial.println("ERROR capture busy");
+        return;
+    }
+
+    uint32_t t0 = millis();
+    while (!s_capture_pair_done) {
+        if ((millis() - t0) > 500u) {
             biba_hal_motor_pwm_left(0.0f);
             biba_hal_motor_pwm_right(0.0f);
             Serial.println("ERROR capture timeout");
             return;
         }
+    }
+
+    for (uint8_t ch = 0; ch < 2u; ++ch) {
         Serial.printf("CAPTURE2_CHAN %u\n", (unsigned)ch);
         for (uint16_t i = 0; i < n_samples; ++i) {
-            Serial.print(s_buf[i]);
-            Serial.print((i + 1) < n_samples ? ',' : '\n');
+            const uint32_t idx = (uint32_t)i * 2u + (uint32_t)ch;
+            Serial.print(s_pair_buf[idx]);
+            Serial.print((i + 1u) < n_samples ? ',' : '\n');
         }
     }
 
@@ -457,6 +486,7 @@ static void cmd_chantest(uint8_t run_left, uint8_t run_right,
 {
     if (settle_ms == 0u) settle_ms = IS_POC_DEFAULT_SETTLE_MS;
     if (settle_ms > IS_POC_MAX_SETTLE_MS) settle_ms = IS_POC_MAX_SETTLE_MS;
+    ensure_armed();
     if (run_left)  biba_hal_motor_pwm_left(signed_duty);
     if (run_right) biba_hal_motor_pwm_right(signed_duty);
     delay(settle_ms);
@@ -502,6 +532,8 @@ static void cmd_rpmrun_both(float tgt_l, float tgt_r, uint32_t duration_ms,
     if (tgt_r < 0.0f) tgt_r = 0.0f;
     if (tgt_l > 2000.0f) tgt_l = 2000.0f;
     if (tgt_r > 2000.0f) tgt_r = 2000.0f;
+
+    ensure_armed();
 
     /* Baseline: both motors off */
     biba_hal_motor_pwm_left(0.0f);
@@ -652,6 +684,8 @@ static void cmd_rpmtrack(const char *shape,
     if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
     if (p_start_ms < 200u)   p_start_ms = 200u;
     if (p_end_ms   < 200u)   p_end_ms   = 200u;
+
+    ensure_armed();
 
     /* Baseline */
     biba_hal_motor_pwm_left(0.0f);
@@ -841,6 +875,8 @@ static void cmd_steprun(int duty_start_pct, int duty_end_pct,
     if (post_windows < 1)  post_windows = 1;
     if (post_windows > 100) post_windows = 100;
 
+    ensure_armed();
+
     /* Baseline with motor off */
     biba_hal_motor_pwm_left(0.0f);
     delay(200);
@@ -965,6 +1001,8 @@ static void cmd_sweep(const char *shape, int amp_pct,
         Serial.println("ERR sweep shape must be SIN or TRAP");
         return;
     }
+
+    ensure_armed();
 
     /* Baseline with motor off */
     biba_hal_motor_pwm_left(0.0f);
@@ -1287,6 +1325,8 @@ static void cmd_calrun(int duty_pct, uint32_t settle_ms)
     const uint16_t n_samples = 1024u;
     const uint32_t sps = 10000u;
 
+    ensure_armed();
+
     biba_hal_motor_pwm_left((float)duty_pct / 100.0f);
     delay(settle_ms);
 
@@ -1330,12 +1370,7 @@ void setup(void)
     Serial.begin(115200);
     Serial.ignoreFlowControl(true);
     biba_hal_init();
-    /* Issue 6 fix: ARM the BTS7960. SSR powers the bridge, REN/LEN enables
-     * activate the half-bridges. Without these, PWM drives nothing and the
-     * IS signal is zero. */
-    biba_hal_ssr_set(true);
-    biba_hal_left_enable(true);
-    biba_hal_right_enable(true);
+    ensure_armed();
     Serial.println("IS_POC_READY");
 }
 
