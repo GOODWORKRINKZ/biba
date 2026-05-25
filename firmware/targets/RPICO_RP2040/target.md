@@ -23,13 +23,13 @@ ID платы в PlatformIO: **`rpipico`**.
   R_REN    GPIO OUT  GP8 ┤             ├ GP22  IMU INT1
   R_LEN    GPIO OUT  GP9 ┤             ├ GP21  I2C0_SCL  IMU
                      GND ┤             ├ GP20  I2C0_SDA  IMU
-  SBC SCK  SPI1_SCK GP10 ┤             ├ GP19
-  SBC MISO SPI1_TX  GP11 ┤     RGB     ├ GP18
-  SBC MOSI SPI1_RX  GP12 ┤             ├ GP17
-  SBC NSS  SPI1_CSn GP13 ┤             ├ GP16
-                     GND ┤             ├ GND
-  DATA_RDY GPIO OUT GP14 ┤             ├ GP17
-  MODE_SEL GPIO IN  GP15 ┤             ├ GP16  —
+  —              —     GP10 ┤             ├ GP19
+  —              —     GP11 ┤     RGB     ├ GP18
+  SBC TX   UART1_TX  GP12 ┤             ├ GP17
+  SBC RX   UART1_RX  GP13 ┤             ├ GP16
+                      GND ┤             ├ GND
+  —              —     GP14 ┤             ├ GP17
+  —              —     GP15 ┤             ├ GP16  —
                     3V3 ─┘             └─ GND
                         SWDIO       SWCLK
 ```
@@ -61,16 +61,16 @@ ID платы в PlatformIO: **`rpipico`**.
 | GP0 | CRSF_TX  | ВЫХ UART0  | К пину RX приёмника           |
 | GP1 | CRSF_RX  | ВХ  UART0  | От пина TX приёмника          |
 
-### SPI-слейв для SBC — GP10…GP13
+### UART1 линк к SBC — GP12…GP13
 
-| Пин  | Сигнал      | Направление | Примечание                        |
-|------|-------------|-------------|-----------------------------------|
-| GP10 | SPI1_SCK    | ВХ          | Тактовый сигнал SPI1              |
-| GP11 | SPI1_TX     | ВЫХ         | MISO (RP2040 → SBC)               |
-| GP12 | SPI1_RX     | ВХ          | MOSI (SBC → RP2040)               |
-| GP13 | SPI1_CSn    | ВХ          | Выбор кристалла                   |
-| GP14 | DATA_READY  | ВЫХ GPIO   | Нарастающий фронт = новые данные  |
-| GP15 | MODE_SEL    | ВХ  GPIO   | Pull-up; замкнуть на GND = companion |
+| Пин  | Сигнал   | Направление | Примечание                         |
+|------|----------|-------------|------------------------------------|
+| GP10 | —        | —           | Свободен                           |
+| GP11 | —        | —           | Свободен                           |
+| GP12 | UART1_TX | ВЫХ         | К пину RX одноплатного компьютера  |
+| GP13 | UART1_RX | ВХ          | От пина TX одноплатного компьютера |
+| GP14 | —        | —           | Свободен                           |
+| GP15 | —        | —           | Свободен                           |
 
 ### IMU — GP20…GP22 (правая сторона, 3 пина подряд)
 

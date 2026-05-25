@@ -20,13 +20,13 @@
  *   GP7  PWM3B     R_LPWM  (slice 3, ch B — same carrier)
  *   GP8  GPIO OUT  R_REN
  *   GP9  GPIO OUT  R_LEN
- *   ---- SBC SPI slave (4 consecutive pins) ----------
- *   GP10 SPI1_SCK  SBC SCK
- *   GP11 SPI1_TX   SBC MISO (RP2040 → SBC)
- *   GP12 SPI1_RX   SBC MOSI (SBC → RP2040)
- *   GP13 SPI1_CSn  SBC NSS
- *   GP14 GPIO OUT  DATA_READY to SBC
- *   GP15 GPIO IN   MODE_SEL (pull-up; low = companion)
+ *   ---- SBC UART link (UART1) --------------------------
+ *   GP10 —          (free)
+ *   GP11 —          (free)
+ *   GP12 UART1_TX   SBC RX  (RP2040 → SBC)
+ *   GP13 UART1_RX   SBC TX  (SBC → RP2040)
+ *   GP14 —          (free)
+ *   GP15 —          (free)
  *
  * Pin assignment — right side (GP16-GP29, bottom to top):
  *
@@ -52,7 +52,7 @@
 #define BIBA_TARGET_HAS_BTS7960_2CH 1
 #define BIBA_TARGET_HAS_CRSF        1
 #define BIBA_TARGET_HAS_IMU         1
-#define BIBA_TARGET_HAS_SPI_SLAVE   1
+#define BIBA_TARGET_HAS_SPI_SLAVE   0   /* SBC link switched to UART1 */
 
 #define BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM 0
 
@@ -93,18 +93,12 @@
 #define BIBA_CRSF_UART_INST          uart0
 #define BIBA_CRSF_UART_IRQ           UART0_IRQ
 
-/* --- SPI slave (SPI1) -------------------------------------------------- */
-
-#define BIBA_PIN_SPI_SCK_GPIO        10
-#define BIBA_PIN_SPI_TX_GPIO         11   /* SPI1_TX = MISO when slave */
-#define BIBA_PIN_SPI_RX_GPIO         12   /* SPI1_RX = MOSI when slave */
-#define BIBA_PIN_SPI_CSN_GPIO        13
-#define BIBA_SPI_INST                spi1
-
-/* --- Data-ready / mode-select ------------------------------------------ */
-
-#define BIBA_PIN_DATA_READY_GPIO     14
-#define BIBA_PIN_MODE_SEL_GPIO       15
+/* --- SBC link (UART1, GP12=TX / GP13=RX) ------------------------------- */
+/* SPI slave replaced by UART1. GP10, GP11, GP14, GP15 are free.           */
+#define BIBA_PIN_SBC_TX_GPIO         12   /* UART1_TX → SBC RX */
+#define BIBA_PIN_SBC_RX_GPIO         13   /* UART1_RX ← SBC TX */
+#define BIBA_SBC_UART_INST           uart1
+#define BIBA_SBC_UART_IRQ            UART1_IRQ
 
 /* --- SSR removed — GP16 is free --------------------------------------- */
 /* biba_hal_ssr_init / biba_hal_ssr_set are kept as no-ops in the HAL.    */
