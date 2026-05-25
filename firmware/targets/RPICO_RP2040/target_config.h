@@ -31,6 +31,13 @@
  * At 6S full charge (25.2 V): 25.2 / 10.1 = 2.49 V — within 3.3 V ADC ref. */
 #define BIBA_VBAT_DIVIDER_RATIO      10.1f
 
+/* IBAT — GP29 / ADC3, battery pack current sensor output.
+ * Calibrate BIBA_IBAT_AMPS_PER_VOLT and BIBA_IBAT_ZERO_OFFSET_V from
+ * the actual sensor module datasheet (e.g. ACS712-30A: 66 mV/A, Voffset=1.65V;
+ * ACS758-100B: 20 mV/A, Voffset=0.6V). Placeholders below — MUST be tuned. */
+#define BIBA_IBAT_AMPS_PER_VOLT      15.15f  /* placeholder — tune to sensor */
+#define BIBA_IBAT_ZERO_OFFSET_V      1.65f   /* placeholder — Vout at 0 A    */
+
 /* Phase 06 HW not yet wired: native ADC GP26/GP27 carry noise/old VBAT
  * divider until 1k‖1k + 0.1µF RC filter is installed on BTS7960 IS pins.
  * Disable per-motor current AND power limiters so spurious IS readings

@@ -123,9 +123,10 @@
 #define BIBA_ADC_CHAN_IS_RIGHT       0U   /* GP26 = ADC0, RC-filtered IS right */
 #define BIBA_ADC_CHAN_IS_LEFT        1U   /* GP27 = ADC1, RC-filtered IS left  */
 #define BIBA_ADC_CHAN_VBAT           2U   /* GP28 = ADC2, VBAT voltage divider */
+#define BIBA_ADC_CHAN_IBAT           3U   /* GP29 = ADC3, battery current sensor */
 
-#define BIBA_ADC_SCAN_LEN           3U
-#define BIBA_ADC_CHANNEL_SEQ        { 0, 1, 2 }
+#define BIBA_ADC_SCAN_LEN           4U
+#define BIBA_ADC_CHANNEL_SEQ        { 0, 1, 2, 3 }
 
 /* --- Status LED (GP25, onboard on Pico, active high) ------------------- */
 
