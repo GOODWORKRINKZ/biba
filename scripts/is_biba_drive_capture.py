@@ -218,6 +218,10 @@ class BiBaDebug:
         return False
 
     def enable_debug(self):
+        # Reset any leftover state from a previously killed session, then re-enable.
+        self.send("DBGOFF")
+        time.sleep(0.15)
+        self.ser.reset_input_buffer()
         self.send("DBGON")
         if not self.wait_for("DBG mode ON"):
             sys.exit("Firmware did not acknowledge DBGON. "

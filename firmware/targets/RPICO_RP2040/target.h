@@ -30,7 +30,7 @@
  *
  * Pin assignment — right side (GP16-GP29, bottom to top):
  *
- *   GP16 GPIO OUT  SSR (BTS7960 power relay)
+ *   GP16 —          (free)
  *   GP20 I2C0_SDA  IMU  (SDA)
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
@@ -40,9 +40,8 @@
  *   GP20 I2C0_SDA  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *   GP21 I2C0_SCL  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *
- * Phase 06 topology change: VBAT and IBAT moved to ADS1115 AIN0/AIN1.
- * GP26/GP27 now carry RC-filtered IS signals for RPM PoC.
- * ADS1115 AIN0–AIN1 carry VBAT/IBAT (3DR Power Module outputs).
+ * ADC topology: all three native channels used on-board (no ADS1115).
+ * GP26=IS_RIGHT, GP27=IS_LEFT, GP28=VBAT (resistive divider).
  *
  * Motor audio: L and R pairs each share one PWM slice (fixed wrap),
  * so per-channel independent carriers are not supported.
@@ -107,11 +106,8 @@
 #define BIBA_PIN_DATA_READY_GPIO     14
 #define BIBA_PIN_MODE_SEL_GPIO       15
 
-/* --- SSR (Solid-State Relay — BTS7960 power control) ------------------- */
-/* GP16: first free pin after SBC SPI interface (GP10-GP14) and MODE_SEL   */
-/* (GP15). HIGH = BTS7960 powered (armed); LOW = BTS7960 power off.        */
-/* D-09: SSR pin assignment.                                                */
-#define BIBA_PIN_SSR_GPIO            16
+/* --- SSR removed — GP16 is free --------------------------------------- */
+/* biba_hal_ssr_init / biba_hal_ssr_set are kept as no-ops in the HAL.    */
 
 /* --- IMU (I2C0, GP20=SDA / GP21=SCL) ----------------------------------- */
 /* GP20/GP21 are adjacent on the right side of the board. */
@@ -122,28 +118,20 @@
 
 /* --- ADC ---------------------------------------------------------------- */
 /*
- * Phase 06 topology: RP2040 native ADC GP26/GP27 now carry RC-filtered
- * BTS7960 IS signals for RPM PoC.  VBAT and IBAT (3DR Power Module) are
- * routed to ADS1115 AIN0/AIN1 via I2C0.
+ * Native ADC topology — three channels on-board:
  *
- *   CH0 (GP26) — IS_RIGHT (1kΩ‖1kΩ + 0.1µF RC filter)
- *   CH1 (GP27) — IS_LEFT  (1kΩ‖1kΩ + 0.1µF RC filter)
+ *   CH0 (GP26) — IS_RIGHT (1kΩ‖1kΩ + 0.1µF RC filter from BTS7960 right)
+ *   CH1 (GP27) — IS_LEFT  (1kΩ‖1kΩ + 0.1µF RC filter from BTS7960 left)
+ *   CH2 (GP28) — VBAT     (resistive voltage divider → BIBA_VBAT_DIVIDER_RATIO)
  *
- * ADS1115 AIN0 — VBAT (3DR Power Module voltage output)
- * ADS1115 AIN1 — IBAT (3DR Power Module current output)
+ * No external ADC (ADS1115 not used).
  */
 #define BIBA_ADC_CHAN_IS_RIGHT       0U   /* GP26 = ADC0, RC-filtered IS right */
 #define BIBA_ADC_CHAN_IS_LEFT        1U   /* GP27 = ADC1, RC-filtered IS left  */
+#define BIBA_ADC_CHAN_VBAT           2U   /* GP28 = ADC2, VBAT voltage divider */
 
-#define BIBA_ADC_SCAN_LEN           2U
-#define BIBA_ADC_CHANNEL_SEQ        { 0, 1 }
-
-/* ADS1115 logical channel mapping (AIN0–AIN1 vs GND — Phase 06).
- * AIN0: VBAT via 3DR Power Module resistive divider.
- * AIN1: IBAT via 3DR Power Module current output.
- */
-#define BIBA_ADS1115_CHAN_VBAT       0U   /* AIN0: 3DR PM voltage out  */
-#define BIBA_ADS1115_CHAN_IBAT       1U   /* AIN1: 3DR PM current out  */
+#define BIBA_ADC_SCAN_LEN           3U
+#define BIBA_ADC_CHANNEL_SEQ        { 0, 1, 2 }
 
 /* --- Status LED (GP25, onboard on Pico, active high) ------------------- */
 

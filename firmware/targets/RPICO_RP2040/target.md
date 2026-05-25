@@ -16,10 +16,10 @@ ID платы в PlatformIO: **`rpipico`**.
   L_RPWM   PWM1A     GP2 ┤             ├ GP23
   L_LPWM   PWM1B     GP3 ┤             ├ 3V3
   L_REN    GPIO OUT  GP4 ┤             ├ GP29  ADC3
-  L_LEN    GPIO OUT  GP5 ┤  ┌──────┐   ├ GP28  ADC2  R_IS
+  L_LEN    GPIO OUT  GP5 ┤  ┌──────┐   ├ GP28  ADC2  VBAT
                      GND ┤  │      │   ├ AGND
-  R_RPWM   PWM3A     GP6 ┤  │      │   ├ GP27  ADC1  L_IS
-  R_LPWM   PWM3B     GP7 ┤  └──────┘   ├ GP26  ADC0  VBAT
+  R_RPWM   PWM3A     GP6 ┤  │      │   ├ GP27  ADC1  IS_LEFT
+  R_LPWM   PWM3B     GP7 ┤  └──────┘   ├ GP26  ADC0  IS_RIGHT
   R_REN    GPIO OUT  GP8 ┤             ├ GP22  IMU INT1
   R_LEN    GPIO OUT  GP9 ┤             ├ GP21  I2C0_SCL  IMU
                      GND ┤             ├ GP20  I2C0_SDA  IMU
@@ -29,7 +29,7 @@ ID платы в PlatformIO: **`rpipico`**.
   SBC NSS  SPI1_CSn GP13 ┤             ├ GP16
                      GND ┤             ├ GND
   DATA_RDY GPIO OUT GP14 ┤             ├ GP17
-  MODE_SEL GPIO IN  GP15 ┤             ├ GP16
+  MODE_SEL GPIO IN  GP15 ┤             ├ GP16  —
                     3V3 ─┘             └─ GND
                         SWDIO       SWCLK
 ```
@@ -80,19 +80,21 @@ ID платы в PlatformIO: **`rpipico`**.
 | GP21 | I2C0_SCL  | ВЫХ         | Тактовый I2C0               |
 | GP22 | IMU_INT1  | ВХ  GPIO   | Прерывание от IMU           |
 
-### АЦП — GP26…GP28
+### АЦП — GP26…GP28 (нативный АЦП RP2040)
 
-| Пин  | Канал АЦП | Сигнал       | Примечание                              |
-|------|-----------|--------------|-----------------------------------------|
-| GP26 | CH0       | VBAT         | Делитель напряжения (см. target_config.h) |
-| GP27 | CH1       | IS левого    | Выход IS левого драйвера BTS7960        |
-| GP28 | CH2       | IS правого   | Выход IS правого драйвера BTS7960       |
+| Пин  | Канал АЦП | Сигнал       | Примечание                                            |
+|------|-----------|--------------|-------------------------------------------------------|
+| GP26 | ADC0      | IS_RIGHT     | RC-фильтр 1kΩ‖1kΩ + 0.1µF с IS-пинов BTS7960 правого |
+| GP27 | ADC1      | IS_LEFT      | RC-фильтр 1kΩ‖1kΩ + 0.1µF с IS-пинов BTS7960 левого  |
+| GP28 | ADC2      | VBAT         | Делитель напряжения; соотношение — `BIBA_VBAT_DIVIDER_RATIO` |
 
 ### Прочее
 
-| Пин  | Сигнал      | Примечание                    |
-|------|-------------|-------------------------------|
-| GP25 | STATUS_LED  | Встроенный светодиод, акт. H  |
+| Пин  | Сигнал      | Примечание                                         |
+|------|-------------|----------------------------------------------------|
+| GP16 | —           | Свободен                                         |
+| GP23 | RGB_LED     | ВЫХ WS2812 (NeoPixel), встроенный на YD-RP2040     |
+| GP25 | STATUS_LED  | ВЫХ GPIO; встроенный светодиод Pico, акт. HIGH     |
 
 ## Частота несущей ШИМ
 
@@ -102,10 +104,15 @@ ID платы в PlatformIO: **`rpipico`**.
 
 ## Датчик тока (Current sense)
 
-Каждый BTS7960 выдаёт один сигнал IS для своего полумоста. Прошивка
-читает CH1 для левого мотора и CH2 для правого. Псевдонимы R и L в
-`target.h` оба указывают на один и тот же канал АЦП, так как IS-пин
-на каждом чипе один.
+Все три нативных АЦП-канала RP2040 задействованы:
+
+| Пин  | Канал | Назначение  | Примечание                                            |
+|------|-------|-------------|-------------------------------------------------------|
+| GP26 | ADC0  | IS_RIGHT    | RC-фильтр 1kΩ‖1kΩ + 0.1µF; `BIBA_IS_AMPS_PER_VOLT = 17.0` A/V |
+| GP27 | ADC1  | IS_LEFT     | RC-фильтр 1kΩ‖1kΩ + 0.1µF; `BIBA_IS_AMPS_PER_VOLT = 17.0` A/V |
+| GP28 | ADC2  | VBAT        | Делитель напряжения; `BIBA_VBAT_DIVIDER_RATIO` в target_config.h |
+
+ADS1115 не используется.
 
 ## Сборка прошивки
 
