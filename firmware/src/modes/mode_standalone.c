@@ -550,7 +550,17 @@ void biba_mode_standalone_tick(void)
      * feels more predictable to the operator than the Python-era
      * envelope-limiter that bled steering when throttle saturated. */
     float throttle = raw_throttle;
-    float steering = biba_apply_deadband(raw_steering, BIBA_STEERING_DEADBAND);
+    /* No-rescale deadband: stick 20%→0, 30%→10%, 100%→80%.
+     * Keeps micro-corrections proportional; max authority = 1-DEADBAND. */
+    float steering;
+    {
+        float mag = raw_steering < 0.0f ? -raw_steering : raw_steering;
+        if (mag <= BIBA_STEERING_DEADBAND)
+            steering = 0.0f;
+        else
+            steering = raw_steering < 0.0f ? -(mag - BIBA_STEERING_DEADBAND)
+                                            :  (mag - BIBA_STEERING_DEADBAND);
+    }
 
     /* ------------------------------------------------------------------ *
      * Drive mode  (low position = MANUAL, else = STABILIZED)
