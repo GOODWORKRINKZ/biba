@@ -169,6 +169,13 @@ bool biba_hal_i2c_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
  * Empty lines (\n\n) are silently discarded. */
 bool biba_hal_serial_readline(char *buf, size_t max_len);
 
+/* Write `len` raw bytes to USB CDC without any encoding (used by the
+ * blackbox download protocol to stream binary .bbd data). */
+void biba_hal_serial_write_bytes(const uint8_t *buf, size_t len);
+
+/* Write a NUL-terminated string to USB CDC (convenience wrapper). */
+void biba_hal_serial_write_str(const char *s);
+
 #ifdef __cplusplus
 }
 #endif

@@ -9,6 +9,7 @@
 /* Native test env excludes drivers/, so pull the portable implementation
  * into this test binary explicitly. */
 #include "../../src/drivers/bts7960.c"
+#include "../../src/app/motor_bridge.c"
 
 enum {
     EVT_PWM_LEFT_ZERO = 1,

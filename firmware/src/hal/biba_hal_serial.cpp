@@ -39,3 +39,13 @@ extern "C" bool biba_hal_serial_readline(char *buf, size_t max_len)
     }
     return false;
 }
+
+extern "C" void biba_hal_serial_write_bytes(const uint8_t *buf, size_t len)
+{
+    Serial.write(buf, len);
+}
+
+extern "C" void biba_hal_serial_write_str(const char *s)
+{
+    Serial.print(s);
+}

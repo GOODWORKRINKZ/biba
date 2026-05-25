@@ -264,4 +264,26 @@
 #  define BIBA_RPM_PULSES_PER_WHEEL_REV   (BIBA_RPM_GEAR_RATIO * BIBA_RPM_COMMUTATOR_BARS)  /* 144 */
 #endif
 
+/* --- Blackbox recorder -------------------------------------------------- */
+
+/* Recording rate in Hz (records per second written to LittleFS). */
+#ifndef BIBA_BLACKBOX_RATE_HZ
+#  define BIBA_BLACKBOX_RATE_HZ      10
+#endif
+
+/* Bitmask of fields included in each record (0xFFFF = all 16 fields). */
+#ifndef BIBA_BLACKBOX_FIELD_MASK
+#  define BIBA_BLACKBOX_FIELD_MASK   0xFFFFu
+#endif
+
+/* Minimum free space threshold: if LittleFS free < this, session is blocked. */
+#ifndef BIBA_BLACKBOX_MIN_FREE_KB
+#  define BIBA_BLACKBOX_MIN_FREE_KB  64u
+#endif
+
+/* Alias so either name works: CH8 triggers the blackbox (same as BIBA_CH_BEACON). */
+#ifndef BIBA_CH_BLACKBOX
+#  define BIBA_CH_BLACKBOX  BIBA_CH_BEACON
+#endif
+
 #endif /* BIBA_CONFIG_H */
