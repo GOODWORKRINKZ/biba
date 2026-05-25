@@ -15,7 +15,7 @@
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
 - [x] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry (completed 2026-05-22)
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
-- [ ] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow
+- [x] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow (completed 2026-05-25)
 
 ---
 
@@ -141,11 +141,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — ZC Detector C module (zc_detector.h/c) + async ADC capture (adc_capture.h/c moved + extended) + Unity test_zc_detector
-- [ ] 07-02-PLAN.md — Proto extension (biba_proto.h + telemetry.h/c) + Python decoder (protocol.py + config.py + main.py) + test_stm32_link_protocol
-- [ ] 07-03-PLAN.md — CALRUN command in PoC firmware + scripts/is_rpm_calibrate.py calibration script
-- [ ] 07-04-PLAN.md — RPM PI C module (rpm_pi.h/c) + Unity test_rpm_pi (wave 2, depends on 07-01)
-- [ ] 07-05-PLAN.md — Wire PI into mode_standalone.c (replaces ramp), DMA IRQ state machine, build + smoke test (wave 3)
+- [x] 07-01-PLAN.md — ZC Detector C module (zc_detector.h/c) + async ADC capture (adc_capture.h/c moved + extended) + Unity test_zc_detector
+- [x] 07-02-PLAN.md — Proto extension (biba_proto.h + telemetry.h/c) + Python decoder (protocol.py + config.py + main.py) + test_stm32_link_protocol
+- [x] 07-03-PLAN.md — CALRUN command in PoC firmware + scripts/is_rpm_calibrate.py calibration script
+- [x] 07-04-PLAN.md — RPM PI C module (rpm_pi.h/c) + Unity test_rpm_pi (wave 2, depends on 07-01)
+- [x] 07-05-PLAN.md — Wire PI into mode_standalone.c (replaces ramp), DMA IRQ state machine, build + smoke test (wave 3)
 
 ---
 

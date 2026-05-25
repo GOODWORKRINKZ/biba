@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: complete
-last_updated: "2026-05-22T00:00:00.000Z"
+last_updated: "2026-05-25T00:00:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 7
+  completed_phases: 7
+  total_plans: 18
+  completed_plans: 18
   percent: 100
 ---
 
@@ -16,13 +16,13 @@ progress:
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 6 — IS-Signal RPM Proof-of-Concept
-**Status:** Phase 6 COMPLETE — all must_haves passed, findings documented in 06-FINDINGS.md.
-**Last updated:** 2026-05-23
+**Phase:** Phase 7 — IS-RPM Integration
+**Status:** Phase 7 COMPLETE — PI loop integrated, latch auto-recovery implemented and field-validated.
+**Last updated:** 2026-05-25
 
 ## Current Phase
 
-All phases complete. Next: Phase 7 — интеграция IS-RPM ZC-детектора в основную прошивку.
+All phases complete. Milestone RP2040 Port — DONE.
 
 ## Completed Phases
 
@@ -31,6 +31,7 @@ All phases complete. Next: Phase 7 — интеграция IS-RPM ZC-детек
 - Phase 4: Thermal Hardening & ESC Architecture — complete (UAT passed 2026-05-19)
 - Phase 5: Current Sensing & ADC Architecture — complete (2026-05-22)
 - Phase 6: IS-Signal RPM Proof-of-Concept — complete (2026-05-23)
+- Phase 7: IS-RPM Integration — complete (2026-05-25)
 
 ## Notes
 
@@ -40,7 +41,7 @@ All 10 UAT acceptance criteria passed. 04-UAT.md status=complete.
 
 Phase 5 (Current Sensing & ADC Architecture) complete 2026-05-22: ADS1115+AHT30 drivers, per-wheel current sense, VBAT/IBAT, temp/hum telemetry, protocol extended, all tests green.
 
-Phase 6 (IS-Signal RPM PoC) added 2026-05-22: plan committed. Hardware change: IS_LEFT/RIGHT → GP26/27 native ADC through RC filter (1kΩ‖1kΩ + 0.1µF). VBAT/IBAT → ADS1115 AIN0/AIN1. New pio env `rpico_rp2040_is_poc`. Python scripts for DMA capture + FFT/ZC/autocorr analysis.
+Phase 7 (IS-RPM Integration) complete 2026-05-25: ZC detector + async ADC capture + RPM PI controller wired into mode_standalone.c. Both wheels run closed-loop RPM. wheel_rpm_hz telemetry live. BTS7960 latch auto-recovery via IS signal detector — empirically validated against stall capture data (LATCH_IS_RAW_MIN=3500, cooldown 20 windows). Field tested and confirmed.
 
 Phase 2 (Stabilization & Sensing) remains deferred — no directory yet, may follow after Phase 6.
 
