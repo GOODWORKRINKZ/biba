@@ -162,7 +162,7 @@ bool biba_melody_player_tick(biba_melody_player_t *p, uint32_t now_ms)
     p->pos++;
 
     uint32_t freq[4] = { ln.freq_hz, 0u, rn.freq_hz, 0u };
-    float    duty[4] = { 0.35f,      0.0f, 0.35f,    0.0f };
+    float    duty[4] = { 0.5f,      0.0f, 0.5f,    0.0f };
     biba_hal_motor_audio_set_all(freq, duty);
 
     uint16_t dur = (ln.dur_ms > rn.dur_ms) ? ln.dur_ms : rn.dur_ms;

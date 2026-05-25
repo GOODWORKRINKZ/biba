@@ -79,24 +79,34 @@ float biba_rpm_pi_step(biba_rpm_pi_state_t *s,
 
     const float err = target_mag - meas_hz;
 
-    /* Anti-windup: do not integrate further into saturation, and require
-     * meas_hz > 50 Hz so the integrator does not run away at startup
-     * (matches the PoC cmd_rpmrun gate). */
+    /* Stall recovery: if the wheel has decelerated to near-zero while
+     * a positive target is commanded, the integrator was likely negative
+     * (free-spin > target condition built up negative I).  Reset it so
+     * the controller builds positive I immediately instead of first
+     * unwinding from -2.0 over several seconds. */
+    if (target_mag > 0.0f && meas_hz < 5.0f && s->integral < 0.0f) {
+        s->integral = 0.0f;
+    }
+
+    /* Anti-windup: do not integrate further into saturation.
+     * The meas_hz > 50 gate was removed — it blocked both integration
+     * and stall recovery.  The saturation clamps below are sufficient
+     * to prevent runaway. */
     const float prev_duty_mag = absf(s->prev_duty);
     const bool sat_high = prev_duty_mag >= 0.999f;
     const bool sat_low  = prev_duty_mag <= 0.001f;
     const bool can_integrate =
         !(sat_high && err > 0.0f) &&
-        !(sat_low  && err < 0.0f) &&
-        (meas_hz > 50.0f);
+        !(sat_low  && err < 0.0f);
     if (can_integrate) {
         s->integral += err * cfg->dt_s;
         s->integral = clampf(s->integral, -i_clamp_neg, i_clamp_pos);
     }
 
-    /* P term: gated off when measurement is exactly zero (PoC pattern: no
-     * proportional kick before any valid ZC sample has arrived). */
-    float p_term = (meas_hz == 0.0f) ? 0.0f : (cfg->kp * err);
+    /* P term: apply whenever target is set.  The meas==0 gate was
+     * preventing proportional response exactly when the wheel stalls —
+     * that is the moment we need P most urgently. */
+    float p_term = cfg->kp * err;
     p_term = clampf(p_term, -cfg->p_clamp, cfg->p_clamp);
 
     const float i_term = ki * s->integral;
