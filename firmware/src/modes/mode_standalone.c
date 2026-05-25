@@ -27,6 +27,8 @@
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
 #include "app/melody.h"
+#include "app/blackbox.h"
+#include "drivers/voltage_sense.h"
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
 #define CRSF_FRAMETYPE_DEVICE_PING  0x28u
@@ -193,6 +195,16 @@ static volatile uint8_t s_latch_cnt_left;
 static volatile uint8_t s_latch_cnt_right;
 static volatile bool    s_latch_reset_pending;
 static volatile uint8_t s_latch_cooldown;   /* windows remaining in post-reset cooldown */
+static uint8_t          s_latch_resets;     /* cumulative latch resets (wraps at 255) */
+
+/* --- Blackbox state ---------------------------------------------------- */
+static volatile uint16_t s_mean_is_left;
+static volatile uint16_t s_mean_is_right;
+static bool     s_bb_enabled;
+static bool     s_bb_recording;
+static bool     s_bb_full_warned;
+static uint32_t s_bb_next_ms;
+static uint32_t s_bb_session_num;
 
 /* RGB LED state machine -------------------------------------------------- */
 static uint32_t s_led_blink_ms;   /* last blink toggle timestamp */
@@ -377,8 +389,8 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
         sum_l += s_adc_left_buf[i];
         sum_r += s_adc_right_buf[i];
     }
-    uint16_t mean_is_left  = (uint16_t)(sum_l / samples_per_channel);
-    uint16_t mean_is_right = (uint16_t)(sum_r / samples_per_channel);
+    s_mean_is_left  = (uint16_t)(sum_l / samples_per_channel);
+    s_mean_is_right = (uint16_t)(sum_r / samples_per_channel);
 
     float duty_l = s_rpm_duty_left;
     float duty_r = s_rpm_duty_right;
@@ -393,7 +405,7 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
         if (s_meas_left_enabled
             && (duty_l > 0.05f || duty_l < -0.05f)
             && zc_left.active_blocks == 0u
-            && mean_is_left > LATCH_IS_RAW_MIN) {
+            && s_mean_is_left > LATCH_IS_RAW_MIN) {
             if (++s_latch_cnt_left >= LATCH_BLOCKS_CONFIRM) {
                 s_latch_cnt_left      = 0u;
                 s_latch_reset_pending = true;
@@ -405,7 +417,7 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
         if (s_meas_right_enabled
             && (duty_r > 0.05f || duty_r < -0.05f)
             && zc_right.active_blocks == 0u
-            && mean_is_right > LATCH_IS_RAW_MIN) {
+            && s_mean_is_right > LATCH_IS_RAW_MIN) {
             if (++s_latch_cnt_right >= LATCH_BLOCKS_CONFIRM) {
                 s_latch_cnt_right     = 0u;
                 s_latch_reset_pending = true;
@@ -480,6 +492,11 @@ void biba_mode_standalone_init(void)
 
     /* Play startup fanfare through motor coils. */
     biba_melody_player_start(&s_player, &biba_melody_startup);
+
+    /* Mount LittleFS blackbox partition. */
+    if (!blackbox_init()) {
+        printf("[biba] BB: LittleFS mount failed\r\n");
+    }
 }
 
 static void ingest_crsf(void)
@@ -581,11 +598,30 @@ void biba_mode_standalone_tick(void)
         biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
         printf("[biba] ARMED\r\n");
         biba_melody_player_start(&s_player, &biba_melody_arm);
+        /* Open blackbox session if BB is enabled and flash is not full. */
+        if (s_bb_enabled && !blackbox_is_full(BIBA_BLACKBOX_MIN_FREE_KB)) {
+            s_bb_session_num = blackbox_next_session_num(NULL);
+            if (blackbox_open_session(s_bb_session_num, now,
+                                      BIBA_BLACKBOX_FIELD_MASK,
+                                      BIBA_BLACKBOX_RATE_HZ)) {
+                s_bb_recording = true;
+                s_bb_next_ms   = now;
+                printf("[biba] BB: session %04lu opened\r\n",
+                       (unsigned long)s_bb_session_num);
+            }
+        }
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
             biba_melody_player_start(&s_player, &biba_melody_disarm);
+        }
+        /* Close blackbox session on disarm edge. */
+        if (s_bb_recording) {
+            blackbox_close_session();
+            s_bb_recording = false;
+            printf("[biba] BB: session %04lu closed\r\n",
+                   (unsigned long)s_bb_session_num);
         }
         /* Exit trim mode on disarm edge (safety) */
         s_trim_mode_active = false;
@@ -609,6 +645,7 @@ void biba_mode_standalone_tick(void)
             biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
             biba_rpm_pi_reset(&s_rpm_pi_left);
             biba_rpm_pi_reset(&s_rpm_pi_right);
+            s_latch_resets = (uint8_t)(s_latch_resets + 1u);
             printf("[biba] LATCH RESET\r\n");
         }
     }
@@ -938,6 +975,80 @@ void biba_mode_standalone_tick(void)
         s_sos_next_ms = 0u;
     }
     s_beacon_active = beacon;
+
+    /* ------------------------------------------------------------------ *
+     * Blackbox CH8 state machine (BB trigger = same channel as beacon)
+     * ------------------------------------------------------------------ */
+    {
+        static bool s_bb_ch_prev;
+        bool bb_ch_active = (rc_to_unit(s_channels[BIBA_CH_BLACKBOX]) > BIBA_ARM_THRESHOLD);
+
+        if (bb_ch_active && !s_bb_ch_prev) {
+            /* Rising edge */
+            if (blackbox_is_full(BIBA_BLACKBOX_MIN_FREE_KB)) {
+                if (s_bb_full_warned) {
+                    blackbox_delete_oldest();
+                    s_bb_full_warned = false;
+                    printf("[biba] BB: deleted oldest session\r\n");
+                    /* Fall through: now enable BB for next arm. */
+                    s_bb_enabled = true;
+                    biba_melody_player_start(&s_player, &biba_melody_sos);
+                    printf("[biba] BB: enabled\r\n");
+                } else {
+                    biba_melody_player_start(&s_player, &biba_melody_failsafe);
+                    s_bb_full_warned = true;
+                    printf("[biba] BB: flash full, CH8 again to delete oldest\r\n");
+                    /* Do NOT set s_bb_enabled — block until operator confirms. */
+                }
+            } else {
+                s_bb_enabled     = true;
+                s_bb_full_warned = false;
+                biba_melody_player_start(&s_player, &biba_melody_sos);
+                printf("[biba] BB: enabled\r\n");
+            }
+        } else if (!bb_ch_active && s_bb_ch_prev) {
+            /* Falling edge */
+            s_bb_enabled = false;
+            if (s_bb_recording) {
+                blackbox_close_session();
+                s_bb_recording = false;
+                printf("[biba] BB: session closed (CH8 LOW)\r\n");
+            }
+            printf("[biba] BB: disabled\r\n");
+        }
+        s_bb_ch_prev = bb_ch_active;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Blackbox per-tick record write (rate-throttled)
+     * ------------------------------------------------------------------ */
+    if (s_bb_recording && (int32_t)(now - s_bb_next_ms) >= 0) {
+        s_bb_next_ms = now + (1000u / BIBA_BLACKBOX_RATE_HZ);
+        biba_blackbox_record_t rec;
+        rec.timestamp_ms    = now;
+        rec.throttle        = (int16_t)(throttle * 1000.0f);
+        rec.rudder          = (int16_t)(steering * 1000.0f);
+        rec.duty_left       = (int16_t)(s_rpm_duty_left  * 1000.0f);
+        rec.duty_right      = (int16_t)(s_rpm_duty_right * 1000.0f);
+        rec.rpm_left_hz10   = (uint16_t)(s_spec_hz_left  < 0.0f
+                                         ? -s_spec_hz_left  * 10.0f
+                                         :  s_spec_hz_left  * 10.0f);
+        rec.rpm_right_hz10  = (uint16_t)(s_spec_hz_right < 0.0f
+                                         ? -s_spec_hz_right * 10.0f
+                                         :  s_spec_hz_right * 10.0f);
+        rec.active_blocks_l = (uint8_t)s_freqdet_blocks_left;
+        rec.active_blocks_r = (uint8_t)s_freqdet_blocks_right;
+        rec.mean_is_l       = s_mean_is_left;
+        rec.mean_is_r       = s_mean_is_right;
+        rec.latch_resets    = s_latch_resets;
+        rec.vbat_mv         = biba_voltage_sense_vbat_mv();
+        rec.pi_integral_l   = (int16_t)(s_rpm_pi_left.integral  * 10000.0f);
+        rec.pi_integral_r   = (int16_t)(s_rpm_pi_right.integral * 10000.0f);
+        rec.pi_meas_ema_l   = (uint16_t)(s_telem_meas_ema_left < 0.0f
+                                          ? -s_telem_meas_ema_left * 10.0f
+                                          :  s_telem_meas_ema_left * 10.0f);
+        blackbox_write_record((const uint8_t *)&rec, sizeof(rec));
+    }
 
     /* Advance melody state machine.
      * During reverse pip: use biased tick so motors keep driving while beeping.
