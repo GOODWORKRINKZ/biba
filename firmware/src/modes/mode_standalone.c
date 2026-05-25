@@ -690,6 +690,16 @@ void biba_mode_standalone_tick(void)
         biba_ramp_reset(&s_rpm_setpoint_ramp_right);
     }
 
+    /* Steering integral balance: when ruder is at zero the two wheel PI
+     * integrals may differ (left was pushed up, right down during a turn).
+     * Equalize them immediately so the robot tracks straight without
+     * coasting through the integral decay lag. */
+    if (steering == 0.0f) {
+        float avg = (s_rpm_pi_left.integral + s_rpm_pi_right.integral) * 0.5f;
+        s_rpm_pi_left.integral  = avg;
+        s_rpm_pi_right.integral = avg;
+    }
+
     /* Bidirectional RPM closed-loop.
      * The IS estimators return frequency magnitude only — they cannot infer
      * direction.  This adapter owns the physical quadrant map: it decides
