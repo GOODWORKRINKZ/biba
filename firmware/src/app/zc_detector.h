@@ -49,7 +49,7 @@ extern "C" {
 /* Low-side validity gate for zc_ema_update: readings below this are treated
  * as noise-floor (back-EMF saturation / no IS current) rather than real
  * commutation frequency. */
-#define ZC_MIN_VALID_HZ      80.0f
+#define ZC_MIN_VALID_HZ      50.0f
 
 /* EMA smoothing factor for the validity-gated update (alpha=0.7 → 70% weight
  * on the new reading). Two-cycle (~200 ms @ 10 Hz loop) step response. */

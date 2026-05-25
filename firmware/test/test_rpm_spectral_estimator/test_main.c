@@ -105,8 +105,8 @@ static void test_returns_invalid_for_dc_window(void)
 static void test_low_target_reports_target_low_reason(void)
 {
     static uint16_t buf[512];
-    fill_sine(buf, 512, 10000u, 60.0f, 2048u, 500u);
-    biba_rpm_spectral_result_t result = biba_rpm_spectral_estimate(buf, 512, 10000u, 60.0f);
+    fill_sine(buf, 512, 10000u, 40.0f, 2048u, 500u);
+    biba_rpm_spectral_result_t result = biba_rpm_spectral_estimate(buf, 512, 10000u, 40.0f);
     TEST_ASSERT_FALSE(result.valid);
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, result.freq_hz);
     TEST_ASSERT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_TARGET_LOW, result.invalid_reason);

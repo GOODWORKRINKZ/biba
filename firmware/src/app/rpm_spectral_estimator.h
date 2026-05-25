@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define BIBA_RPM_SPECTRAL_MIN_TARGET_HZ      80.0f
+#define BIBA_RPM_SPECTRAL_MIN_TARGET_HZ      50.0f
 #define BIBA_RPM_SPECTRAL_MAX_TARGET_HZ    1200.0f
 #define BIBA_RPM_SPECTRAL_REL_BAND           0.35f
 #define BIBA_RPM_SPECTRAL_ABS_BAND_HZ        80.0f
