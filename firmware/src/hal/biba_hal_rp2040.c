@@ -13,6 +13,8 @@
 #include "biba_board.h"
 #include "biba_config.h"
 #include "biba_proto.h"
+#include "drivers/ads1115.h"
+#include "drivers/aht30.h"
 
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
@@ -138,16 +140,20 @@ void biba_hal_init(void)
 
     /* ADC --------------------------------------------------------------- */
     adc_init();
-    /* ADC-capable pins: GP26 = ADC0 (VBAT), GP27 = ADC1 (rail current). */
-    adc_gpio_init(26u + BIBA_ADC_CHAN_VBAT);
-    adc_gpio_init(26u + BIBA_ADC_CHAN_RAIL_CURRENT);
+    /* Phase 06: GP26 = ADC0 = IS_LEFT (RC-filtered), GP27 = ADC1 = IS_RIGHT (RC-filtered). */
+    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_LEFT  */
+    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_RIGHT */
 
-    /* I2C0 for IMU ------------------------------------------------------- */
+    /* I2C0 for IMU, ADS1115 (0x48), AHT30 (0x38) ----------------------- */
     i2c_init(BIBA_I2C_INST, 400000u);
     gpio_set_function(BIBA_PIN_I2C_SDA_GPIO, GPIO_FUNC_I2C);
     gpio_set_function(BIBA_PIN_I2C_SCL_GPIO, GPIO_FUNC_I2C);
     gpio_pull_up(BIBA_PIN_I2C_SDA_GPIO);
     gpio_pull_up(BIBA_PIN_I2C_SCL_GPIO);
+
+    /* Initialise ADS1115 (Phase 06: VBAT/IBAT via AIN0/AIN1) and AHT30 (temp/humidity). */
+    (void)ads1115_init(ADS1115_ADDR, ADS1115_FSR_4096MV);
+    (void)aht30_init();
 
     /* CRSF and SPI slave are initialised lazily on first use. */
 
@@ -263,17 +269,9 @@ void biba_hal_right_enable(bool enabled)
     gpio_put(BIBA_PIN_RIGHT_LEN_GPIO, enabled ? 1u : 0u);
 }
 
-void biba_hal_ssr_init(void)
-{
-    gpio_init(BIBA_PIN_SSR_GPIO);
-    gpio_set_dir(BIBA_PIN_SSR_GPIO, GPIO_OUT);
-    gpio_put(BIBA_PIN_SSR_GPIO, 0);   /* LOW = SSR off = BTS7960 power off */
-}
+void biba_hal_ssr_init(void)  {}
 
-void biba_hal_ssr_set(bool enabled)
-{
-    gpio_put(BIBA_PIN_SSR_GPIO, enabled ? 1u : 0u);
-}
+void biba_hal_ssr_set(bool enabled)  { (void)enabled; }
 
 /* --- ADC ---------------------------------------------------------------- */
 

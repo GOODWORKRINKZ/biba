@@ -1,0 +1,29 @@
+{
+  "wheel": "left",
+  "date": "2026-05-23",
+  "K_hz_per_pct": 10.106,
+  "dead_hz": 74.32,
+  "r_squared": 1.0,
+  "points": [
+    {
+      "duty_pct": 30,
+      "is_hz": 230.58,
+      "tach_hz": 228.21
+    },
+    {
+      "duty_pct": 50,
+      "is_hz": 428.01,
+      "tach_hz": 430.7
+    },
+    {
+      "duty_pct": 70,
+      "is_hz": 640.5,
+      "tach_hz": 635.62
+    },
+    {
+      "duty_pct": 90,
+      "is_hz": 850.23,
+      "tach_hz": 833.64
+    }
+  ]
+}

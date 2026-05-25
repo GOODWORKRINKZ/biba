@@ -1,0 +1,20 @@
+# t_s, thr_pct, str_pct
+# 2s baseline idle
+0.0, 0, 0
+2.0, 0, 0
+# sharp step up to 100%
+2.1, 100, 0
+# hold 8s — wheel spins up fully
+10.0, 100, 0
+# sharp drop to 0
+10.1, 0, 0
+# coast 5s — observe how fast wheel stops
+15.0, 0, 0
+# second run: sharp step to 60%
+15.1, 60, 0
+# hold 8s
+23.0, 60, 0
+# sharp drop to 0
+23.1, 0, 0
+# coast 5s
+28.0, 0, 0

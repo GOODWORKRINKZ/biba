@@ -17,7 +17,10 @@ void biba_ramp_reset(biba_ramp_t *r)
     r->hold_remaining_s = 0.0f;
 }
 
-float biba_ramp_update(biba_ramp_t *r, float target, float dt)
+float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
+                                  float accel_rate, float decel_rate,
+                                  float reverse_decel_rate,
+                                  uint32_t zero_hold_ms)
 {
     /* Guard: first tick or clock wrap — return current unchanged (Pitfall 1). */
     if (dt <= 0.0f) return r->current;
@@ -36,17 +39,17 @@ float biba_ramp_update(biba_ramp_t *r, float target, float dt)
     }
 
     /* Direction change: decelerate toward zero, do NOT cross it.
-     * Uses BIBA_RAMP_REVERSE_DECEL_RATE (slower than normal decel). */
+     * Uses reverse_decel_rate (slower than normal decel). */
     if ((r->current > 0.0f && target < 0.0f) ||
         (r->current < 0.0f && target > 0.0f)) {
 
-        float max_step = BIBA_RAMP_REVERSE_DECEL_RATE * dt;
+        float max_step = reverse_decel_rate * dt;
         float abs_cur  = (r->current < 0.0f) ? -r->current : r->current;
 
         if (abs_cur <= max_step) {
             /* Reached zero: arm the hold timer. */
             r->current          = 0.0f;
-            r->hold_remaining_s = (float)BIBA_RAMP_ZERO_HOLD_MS / 1000.0f;
+            r->hold_remaining_s = (float)zero_hold_ms / 1000.0f;
         } else if (r->current > 0.0f) {
             r->current -= max_step;
         } else {
@@ -66,7 +69,7 @@ float biba_ramp_update(biba_ramp_t *r, float target, float dt)
     float abs_target  = (target    < 0.0f) ? -target    : target;
     float abs_current = (r->current < 0.0f) ? -r->current : r->current;
     int   accelerating = (abs_target > abs_current);
-    float rate         = accelerating ? BIBA_RAMP_ACCEL_RATE : BIBA_RAMP_DECEL_RATE;
+    float rate         = accelerating ? accel_rate : decel_rate;
     float max_step     = rate * dt;
 
     if (abs_diff <= max_step) {
@@ -80,4 +83,13 @@ float biba_ramp_update(biba_ramp_t *r, float target, float dt)
     if (r->current < -1.0f) r->current = -1.0f;
 
     return r->current;
+}
+
+float biba_ramp_update(biba_ramp_t *r, float target, float dt)
+{
+    return biba_ramp_update_with_rates(r, target, dt,
+                                       BIBA_RAMP_ACCEL_RATE,
+                                       BIBA_RAMP_DECEL_RATE,
+                                       BIBA_RAMP_REVERSE_DECEL_RATE,
+                                       BIBA_RAMP_ZERO_HOLD_MS);
 }

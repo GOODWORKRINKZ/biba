@@ -221,3 +221,120 @@ def test_build_motor_audio_rejects_invalid_args(kwargs):
 
     with pytest.raises(ValueError):
         build_motor_audio(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Phase 05: Telemetry struct — ibat, temperature, humidity round-trip
+# ---------------------------------------------------------------------------
+
+def test_telemetry_ibat_temperature_humidity_roundtrip() -> None:
+    """New fields ibat_a, temperature_c, humidity_pct survive a to_bytes → from_bytes cycle."""
+    tlm = Telemetry(
+        vbat_v=24.0,
+        ibat_a=12.345,
+        temperature_c=27.5,
+        humidity_pct=62.0,
+    )
+    frame = TelemetryFrame(seq=1, flags=0, telemetry=tlm)
+    raw = frame.to_bytes()
+    rt = TelemetryFrame.from_bytes(raw)
+
+    assert rt.telemetry.ibat_a == pytest.approx(12.345, abs=1e-3)
+    assert rt.telemetry.temperature_c == pytest.approx(27.5, abs=0.01)
+    assert rt.telemetry.humidity_pct == pytest.approx(62.0, abs=0.5)
+
+
+def test_telemetry_zero_new_fields_produce_zero_outputs() -> None:
+    """Default Telemetry() (all zeros) → new fields decode as zero."""
+    frame = TelemetryFrame(seq=0, flags=0, telemetry=Telemetry())
+    rt = TelemetryFrame.from_bytes(frame.to_bytes())
+    assert rt.telemetry.ibat_a == 0.0
+    assert rt.telemetry.temperature_c == 0.0
+    assert rt.telemetry.humidity_pct == 0.0
+
+
+def test_telemetry_existing_fields_unaffected_by_new_fields() -> None:
+    """Adding new fields does not shift or corrupt the original layout."""
+    tlm = Telemetry(
+        setpoint_left=0.5,
+        current_left_a=5.0,
+        vbat_v=25.2,
+        gyro_z_dps=90.0,
+        crsf_rssi=200,
+        uptime_ms=999_000,
+        ibat_a=3.0,
+        temperature_c=25.0,
+        humidity_pct=45.0,
+    )
+    rt = TelemetryFrame.from_bytes(TelemetryFrame(seq=2, flags=0, telemetry=tlm).to_bytes()).telemetry
+
+    assert rt.setpoint_left == pytest.approx(0.5, abs=1e-4)
+    assert rt.current_left_a == pytest.approx(5.0, abs=1e-3)
+    assert rt.vbat_v == pytest.approx(25.2, abs=1e-3)
+    assert rt.gyro_z_dps == pytest.approx(90.0, abs=0.01)
+    assert rt.crsf_rssi == 200
+    assert rt.uptime_ms == 999_000
+    assert rt.ibat_a == pytest.approx(3.0, abs=1e-3)
+    assert rt.temperature_c == pytest.approx(25.0, abs=0.01)
+    assert rt.humidity_pct == pytest.approx(45.0, abs=0.5)
+
+
+def test_telemetry_struct_is_still_48_bytes() -> None:
+    """Total packed struct size must remain 48 bytes (backward-compatible)."""
+    import struct as _struct
+    from stm32_link.protocol import TELEMETRY_STRUCT, TELEMETRY_SIZE
+    assert TELEMETRY_SIZE == 48
+    assert _struct.calcsize(TELEMETRY_STRUCT) == 48
+
+
+# ---------------------------------------------------------------------------
+# Phase 07: wheel_rpm telemetry (IS-RPM ZC frequency carved from reserved[11])
+# ---------------------------------------------------------------------------
+
+def test_telemetry_size_still_48() -> None:
+    """Phase 07: adding wheel_rpm fields must not drift struct size."""
+    from stm32_link.protocol import TELEMETRY_SIZE
+    assert TELEMETRY_SIZE == 48
+
+
+def test_wheel_rpm_decode_300hz() -> None:
+    """fields[20]=3000, fields[21]=1500 must decode to 300.0 / 150.0 Hz."""
+    tlm = Telemetry(wheel_rpm_left_hz=300.0, wheel_rpm_right_hz=150.0)
+    raw = TelemetryFrame(seq=11, flags=0, telemetry=tlm).to_bytes()
+    rt = TelemetryFrame.from_bytes(raw)
+    assert rt.telemetry.wheel_rpm_left_hz == pytest.approx(300.0, abs=0.05)
+    assert rt.telemetry.wheel_rpm_right_hz == pytest.approx(150.0, abs=0.05)
+
+
+def test_wheel_rpm_decode_zero() -> None:
+    """Default zeros decode to 0.0 Hz (invalid / stopped sentinel)."""
+    raw = TelemetryFrame(seq=0, flags=0, telemetry=Telemetry()).to_bytes()
+    rt = TelemetryFrame.from_bytes(raw)
+    assert rt.telemetry.wheel_rpm_left_hz == 0.0
+    assert rt.telemetry.wheel_rpm_right_hz == 0.0
+
+
+def test_wheel_rpm_encode_roundtrip() -> None:
+    """Non-integer Hz values survive a to_bytes -> from_bytes cycle within 0.1 Hz."""
+    tlm = Telemetry(wheel_rpm_left_hz=432.7, wheel_rpm_right_hz=428.1)
+    rt = TelemetryFrame.from_bytes(
+        TelemetryFrame(seq=3, flags=0, telemetry=tlm).to_bytes()
+    )
+    assert rt.telemetry.wheel_rpm_left_hz == pytest.approx(432.7, abs=0.1)
+    assert rt.telemetry.wheel_rpm_right_hz == pytest.approx(428.1, abs=0.1)
+
+
+def test_wheel_rpm_zero_invalid_encodes_zero_bytes() -> None:
+    """Telemetry(wheel_rpm_left_hz=0.0) must place 0x0000 at the wheel_rpm slot.
+
+    Layout inside packed payload "<hhhhHHhhhhhhBBbBIhhBHH7s":
+      36 bytes precede the humidity_q8 byte; wheel_rpm_left_hz10 lives at
+      payload offset 37, wheel_rpm_right_hz10 at 39. Frame header is 6 bytes
+      (sync0, sync1, version, cmd, seq, flags), so absolute offsets are 43/45.
+    """
+    raw = TelemetryFrame(seq=0, flags=0, telemetry=Telemetry()).to_bytes()
+    left_hz10 = struct.unpack("<H", raw[6 + 37 : 6 + 39])[0]
+    right_hz10 = struct.unpack("<H", raw[6 + 39 : 6 + 41])[0]
+    assert left_hz10 == 0
+    assert right_hz10 == 0
+

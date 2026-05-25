@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import inspect
 import logging
+import math
 import os
 import signal
 import threading
@@ -65,6 +66,19 @@ _SYNTH_EVENT_NAMES = {
 
 def _clamp_motor_trim(trim: float) -> float:
     return max(-config.MOTOR_TRIM_MAX_EFFECT, min(config.MOTOR_TRIM_MAX_EFFECT, trim))
+
+
+def wheel_rpm_to_mps(rpm_hz: float) -> float:
+    """Convert IS-signal ZC frequency (Hz) to wheel linear speed (m/s).
+
+    Returns 0.0 for rpm_hz <= 0 (no signal / motor stopped) or when the
+    configured GEAR_RATIO is zero (avoids ZeroDivisionError if env is bad).
+    """
+    if rpm_hz <= 0.0:
+        return 0.0
+    if config.GEAR_RATIO == 0.0:
+        return 0.0
+    return (2.0 * math.pi * rpm_hz * config.WHEEL_RADIUS_M) / config.GEAR_RATIO
 
 
 class _NullDrive:

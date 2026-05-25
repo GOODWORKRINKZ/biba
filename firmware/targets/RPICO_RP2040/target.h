@@ -20,24 +20,28 @@
  *   GP7  PWM3B     R_LPWM  (slice 3, ch B — same carrier)
  *   GP8  GPIO OUT  R_REN
  *   GP9  GPIO OUT  R_LEN
- *   ---- SBC SPI slave (4 consecutive pins) ----------
- *   GP10 SPI1_SCK  SBC SCK
- *   GP11 SPI1_TX   SBC MISO (RP2040 → SBC)
- *   GP12 SPI1_RX   SBC MOSI (SBC → RP2040)
- *   GP13 SPI1_CSn  SBC NSS
- *   GP14 GPIO OUT  DATA_READY to SBC
- *   GP15 GPIO IN   MODE_SEL (pull-up; low = companion)
+ *   ---- SBC UART link (UART1) --------------------------
+ *   GP10 —          (free)
+ *   GP11 —          (free)
+ *   GP12 UART1_TX   SBC RX  (RP2040 → SBC)
+ *   GP13 UART1_RX   SBC TX  (SBC → RP2040)
+ *   GP14 —          (free)
+ *   GP15 —          (free)
  *
  * Pin assignment — right side (GP16-GP29, bottom to top):
  *
- *   GP16 GPIO OUT  SSR (BTS7960 power relay)
+ *   GP16 —          (free)
  *   GP20 I2C0_SDA  IMU  (SDA)
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
  *   GP25 GPIO OUT  Onboard LED (active high)
- *   GP26 ADC0      VBAT voltage divider
- *   GP27 ADC1      Left motor IS  (BTS7960 IS pin)
- *   GP28 ADC2      Right motor IS (BTS7960 IS pin)
+ *   GP26 ADC0      IS_RIGHT (1kΩ‖1kΩ RC filter from BTS7960 R IS pins — Phase 06)
+ *   GP27 ADC1      IS_LEFT  (1kΩ‖1kΩ RC filter from BTS7960 L IS pins — Phase 06)
+ *   GP20 I2C0_SDA  IMU + ADS1115 + AHT30 (shared I2C0 bus)
+ *   GP21 I2C0_SCL  IMU + ADS1115 + AHT30 (shared I2C0 bus)
+ *
+ * ADC topology: all three native channels used on-board (no ADS1115).
+ * GP26=IS_RIGHT, GP27=IS_LEFT, GP28=VBAT (resistive divider).
  *
  * Motor audio: L and R pairs each share one PWM slice (fixed wrap),
  * so per-channel independent carriers are not supported.
@@ -48,7 +52,7 @@
 #define BIBA_TARGET_HAS_BTS7960_2CH 1
 #define BIBA_TARGET_HAS_CRSF        1
 #define BIBA_TARGET_HAS_IMU         1
-#define BIBA_TARGET_HAS_SPI_SLAVE   1
+#define BIBA_TARGET_HAS_SPI_SLAVE   0   /* SBC link switched to UART1 */
 
 #define BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM 0
 
@@ -89,24 +93,15 @@
 #define BIBA_CRSF_UART_INST          uart0
 #define BIBA_CRSF_UART_IRQ           UART0_IRQ
 
-/* --- SPI slave (SPI1) -------------------------------------------------- */
+/* --- SBC link (UART1, GP12=TX / GP13=RX) ------------------------------- */
+/* SPI slave replaced by UART1. GP10, GP11, GP14, GP15 are free.           */
+#define BIBA_PIN_SBC_TX_GPIO         12   /* UART1_TX → SBC RX */
+#define BIBA_PIN_SBC_RX_GPIO         13   /* UART1_RX ← SBC TX */
+#define BIBA_SBC_UART_INST           uart1
+#define BIBA_SBC_UART_IRQ            UART1_IRQ
 
-#define BIBA_PIN_SPI_SCK_GPIO        10
-#define BIBA_PIN_SPI_TX_GPIO         11   /* SPI1_TX = MISO when slave */
-#define BIBA_PIN_SPI_RX_GPIO         12   /* SPI1_RX = MOSI when slave */
-#define BIBA_PIN_SPI_CSN_GPIO        13
-#define BIBA_SPI_INST                spi1
-
-/* --- Data-ready / mode-select ------------------------------------------ */
-
-#define BIBA_PIN_DATA_READY_GPIO     14
-#define BIBA_PIN_MODE_SEL_GPIO       15
-
-/* --- SSR (Solid-State Relay — BTS7960 power control) ------------------- */
-/* GP16: first free pin after SBC SPI interface (GP10-GP14) and MODE_SEL   */
-/* (GP15). HIGH = BTS7960 powered (armed); LOW = BTS7960 power off.        */
-/* D-09: SSR pin assignment.                                                */
-#define BIBA_PIN_SSR_GPIO            16
+/* --- SSR removed — GP16 is free --------------------------------------- */
+/* biba_hal_ssr_init / biba_hal_ssr_set are kept as no-ops in the HAL.    */
 
 /* --- IMU (I2C0, GP20=SDA / GP21=SCL) ----------------------------------- */
 /* GP20/GP21 are adjacent on the right side of the board. */
@@ -117,26 +112,19 @@
 
 /* --- ADC ---------------------------------------------------------------- */
 /*
- * RP2040 ADC pins: GP26=CH0, GP27=CH1, GP28=CH2, GP29=CH3.
+ * Native ADC topology — three channels on-board:
  *
- *   CH0 (GP26) — VBAT voltage divider
- *   CH1 (GP27) — Left motor IS  (BTS7960 IS output, left H-bridge)
- *   CH2 (GP28) — Right motor IS (BTS7960 IS output, right H-bridge)
+ *   CH0 (GP26) — IS_RIGHT (1kΩ‖1kΩ + 0.1µF RC filter from BTS7960 right)
+ *   CH1 (GP27) — IS_LEFT  (1kΩ‖1kΩ + 0.1µF RC filter from BTS7960 left)
+ *   CH2 (GP28) — VBAT     (resistive voltage divider → BIBA_VBAT_DIVIDER_RATIO)
  *
- * Each BTS7960 chip exposes a single IS pin for its half-bridge.
- * The R/L aliases both point to the same channel (one IS per driver chip).
+ * No external ADC (ADS1115 not used).
  */
-#define BIBA_ADC_CHAN_LEFT_R_IS     1U   /* GP27 = ADC1, left driver IS  */
-#define BIBA_ADC_CHAN_LEFT_L_IS     1U   /* aliased to same channel       */
-#define BIBA_ADC_CHAN_RIGHT_R_IS    2U   /* GP28 = ADC2, right driver IS  */
-#define BIBA_ADC_CHAN_RIGHT_L_IS    2U   /* aliased to same channel       */
-#define BIBA_ADC_CHAN_VBAT          0U   /* GP26 = ADC0                   */
-#define BIBA_ADC_CHAN_RAIL_12V      0U   /* aliased — not wired           */
-#define BIBA_ADC_CHAN_RAIL_CURRENT  0U   /* aliased — not wired           */
+#define BIBA_ADC_CHAN_IS_RIGHT       0U   /* GP26 = ADC0, RC-filtered IS right */
+#define BIBA_ADC_CHAN_IS_LEFT        1U   /* GP27 = ADC1, RC-filtered IS left  */
+#define BIBA_ADC_CHAN_VBAT           2U   /* GP28 = ADC2, VBAT voltage divider */
 
 #define BIBA_ADC_SCAN_LEN           3U
-
-/* Polled on demand; no DMA sequence needed. */
 #define BIBA_ADC_CHANNEL_SEQ        { 0, 1, 2 }
 
 /* --- Status LED (GP25, onboard on Pico, active high) ------------------- */

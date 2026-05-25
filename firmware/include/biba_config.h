@@ -84,6 +84,15 @@
 #ifndef BIBA_VBAT_DIVIDER_RATIO
 #  define BIBA_VBAT_DIVIDER_RATIO      11.0f
 #endif
+
+/* 3DR Power Module battery current calibration defaults.
+ * Targets with a real power module should override in target_config.h. */
+#ifndef BIBA_IBAT_AMPS_PER_VOLT
+#  define BIBA_IBAT_AMPS_PER_VOLT      1.0f
+#endif
+#ifndef BIBA_IBAT_ZERO_OFFSET_V
+#  define BIBA_IBAT_ZERO_OFFSET_V      0.0f
+#endif
 /* PA5 rail tap uses its own divider. Defaults to the VBAT ratio because
  * the reference Blue Pill wiring shares the 1:11 ladder; a custom board
  * with a dedicated 12 V rail divider should override this in its
@@ -181,6 +190,12 @@
 #  define BIBA_MOTOR_DEADBAND               0.05f
 #endif
 
+/* Operator steering input deadband. The transmitter stick can mechanically
+ * stick near center; below this threshold straight throttle must remain straight. */
+#ifndef BIBA_STEERING_DEADBAND
+#  define BIBA_STEERING_DEADBAND            0.20f
+#endif
+
 /* Trim gesture: hold the first 4 RC channels above this threshold
  * for BIBA_TRIM_CONFIRM_HOLD_MS (while disarmed) to enter/exit trim mode.
  * Matches biba-controller/main.py _TRIM_GESTURE_HIGH_THRESHOLD / MOTOR_TRIM_CONFIRM_HOLD_S. */
@@ -221,6 +236,19 @@
 #endif
 #ifndef BIBA_RAMP_ZERO_HOLD_MS
 #  define BIBA_RAMP_ZERO_HOLD_MS         150u   /* RAMP_ZERO_HOLD_S * 1000 */
+#endif
+
+#ifndef BIBA_RPM_SETPOINT_ACCEL_RATE
+#  define BIBA_RPM_SETPOINT_ACCEL_RATE   0.6f   /* full-scale command / second */
+#endif
+#ifndef BIBA_RPM_SETPOINT_DECEL_RATE
+#  define BIBA_RPM_SETPOINT_DECEL_RATE   1.0f   /* 1.0 = full→zero in 1s */
+#endif
+#ifndef BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE
+#  define BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE 0.5f
+#endif
+#ifndef BIBA_RPM_SETPOINT_ZERO_HOLD_MS
+#  define BIBA_RPM_SETPOINT_ZERO_HOLD_MS 150u
 #endif
 
 #endif /* BIBA_CONFIG_H */

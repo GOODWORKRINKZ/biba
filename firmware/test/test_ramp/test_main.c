@@ -55,6 +55,18 @@ static void test_acceleration_toward_positive_target(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.2f, r.current);
 }
 
+static void test_custom_accel_rate_limits_soft_start(void)
+{
+    biba_ramp_t r;
+    biba_ramp_init(&r);
+
+    float out = biba_ramp_update_with_rates(&r, 1.0f, 0.1f,
+                                            0.6f, 2.0f, 0.5f, 150u);
+
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.06f, out);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.06f, r.current);
+}
+
 /* -----------------------------------------------------------------------
  * Test 5: Deceleration from positive current
  * DECEL_RATE=2.0, current=1.0, target=0, dt=0.1 → step=0.2 → 0.8f
@@ -134,6 +146,7 @@ static void run_all(void)
     RUN_TEST(test_reset_zeroes_running_state);
     RUN_TEST(test_dt_zero_returns_current_unchanged);
     RUN_TEST(test_acceleration_toward_positive_target);
+    RUN_TEST(test_custom_accel_rate_limits_soft_start);
     RUN_TEST(test_deceleration_from_positive);
     RUN_TEST(test_direction_change_uses_reverse_decel_rate);
     RUN_TEST(test_direction_change_triggers_zero_hold);

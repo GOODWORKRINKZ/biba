@@ -26,6 +26,29 @@ void biba_telemetry_collect(const biba_telemetry_input_t *inputs,
 
     out->vbat_mv     = biba_voltage_sense_vbat_mv();
     out->rail_12v_mv = biba_voltage_sense_rail_mv();
+    out->ibat_ma     = clamp_i16((int32_t)(biba_voltage_sense_ibat_a() * 1000.0f));
+
+    /* Temperature and humidity: pre-populated by a low-rate task (≤1 Hz)
+     * that calls aht30_read(); copied directly from the inputs struct.
+     * aht30_read() blocks ~80 ms and must NOT be called here. */
+    out->temperature_cdeg = clamp_i16((int32_t)(inputs->temperature_c * 100.0f));
+    out->humidity_q8      = (inputs->humidity_pct > 100.0f) ? 100u
+                          : (inputs->humidity_pct < 0.0f)   ? 0u
+                          : (uint8_t)inputs->humidity_pct;
+
+    /* IS-signal wheel RPM (ZC frequency x10 for 0.1 Hz resolution). 0 = invalid. */
+    {
+        float lhz = inputs->wheel_rpm_left_hz;
+        float rhz = inputs->wheel_rpm_right_hz;
+        if (lhz < 0.0f) lhz = 0.0f;
+        if (rhz < 0.0f) rhz = 0.0f;
+        uint32_t lq = (uint32_t)(lhz * 10.0f + 0.5f);
+        uint32_t rq = (uint32_t)(rhz * 10.0f + 0.5f);
+        if (lq > 0xFFFFu) lq = 0xFFFFu;
+        if (rq > 0xFFFFu) rq = 0xFFFFu;
+        out->wheel_rpm_left_hz10  = (uint16_t)lq;
+        out->wheel_rpm_right_hz10 = (uint16_t)rq;
+    }
 
     biba_imu_sample_t imu;
     if (biba_imu_read(&imu)) {

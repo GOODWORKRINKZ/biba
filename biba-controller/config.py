@@ -82,6 +82,10 @@ LEFT_MOTOR_MAX_POWER_W = _get_env_float("LEFT_MOTOR_MAX_POWER_W", 180.0)
 RIGHT_MOTOR_MAX_POWER_W = _get_env_float("RIGHT_MOTOR_MAX_POWER_W", 180.0)
 MOTOR_LIMIT_FALLBACK_VOLTAGE = _get_env_float("MOTOR_LIMIT_FALLBACK_VOLTAGE", 24.0)
 
+# --- Wheel odometry (IS-RPM → m/s) ------------------------------------
+WHEEL_RADIUS_M = _get_env_float("WHEEL_RADIUS_M", 0.100)  # 10 cm placeholder
+GEAR_RATIO     = _get_env_float("GEAR_RATIO",     1.0)    # 1.0 = direct drive
+
 CRSF_PORT = os.getenv("CRSF_PORT", "/dev/ttyS0")
 CRSF_BAUD = _get_env_int("CRSF_BAUD", 420000)
 BMS_TRANSPORT = _get_env_choice("BMS_TRANSPORT", "BLE", {"UART", "BLE"})

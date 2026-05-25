@@ -15,7 +15,11 @@
 #include "biba_board.h"
 #include "app/control_loop.h"
 #include "app/failsafe.h"
+#include "app/adc_capture.h"
 #include "app/ramp.h"
+#include "app/zc_detector.h"
+#include "app/rpm_spectral_estimator.h"
+#include "app/rpm_pi.h"
 #include "app/telemetry.h"
 #include "drivers/bts7960.h"
 #include "drivers/crsf.h"
@@ -82,9 +86,79 @@ static const biba_pid_config_t s_heading_cfg = {
 static bool s_armed;   /* tracks arm state across ticks for edge logging */
 static bool s_last_failsafe;
 
-/* Per-motor slew-rate limiters (D-01, D-03). */
-static biba_ramp_t s_ramp_left;
-static biba_ramp_t s_ramp_right;
+/* RPM closed-loop state (per-channel). The PI replaces the old open-loop
+ * duty ramp; the separate setpoint ramp below only softens commanded RPM
+ * changes before they enter the controller. DMA IRQ writes s_rpm_duty_*;
+ * tick reads them. */
+static biba_rpm_pi_state_t  s_rpm_pi_left;
+static biba_rpm_pi_state_t  s_rpm_pi_right;
+static biba_ramp_t          s_rpm_setpoint_ramp_left;
+static biba_ramp_t          s_rpm_setpoint_ramp_right;
+static volatile float       s_rpm_duty_left;
+static volatile float       s_rpm_duty_right;
+static volatile float       s_target_hz_left;   /* tick writes, ADC callback reads */
+static volatile float       s_target_hz_right;
+static volatile bool        s_meas_left_enabled;
+static volatile bool        s_meas_right_enabled;
+static volatile bool        s_meas_left_reverse;
+static volatile bool        s_meas_right_reverse;
+static volatile float       s_meas_target_hz_left;
+static volatile float       s_meas_target_hz_right;
+#define STANDALONE_RPM_SAMPLES_PER_WHEEL 512u
+#define STANDALONE_RPM_ADC_AGGREGATE_SPS 20000u
+#define STANDALONE_RPM_WHEEL_SPS         10000u
+
+static uint16_t             s_adc_buf[STANDALONE_RPM_SAMPLES_PER_WHEEL * 2u];
+static uint16_t             s_adc_left_buf[STANDALONE_RPM_SAMPLES_PER_WHEEL];
+static uint16_t             s_adc_right_buf[STANDALONE_RPM_SAMPLES_PER_WHEEL];
+
+/* Interpreted and raw Hz per channel (set by ADC IRQ, read for DRIVE_DATA telemetry). */
+static volatile float s_meas_hz_left;
+static volatile float s_meas_hz_right;
+static volatile float s_meas_raw_hz_left;
+static volatile float s_meas_raw_hz_right;
+static volatile float s_spec_hz_left;
+static volatile float s_spec_hz_right;
+static volatile float s_spec_quality_left;
+static volatile float s_spec_quality_right;
+static volatile float s_spec_peak_left;
+static volatile float s_spec_peak_right;
+static volatile float s_spec_candidate_left;
+static volatile float s_spec_candidate_right;
+static volatile uint8_t s_spec_reason_left;
+static volatile uint8_t s_spec_reason_right;
+static volatile uint16_t s_freqdet_blocks_left;
+static volatile uint16_t s_freqdet_blocks_right;
+static volatile uint16_t s_freqdet_cross_left;
+static volatile uint16_t s_freqdet_cross_right;
+static volatile uint16_t s_freqdet_pkpk_left;
+static volatile uint16_t s_freqdet_pkpk_right;
+static volatile float s_freqdet_std_left;
+static volatile float s_freqdet_std_right;
+static float s_telem_meas_ema_left;
+static float s_telem_meas_ema_right;
+
+/* Debug override state — serial-controlled bench testing.
+ * DBGON  : enable override mode (CRSF inputs bypassed).
+ * ARM    : set s_dbg_arm (only when debug active).
+ * DISARM : clear s_dbg_arm, zero throttle/steering.
+ * SET T=<-100..100> S=<-100..100> : set throttle/steering overrides.
+ * OLON   : debug-only open-loop motor duty passthrough for detector tests.
+ * OLOFF  : return debug mode to normal RPM PI control.
+ * DBGOFF : disable override mode.
+ * While active, DRIVE_DATA telemetry is emitted every tick. */
+static bool  s_dbg_active;
+static bool  s_dbg_arm;
+static bool  s_dbg_open_loop;
+static float s_dbg_thr;
+static float s_dbg_str;
+
+/* PI config initialised in biba_mode_standalone_init(). */
+static biba_rpm_pi_config_t s_rpm_cfg;
+
+/* Max Hz at 100% duty (from Phase 06 calibration). Maps mixer [-1,1] -> Hz. */
+#define STANDALONE_RPM_MAX_HZ  940.0f
+
 static bool s_beacon_active;
 static uint32_t s_sos_next_ms;   /* earliest time for next SOS repeat */
 static biba_melody_player_t s_player;
@@ -147,11 +221,154 @@ static void update_rgb_led(bool failsafe, bool armed, bool trim_mode,
     biba_hal_rgb_led_set(r, g, b);
 }
 
+/* Process one line of serial debug input per tick (non-blocking).
+ * Commands: DBGON / DBGOFF / ARM / DISARM / SET T=<pct> S=<pct> */
+static void process_debug_serial(void)
+{
+    char line[64];
+    if (!biba_hal_serial_readline(line, sizeof(line))) return;
+    if (strcmp(line, "DBGON") == 0) {
+        s_dbg_active = true;
+        printf("[biba] DBG mode ON\r\n");
+        printf("DRIVE_HEADER t_ms,thr,str,mix_L,mix_R,"
+               "tgt_L_hz,tgt_R_hz,meas_L_hz,meas_R_hz,"
+               "duty_L,duty_R,int_L,int_R,freqdet_L_hz,freqdet_R_hz,"
+             "spec_L_hz,spec_R_hz,spec_q_L,spec_q_R,spec_peak_L,spec_peak_R,"
+             "spec_cand_L,spec_cand_R,spec_reason_L,spec_reason_R,"
+               "zc_blocks_L,zc_blocks_R,zc_cross_L,zc_cross_R,"
+               "zc_pkpk_L,zc_pkpk_R,zc_std_L,zc_std_R\r\n");
+    } else if (strcmp(line, "DBGOFF") == 0) {
+        s_dbg_active = false;
+        s_dbg_arm    = false;
+        s_dbg_open_loop = false;
+        s_dbg_thr    = 0.0f;
+        s_dbg_str    = 0.0f;
+        printf("[biba] DBG mode OFF\r\n");
+    } else if (s_dbg_active && strcmp(line, "ARM") == 0) {
+        s_dbg_arm = true;
+        printf("[biba] DBG armed\r\n");
+    } else if (s_dbg_active && (strcmp(line, "DISARM") == 0)) {
+        s_dbg_arm = false;
+        s_dbg_open_loop = false;
+        s_dbg_thr = 0.0f;
+        s_dbg_str = 0.0f;
+        printf("[biba] DBG disarmed\r\n");
+    } else if (s_dbg_active && strcmp(line, "OLON") == 0) {
+        s_dbg_open_loop = true;
+        biba_rpm_pi_reset(&s_rpm_pi_left);
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        s_rpm_duty_left = 0.0f;
+        s_rpm_duty_right = 0.0f;
+        printf("[biba] DBG open-loop ON\r\n");
+    } else if (s_dbg_active && strcmp(line, "OLOFF") == 0) {
+        s_dbg_open_loop = false;
+        biba_rpm_pi_reset(&s_rpm_pi_left);
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        s_rpm_duty_left = 0.0f;
+        s_rpm_duty_right = 0.0f;
+        printf("[biba] DBG open-loop OFF\r\n");
+    } else if (s_dbg_active) {
+        int thr_pct = 0, str_pct = 0;
+        if (sscanf(line, "SET T=%d S=%d", &thr_pct, &str_pct) == 2) {
+            if (thr_pct < -100) thr_pct = -100;
+            if (thr_pct >  100) thr_pct =  100;
+            if (str_pct < -100) str_pct = -100;
+            if (str_pct >  100) str_pct =  100;
+            s_dbg_thr = (float)thr_pct / 100.0f;
+            s_dbg_str = (float)str_pct / 100.0f;
+        }
+    }
+}
+
 static float rc_to_unit(uint16_t v)
 {
     /* Standard CRSF channel: 172..1811 maps to -1..+1. */
     float normalised = ((float)v - 992.0f) / 819.0f;
     return biba_clamp_unit(normalised);
+}
+
+static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
+{
+    if (samples_per_channel > STANDALONE_RPM_SAMPLES_PER_WHEEL) {
+        samples_per_channel = STANDALONE_RPM_SAMPLES_PER_WHEEL;
+    }
+    for (uint16_t i = 0; i < samples_per_channel; ++i) {
+        s_adc_left_buf[i] = buf[(uint32_t)i * 2u];
+        s_adc_right_buf[i] = buf[(uint32_t)i * 2u + 1u];
+    }
+
+    zc_detector_result_t zc_left = zc_freq_analyze(s_adc_left_buf,
+                                                   samples_per_channel,
+                                                   STANDALONE_RPM_WHEEL_SPS);
+    zc_detector_result_t zc_right = zc_freq_analyze(s_adc_right_buf,
+                                                    samples_per_channel,
+                                                    STANDALONE_RPM_WHEEL_SPS);
+    biba_rpm_spectral_result_t spec_left = biba_rpm_spectral_estimate(
+        s_adc_left_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
+        s_meas_target_hz_left);
+    biba_rpm_spectral_result_t spec_right = biba_rpm_spectral_estimate(
+        s_adc_right_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
+        s_meas_target_hz_right);
+
+    float raw_hz_left = s_meas_left_enabled ? zc_left.freq_hz : 0.0f;
+    float raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;
+    float spec_hz_left = (s_meas_left_enabled && spec_left.valid) ? spec_left.freq_hz : 0.0f;
+    float spec_hz_right = (s_meas_right_enabled && spec_right.valid) ? spec_right.freq_hz : 0.0f;
+    float pi_meas_hz_left = s_meas_left_reverse ? -spec_hz_left : spec_hz_left;
+    float pi_meas_hz_right = s_meas_right_reverse ? -spec_hz_right : spec_hz_right;
+    s_meas_raw_hz_left = raw_hz_left;
+    s_meas_raw_hz_right = raw_hz_right;
+    s_spec_hz_left = spec_hz_left;
+    s_spec_hz_right = spec_hz_right;
+    s_spec_quality_left = s_meas_left_enabled ? spec_left.quality : 0.0f;
+    s_spec_quality_right = s_meas_right_enabled ? spec_right.quality : 0.0f;
+    s_spec_peak_left = s_meas_left_enabled ? spec_left.peak_amp_lsb : 0.0f;
+    s_spec_peak_right = s_meas_right_enabled ? spec_right.peak_amp_lsb : 0.0f;
+    s_spec_candidate_left = s_meas_left_enabled ? spec_left.candidate_hz : 0.0f;
+    s_spec_candidate_right = s_meas_right_enabled ? spec_right.candidate_hz : 0.0f;
+    s_spec_reason_left = s_meas_left_enabled ? (uint8_t)spec_left.invalid_reason : 0u;
+    s_spec_reason_right = s_meas_right_enabled ? (uint8_t)spec_right.invalid_reason : 0u;
+
+    s_freqdet_blocks_left  = s_meas_left_enabled  ? zc_left.active_blocks : 0u;
+    s_freqdet_blocks_right = s_meas_right_enabled ? zc_right.active_blocks : 0u;
+    s_freqdet_cross_left   = s_meas_left_enabled  ? zc_left.total_crossings : 0u;
+    s_freqdet_cross_right  = s_meas_right_enabled ? zc_right.total_crossings : 0u;
+    s_freqdet_pkpk_left    = s_meas_left_enabled  ? zc_left.max_pkpk : 0u;
+    s_freqdet_pkpk_right   = s_meas_right_enabled ? zc_right.max_pkpk : 0u;
+    s_freqdet_std_left     = s_meas_left_enabled  ? zc_left.max_std : 0.0f;
+    s_freqdet_std_right    = s_meas_right_enabled ? zc_right.max_std : 0.0f;
+
+    (void)zc_ema_update(&s_telem_meas_ema_left, spec_hz_left, s_meas_target_hz_left);
+    (void)zc_ema_update(&s_telem_meas_ema_right, spec_hz_right, s_meas_target_hz_right);
+    s_meas_hz_left  = s_meas_left_reverse  ? -s_telem_meas_ema_left  : s_telem_meas_ema_left;
+    s_meas_hz_right = s_meas_right_reverse ? -s_telem_meas_ema_right : s_telem_meas_ema_right;
+    s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
+                                        s_target_hz_left,  pi_meas_hz_left);
+    s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
+                                        s_target_hz_right, pi_meas_hz_right);
+
+    (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
+                                       BIBA_ADC_CHAN_IS_RIGHT,
+                                       STANDALONE_RPM_SAMPLES_PER_WHEEL,
+                                       s_adc_buf,
+                                       on_adc_pair_done);
+}
+
+static biba_limit_result_t apply_drive_current_limits(biba_mix_output_t mix)
+{
+    biba_motor_current_t il = biba_current_sense_left();
+    biba_motor_current_t ir = biba_current_sense_right();
+    biba_motor_limit_t lim = {
+        .current_limit_a  = BIBA_LEFT_MAX_CURRENT_A,
+        .power_limit_w    = BIBA_LEFT_MAX_POWER_W,
+        .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
+    };
+    biba_motor_limit_t rim = {
+        .current_limit_a  = BIBA_RIGHT_MAX_CURRENT_A,
+        .power_limit_w    = BIBA_RIGHT_MAX_POWER_W,
+        .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
+    };
+    return biba_apply_motor_limits(mix.left, mix.right, il, ir, lim, rim);
 }
 
 void biba_mode_standalone_init(void)
@@ -165,8 +382,32 @@ void biba_mode_standalone_init(void)
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
     s_last_failsafe = true;
 
-    biba_ramp_init(&s_ramp_left);
-    biba_ramp_init(&s_ramp_right);
+    /* PI config: load default tuning from rpm_pi.h. */
+    s_rpm_cfg.kp             = BIBA_RPM_PI_KP;
+    s_rpm_cfg.ki             = BIBA_RPM_PI_KI;
+    s_rpm_cfg.ki_low         = BIBA_RPM_PI_KI_LOW;
+    s_rpm_cfg.ki_low_thresh  = BIBA_RPM_PI_KI_LOW_THRESH;
+    s_rpm_cfg.ff_slope       = BIBA_RPM_PI_FF_SLOPE;
+    s_rpm_cfg.ff_dead        = BIBA_RPM_PI_FF_DEAD;
+    s_rpm_cfg.stiction_floor = BIBA_RPM_PI_STICTION;
+    s_rpm_cfg.p_clamp        = BIBA_RPM_PI_P_CLAMP;
+    s_rpm_cfg.dt_s           = BIBA_RPM_PI_DT_S;
+
+    biba_rpm_pi_reset(&s_rpm_pi_left);
+    biba_rpm_pi_reset(&s_rpm_pi_right);
+    biba_ramp_init(&s_rpm_setpoint_ramp_left);
+    biba_ramp_init(&s_rpm_setpoint_ramp_right);
+    s_rpm_duty_left   = 0.0f;
+    s_rpm_duty_right  = 0.0f;
+    s_target_hz_left  = 0.0f;
+    s_target_hz_right = 0.0f;
+
+    adc_capture_init(STANDALONE_RPM_ADC_AGGREGATE_SPS);
+    (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
+                                       BIBA_ADC_CHAN_IS_RIGHT,
+                                       STANDALONE_RPM_SAMPLES_PER_WHEEL,
+                                       s_adc_buf,
+                                       on_adc_pair_done);
 
     /* Play startup fanfare through motor coils. */
     biba_melody_player_start(&s_player, &biba_melody_startup);
@@ -208,6 +449,7 @@ static void ingest_crsf(void)
 
 void biba_mode_standalone_tick(void)
 {
+    process_debug_serial();
     ingest_crsf();
     uint32_t now = biba_hal_now_ms();
 
@@ -240,11 +482,26 @@ void biba_mode_standalone_tick(void)
      * ------------------------------------------------------------------ */
     bool armed = (!failsafe) && (arm_ch > BIBA_ARM_THRESHOLD);
 
+    /* Debug override: bypass CRSF inputs for bench testing with wheels
+     * in the air.  Activated via serial command DBGON. */
+    if (s_dbg_active) {
+        failsafe     = false;
+        armed        = s_dbg_arm;
+        raw_throttle = s_dbg_thr;
+        raw_steering = s_dbg_str;
+    }
+
     /* Failsafe rising edge: play warning (distinct from normal disarm). */
     if (failsafe && !s_last_failsafe) {
         biba_melody_player_start(&s_player, &biba_melody_failsafe);
-        biba_ramp_reset(&s_ramp_left);    /* D-04: hard reset on failsafe edge */
-        biba_ramp_reset(&s_ramp_right);
+        biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on failsafe edge */
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
+        s_rpm_duty_left   = 0.0f;
+        s_rpm_duty_right  = 0.0f;
+        s_target_hz_left  = 0.0f;
+        s_target_hz_right = 0.0f;
         biba_hal_ssr_set(false);          /* D-10: belt-and-suspenders SSR cut on failsafe */
     }
     s_last_failsafe = failsafe;
@@ -263,8 +520,14 @@ void biba_mode_standalone_tick(void)
         }
         /* Exit trim mode on disarm edge (safety) */
         s_trim_mode_active = false;
-        biba_ramp_reset(&s_ramp_left);    /* D-04: hard reset on disarm edge */
-        biba_ramp_reset(&s_ramp_right);
+        biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on disarm edge */
+        biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
+        s_rpm_duty_left   = 0.0f;
+        s_rpm_duty_right  = 0.0f;
+        s_target_hz_left  = 0.0f;
+        s_target_hz_right = 0.0f;
     }
     s_armed = armed;
     biba_hal_ssr_set(armed);              /* D-10: SSR HIGH=armed, LOW=disarmed */
@@ -281,19 +544,13 @@ void biba_mode_standalone_tick(void)
         speed_scale = BIBA_SPEED_MODE_MEDIUM_SCALE;
     }
 
-    /* Scale drive inputs: tank-mix → scale → un-mix  (≡ Python
-     * _scale_drive_inputs_for_speed_mode).  Without clamping this
-     * simplifies to throttle *= s, steering *= s, but the full form
-     * handles corner cases at the unit-circle boundary correctly. */
-    float throttle, steering;
-    {
-        float ml = biba_clamp_unit(raw_throttle + raw_steering);
-        float mr = biba_clamp_unit(raw_throttle - raw_steering);
-        float sl = ml * speed_scale;
-        float sr = mr * speed_scale;
-        throttle = (sl + sr) * 0.5f;
-        steering = (sl - sr) * 0.5f;
-    }
+    /* Drive inputs pass through unscaled — the speed_scale is applied
+     * AFTER the mixer on left_out/right_out (see below).  This keeps
+     * steering authority constant regardless of throttle level, which
+     * feels more predictable to the operator than the Python-era
+     * envelope-limiter that bled steering when throttle saturated. */
+    float throttle = raw_throttle;
+    float steering = biba_apply_deadband(raw_steering, BIBA_STEERING_DEADBAND);
 
     /* ------------------------------------------------------------------ *
      * Drive mode  (low position = MANUAL, else = STABILIZED)
@@ -310,20 +567,8 @@ void biba_mode_standalone_tick(void)
         biba_pid_reset(&s_heading_pid);
     }
 
-    /* Limit throttle + steering to the speed-mode envelope (≡ Python
-     * _limit_drive_output_for_speed_mode). */
-    {
-        float lim_thr = throttle;
-        if (lim_thr >  speed_scale) lim_thr =  speed_scale;
-        if (lim_thr < -speed_scale) lim_thr = -speed_scale;
-        float steer_lim = speed_scale - (lim_thr < 0.0f ? -lim_thr : lim_thr);
-        if (steer_lim < 0.0f) steer_lim = 0.0f;
-        float lim_str = steering;
-        if (lim_str >  steer_lim) lim_str =  steer_lim;
-        if (lim_str < -steer_lim) lim_str = -steer_lim;
-        throttle = lim_thr;
-        steering = lim_str;
-    }
+    /* (Envelope limiter removed — output-side scaling below preserves
+     *  the full steering authority at any throttle level.) */
 
     /* ------------------------------------------------------------------ *
      * Motor trim  (ported from biba-controller/main.py)
@@ -365,52 +610,174 @@ void biba_mode_standalone_tick(void)
         s_trim_gesture_start_ms = 0u;
         s_trim_gesture_consumed = false;
     }
-    float trim = s_trim_mode_active
-        ? trim_ch * BIBA_MOTOR_TRIM_MAX_EFFECT
-        : s_saved_motor_trim;
-    if (trim >  BIBA_MOTOR_TRIM_MAX_EFFECT) trim =  BIBA_MOTOR_TRIM_MAX_EFFECT;
-    if (trim < -BIBA_MOTOR_TRIM_MAX_EFFECT) trim = -BIBA_MOTOR_TRIM_MAX_EFFECT;
+    /* TODO(trim): Motor trim was designed for open-loop duty control (Phase ≤6).
+     * With RPM closed-loop (Phase 7+) the PI independently regulates each wheel
+     * to the same target_hz, so duty-level trim has no meaningful effect and
+     * may fight the integrator.  Options to revisit:
+     *   a) Remove trim entirely — PI balances wheels via feedback.
+     *   b) Rethink as target_hz offset trim (left_target_hz *= 1 ± trim) so
+     *      the operator can permanently bias one wheel's setpoint if the two
+     *      motors have different real-world characteristics.
+     * For now trim is bypassed (trim = 0). The gesture/LED machinery is kept
+     * so no user-visible behaviour is lost and the code compiles cleanly. */
+    float trim = 0.0f;
+    (void)trim_ch;  /* suppress unused-variable warning */
 
     /* ------------------------------------------------------------------ *
-     * Mix → current limiter → trim → drive
+     * Mix → current limiter (thermal backoff) → drive
+     * (trim bypassed — see TODO above)
      * ------------------------------------------------------------------ */
     float left_out = 0.0f, right_out = 0.0f;
     bool left_limited = false, right_limited = false;
 
     if (armed) {
-        biba_mix_output_t mix = biba_mix_differential(throttle, steering);
-
-        biba_motor_current_t il = biba_current_sense_left();
-        biba_motor_current_t ir = biba_current_sense_right();
-        biba_motor_limit_t lim = {
-            .current_limit_a  = BIBA_LEFT_MAX_CURRENT_A,
-            .power_limit_w    = BIBA_LEFT_MAX_POWER_W,
-            .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
-        };
-        biba_motor_limit_t rim = {
-            .current_limit_a  = BIBA_RIGHT_MAX_CURRENT_A,
-            .power_limit_w    = BIBA_RIGHT_MAX_POWER_W,
-            .supply_voltage_v = BIBA_FALLBACK_SUPPLY_V,
-        };
-        biba_limit_result_t out = biba_apply_motor_limits(mix.left, mix.right,
-                                                           il, ir, lim, rim);
+        /* Vector-style mix: treat (throttle, steer) as a 2-D command and
+         * project onto the L∞ ball of radius speed_scale.  L_raw=T+S and
+         * R_raw=T−S together define the desired wheel-vector; we shrink
+         * BOTH proportionally so neither exceeds speed_scale, preserving
+         * the L:R ratio (≡ direction of motion).  This avoids the
+         * envelope-limiter's behaviour where steering authority collapsed
+         * once throttle saturated. */
+        float t = biba_clamp_unit(throttle);
+        float s = biba_clamp_unit(steering);
+        float l_raw = t + s;
+        float r_raw = t - s;
+        float al = l_raw < 0.0f ? -l_raw : l_raw;
+        float ar = r_raw < 0.0f ? -r_raw : r_raw;
+        float peak = al > ar ? al : ar;
+        float denom = peak > 1.0f ? peak : 1.0f;
+        biba_mix_output_t mix;
+        mix.left  = l_raw * speed_scale / denom;
+        mix.right = r_raw * speed_scale / denom;
+        biba_limit_result_t out = apply_drive_current_limits(mix);
         left_limited  = out.left_limited;
         right_limited = out.right_limited;
         left_out  = out.left;
         right_out = out.right;
-
-        /* Apply trim */
-        if (trim > 0.0f) {
-            right_out *= (1.0f - trim);
-        } else if (trim < 0.0f) {
-            left_out *= (1.0f + trim);   /* trim is negative → reduces left */
-        }
+        (void)trim;  /* trim disabled — see TODO above */
     }
 
-    /* D-03, D-05: Apply ramp post-mix. Always runs — never bypassed.
-     * MUST be before melody/going_reverse checks (Pitfalls 2 and 3). */
-    left_out  = biba_ramp_update(&s_ramp_left,  left_out,  dt);
-    right_out = biba_ramp_update(&s_ramp_right, right_out, dt);
+    /* Save pre-PI mixer output for telemetry (left_out/right_out will be
+     * overwritten with the final duty below). */
+    const float mix_l_log = left_out;
+    const float mix_r_log = right_out;
+
+    if (armed && !(s_dbg_active && s_dbg_open_loop)) {
+        left_out = biba_ramp_update_with_rates(&s_rpm_setpoint_ramp_left,
+                                               left_out, dt,
+                                               BIBA_RPM_SETPOINT_ACCEL_RATE,
+                                               BIBA_RPM_SETPOINT_DECEL_RATE,
+                                               BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE,
+                                               BIBA_RPM_SETPOINT_ZERO_HOLD_MS);
+        right_out = biba_ramp_update_with_rates(&s_rpm_setpoint_ramp_right,
+                                                right_out, dt,
+                                                BIBA_RPM_SETPOINT_ACCEL_RATE,
+                                                BIBA_RPM_SETPOINT_DECEL_RATE,
+                                                BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE,
+                                                BIBA_RPM_SETPOINT_ZERO_HOLD_MS);
+    } else {
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
+    }
+
+    /* Bidirectional RPM closed-loop.
+     * The IS estimators return frequency magnitude only — they cannot infer
+     * direction.  This adapter owns the physical quadrant map: it decides
+     * whether an IS signal is valid for the current bridge direction, assigns
+     * commanded direction to the measurement, and feeds signed target/meas to
+     * the direction-agnostic PI.  Direction flip → reset PI + clear stale duty
+     * so the integrator starts clean from the correct side. */
+    {
+        static bool s_prev_rev_left  = false;
+        static bool s_prev_rev_right = false;
+
+        bool rev_left  = (left_out  < -BIBA_MOTOR_DEADBAND);
+        bool rev_right = (right_out < -BIBA_MOTOR_DEADBAND);
+
+        if (rev_left != s_prev_rev_left) {
+            biba_rpm_pi_reset(&s_rpm_pi_left);
+            s_rpm_duty_left = 0.0f;
+            s_telem_meas_ema_left = 0.0f;
+            s_meas_hz_left = 0.0f;
+            s_meas_raw_hz_left = 0.0f;
+        }
+        if (rev_right != s_prev_rev_right) {
+            biba_rpm_pi_reset(&s_rpm_pi_right);
+            s_rpm_duty_right = 0.0f;
+            s_telem_meas_ema_right = 0.0f;
+            s_meas_hz_right = 0.0f;
+            s_meas_raw_hz_right = 0.0f;
+        }
+        s_prev_rev_left  = rev_left;
+        s_prev_rev_right = rev_right;
+
+        float target_mag_left = left_out < 0.0f ? -left_out : left_out;
+        float target_mag_right = right_out < 0.0f ? -right_out : right_out;
+
+        /* IS sensing is hardware-observable only in wired quadrants.  LEFT has
+         * only the forward BTS7960 IS wired, so LEFT reverse ADC content is PWM
+         * coupling, not wheel speed.  RIGHT has valid IS evidence in both dirs.
+         * The PI still runs for every non-zero target; invalid quadrants simply
+         * receive meas=0 and therefore fall back to FF/P-start behaviour. */
+        s_meas_left_enabled  = (!rev_left && left_out > BIBA_MOTOR_DEADBAND);
+        s_meas_right_enabled = ((right_out > BIBA_MOTOR_DEADBAND) ||
+                    (right_out < -BIBA_MOTOR_DEADBAND));
+        s_meas_left_reverse  = rev_left;
+        s_meas_right_reverse = rev_right;
+        s_meas_target_hz_left  = s_meas_left_enabled  ? target_mag_left * STANDALONE_RPM_MAX_HZ : 0.0f;
+        s_meas_target_hz_right = s_meas_right_enabled
+                 ? target_mag_right * STANDALONE_RPM_MAX_HZ
+                     : 0.0f;
+        s_target_hz_left  = (target_mag_left  > BIBA_MOTOR_DEADBAND)
+                    ? left_out  * STANDALONE_RPM_MAX_HZ : 0.0f;
+        s_target_hz_right = (target_mag_right > BIBA_MOTOR_DEADBAND)
+                    ? right_out * STANDALONE_RPM_MAX_HZ : 0.0f;
+
+        float duty_left  = (s_dbg_active && s_dbg_open_loop) ? left_out
+               : s_rpm_duty_left;
+        float duty_right = (s_dbg_active && s_dbg_open_loop) ? right_out
+               : s_rpm_duty_right;
+        if (failsafe || !armed) {
+            duty_left  = 0.0f;
+            duty_right = 0.0f;
+        }
+        left_out  = duty_left;
+        right_out = duty_right;
+    }
+    (void)dt;   /* PI dt is configured via cfg.dt_s; tick dt no longer used here */
+
+    /* Debug telemetry: emit per-tick line when debug override is active.
+    * Format (CSV): DRIVE_DATA t_ms,thr,str,mix_L,mix_R,tgt_L,tgt_R,
+    *                           meas_L,meas_R,duty_L,duty_R,int_L,int_R,freqdet_L,freqdet_R,
+    *                           spec_L/R,spec_q_L/R,spec_peak_L/R,spec_cand_L/R,spec_reason_L/R,
+    *                           zc_blocks_L/R,zc_cross_L/R,zc_pkpk_L/R,zc_std_L/R
+    * tgt is signed (negative = reverse command). meas is the interpreted,
+    * signed EMA frequency used for graph tracking; freqdet is the gated ZC
+    * frequency-detector output, not raw ADC samples. */
+    if (s_dbg_active) {
+        float tgt_l_signed  = s_target_hz_left;
+        float tgt_r_signed  = s_target_hz_right;
+        float meas_l_signed = s_meas_hz_left;
+        float meas_r_signed = s_meas_hz_right;
+       printf("DRIVE_DATA %lu,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%.4f,%.4f,%.1f,%.1f,%.1f,%.1f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%u,%u,%u,%u,%u,%u,%u,%u,%.1f,%.1f\r\n",
+               now,
+               throttle, steering,
+               mix_l_log, mix_r_log,
+               tgt_l_signed, tgt_r_signed,
+               meas_l_signed, meas_r_signed,
+               left_out, right_out,
+            s_rpm_pi_left.integral, s_rpm_pi_right.integral,
+            s_meas_raw_hz_left, s_meas_raw_hz_right,
+            s_spec_hz_left, s_spec_hz_right,
+            s_spec_quality_left, s_spec_quality_right,
+            s_spec_peak_left, s_spec_peak_right,
+            s_spec_candidate_left, s_spec_candidate_right,
+            (unsigned)s_spec_reason_left, (unsigned)s_spec_reason_right,
+            (unsigned)s_freqdet_blocks_left, (unsigned)s_freqdet_blocks_right,
+            (unsigned)s_freqdet_cross_left, (unsigned)s_freqdet_cross_right,
+            (unsigned)s_freqdet_pkpk_left, (unsigned)s_freqdet_pkpk_right,
+            s_freqdet_std_left, s_freqdet_std_right);
+    }
 
     /* If actively driving, motors are needed — interrupt melodies.
      * Exception: the intentional reverse backup pip must not be self-cancelled. */
@@ -502,6 +869,8 @@ void biba_mode_standalone_tick(void)
             .setpoint_right   = right_out,
             .current_left_a   = il.current_a,
             .current_right_a  = ir.current_a,
+            .wheel_rpm_left_hz  = s_rpm_pi_left.meas_ema,
+            .wheel_rpm_right_hz = s_rpm_pi_right.meas_ema,
             .crsf_rssi        = s_link.uplink_rssi_1,
             .crsf_link_quality = s_link.uplink_link_quality,
             .crsf_snr_db      = s_link.uplink_snr,
@@ -523,10 +892,12 @@ void biba_mode_standalone_tick(void)
         if (now - s_last_log_ms >= 1000u) {
             s_last_log_ms = now;
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
-            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d rssi=%d lq=%d\r\n",
+            int current_limited = (left_limited || right_limited) ? 1 : 0;
+            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d rssi=%d lq=%d\r\n",
                    now, (int)failsafe, (int)armed, spd, (int)stabilized,
                    (int)(raw_throttle * 100), (int)(raw_steering * 100),
                    (int)(left_out * 100), (int)(right_out * 100),
+                   current_limited,
                    s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
             /* CRSF/DMA health line every 5 s */
