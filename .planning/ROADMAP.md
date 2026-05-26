@@ -17,6 +17,7 @@
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
 - [x] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow (completed 2026-05-25)
 - [x] **Phase 8: Session Flight Recorder** — LittleFS black box on RP2040 flash, CH8 trigger + SOS tone, binary .bbd session files, Python download script via USB CDC
+- [ ] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox
 
 ---
 
