@@ -201,7 +201,11 @@ Plans:
   5. `hint_hz` tracking in `mode_standalone.c`: updated from `spec_hz` only when `spec_reason = SPEC_REASON_MEASURED`; not updated on DR or stale reads
   6. Unity test suite: hint=0 → identical to current behavior; hint far from target → second window fires; best-of-two selection verified
   7. pio test -e native_test: all existing tests pass, ≥6 new hint tests added
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 10-01-PLAN.md — Python research script: spectral_estimate_hint() + is_hint_research.py (28 CSV files, ≥5pp gate)
+- [ ] 10-02-PLAN.md — Firmware API extension: 5-arg signature, HINT_MEASURED enum, dual-window .c implementation, 8 call sites
+- [ ] 10-03-PLAN.md — mode_standalone hint state + update/reset logic + ≥6 Unity tests (≥84 total)
 
 Features deferred beyond current milestone (v2+):
 
