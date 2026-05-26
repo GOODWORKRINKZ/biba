@@ -120,6 +120,48 @@ def spectral_estimate(buf: np.ndarray, sps: int, target_hz: float) -> SpectralRe
     return r
 
 
+# Half of the absolute search band — used as deadband for hint activation
+_DEADBAND_HZ = _SPEC_ABS_BAND_HZ / 2.0  # = 40.0 Hz
+
+
+def spectral_estimate_hint(buf: np.ndarray, sps: int,
+                            target_hz: float, hint_hz: float = 0.0) -> SpectralResult:
+    """Dual-window Goertzel estimator.
+
+    Runs the plant-model search window first (via spectral_estimate).  If
+    *hint_hz* is non-zero and sufficiently far from *target_hz*, a second
+    search centred on *hint_hz* is also run and the result with the higher
+    peak amplitude is returned.  When the hint window wins, ``reason`` is
+    set to ``"hint"`` (mirrors BIBA_RPM_SPECTRAL_HINT_MEASURED in firmware).
+
+    Args:
+        buf:       ADC sample buffer (float32 array, length N).
+        sps:       Sample rate in Hz.
+        target_hz: Plant-model centre frequency.
+        hint_hz:   Previous valid frequency estimate.  Pass 0.0 to suppress
+                   the second window (backward-compatible sentinel).
+
+    Returns:
+        SpectralResult with best-of-two by peak_amp.
+    """
+    # Plant window always runs
+    r_plant = spectral_estimate(buf, sps, target_hz)
+
+    # Guard: sentinel 0.0 or within deadband → no second window
+    if hint_hz == 0.0 or abs(hint_hz - target_hz) <= _DEADBAND_HZ:
+        return r_plant
+
+    # Hint window: use hint_hz as the search centre
+    r_hint = spectral_estimate(buf, sps, hint_hz)
+
+    # Best-of-two by peak amplitude
+    if r_hint.valid and r_hint.peak_amp > r_plant.peak_amp:
+        r_hint.reason = "hint"
+        return r_hint
+
+    return r_plant
+
+
 def load_sweepraw(path: Path) -> list[dict]:
     by_idx: dict[int, dict] = {}
     with open(path, newline="") as fh:
