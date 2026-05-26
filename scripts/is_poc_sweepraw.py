@@ -101,6 +101,12 @@ def _parse_both_windows(ser, timeout_s: float) -> tuple[list[dict], list[dict], 
             current_chan = parts[4] if len(parts) >= 5 else "L"
             current_meta = {"idx": int(parts[1]), "t_ms": int(parts[2]),
                             "duty": float(parts[3])}
+            if current_chan == "L" and len(parts) >= 7:
+                current_meta["vbat_raw"] = int(parts[5])
+                current_meta["ibat_raw"] = int(parts[6])
+            else:
+                current_meta["vbat_raw"] = float("nan")
+                current_meta["ibat_raw"] = float("nan")
             continue
         if line.startswith("SWEEPRAW2_END"):
             print(line)
@@ -128,10 +134,12 @@ def _parse_both_windows(ser, timeout_s: float) -> tuple[list[dict], list[dict], 
 def _write_csv(path: Path, windows: list[dict]) -> None:
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["win_idx", "t_ms", "duty_pct", "sample_idx", "adc_raw"])
+        w.writerow(["win_idx", "t_ms", "duty_pct", "sample_idx", "adc_raw", "vbat_raw", "ibat_raw"])
         for win in windows:
             for i, v in enumerate(win["samples"]):
-                w.writerow([win["idx"], win["t_ms"], f"{win['duty']:.2f}", i, v])
+                w.writerow([win["idx"], win["t_ms"], f"{win['duty']:.2f}", i, v,
+                            win.get("vbat_raw", float("nan")),
+                            win.get("ibat_raw", float("nan"))])
 
 
 def main() -> int:

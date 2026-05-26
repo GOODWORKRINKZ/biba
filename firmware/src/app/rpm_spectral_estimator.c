@@ -1,4 +1,5 @@
 #include "rpm_spectral_estimator.h"
+#include "biba_config.h"
 
 #include <math.h>
 
@@ -74,6 +75,7 @@ biba_rpm_spectral_result_t biba_rpm_spectral_estimate(const uint16_t *buf,
     float sum = 0.0f;
     for (uint16_t i = 0; i < n; ++i) sum += (float)buf[i];
     float mean = sum / (float)n;
+    result.mean_adc = mean;
 
     uint16_t best_bin = k_lo;
     float best_amp = 0.0f;
@@ -191,4 +193,36 @@ biba_rpm_spectral_result_t biba_rpm_spectral_estimate(const uint16_t *buf,
     }
 
     return result;
+}
+
+void biba_rpm_spectral_apply_load_gate(biba_rpm_spectral_result_t *primary,
+                                       biba_rpm_spectral_result_t *secondary)
+{
+    if (!primary || !secondary) return;
+
+    /* Apply ratio gate to primary channel */
+    if (primary->valid) {
+        float other_mean = secondary->mean_adc + 1e-6f;
+        float ratio = primary->mean_adc / other_mean;
+        bool high_ratio = ratio > BIBA_RPM_LOAD_RATIO_THRESH &&
+                          primary->quality < BIBA_RPM_LOAD_QUALITY_MAX;
+        bool abs_high = primary->mean_adc > (float)BIBA_RPM_LOAD_ABS_THRESH_ADC;
+        if (high_ratio || abs_high) {
+            primary->valid = false;
+            primary->invalid_reason = BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD;
+        }
+    }
+
+    /* Apply ratio gate to secondary channel (symmetric) */
+    if (secondary->valid) {
+        float other_mean = primary->mean_adc + 1e-6f;
+        float ratio = secondary->mean_adc / other_mean;
+        bool high_ratio = ratio > BIBA_RPM_LOAD_RATIO_THRESH &&
+                          secondary->quality < BIBA_RPM_LOAD_QUALITY_MAX;
+        bool abs_high = secondary->mean_adc > (float)BIBA_RPM_LOAD_ABS_THRESH_ADC;
+        if (high_ratio || abs_high) {
+            secondary->valid = false;
+            secondary->invalid_reason = BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD;
+        }
+    }
 }

@@ -301,4 +301,15 @@
 #  define BIBA_RPM_DR_ALPHA         0.2f     /* EMA smoothing (5-step time constant) */
 #endif
 
+/* --- IS-pin DC load gate (Phase 11) ------------------------------------ */
+#ifndef BIBA_RPM_LOAD_RATIO_THRESH
+#  define BIBA_RPM_LOAD_RATIO_THRESH     1.5f   /* ratio = mean_IS_primary / mean_IS_other */
+#endif
+#ifndef BIBA_RPM_LOAD_QUALITY_MAX
+#  define BIBA_RPM_LOAD_QUALITY_MAX      10.0f  /* gate fires only when quality < this */
+#endif
+#ifndef BIBA_RPM_LOAD_ABS_THRESH_ADC
+#  define BIBA_RPM_LOAD_ABS_THRESH_ADC   3800u  /* absolute ADC count fallback gate (D-A3) */
+#endif
+
 #endif /* BIBA_CONFIG_H */

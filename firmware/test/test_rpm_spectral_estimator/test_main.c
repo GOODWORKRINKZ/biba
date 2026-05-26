@@ -201,6 +201,68 @@ static void test_hint_measured_reason_does_not_alias_none(void)
     TEST_ASSERT_NOT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_NONE, result.invalid_reason);
 }
 
+/* --- Phase 11: IS-pin DC load gate tests --- */
+
+static void test_load_gate_rejects_high_ratio_low_quality(void)
+{
+    /* win3 analog: DC_L=2588, DC_R=1383, quality=3.7 → should be REJECTED */
+    biba_rpm_spectral_result_t prim = {0};
+    prim.mean_adc = 2588.0f; prim.quality = 3.7f; prim.valid = true;
+    prim.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    biba_rpm_spectral_result_t sec = {0};
+    sec.mean_adc = 1383.0f; sec.quality = 27.5f; sec.valid = true;
+    sec.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    biba_rpm_spectral_apply_load_gate(&prim, &sec);
+    TEST_ASSERT_FALSE(prim.valid);
+    TEST_ASSERT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD, prim.invalid_reason);
+    /* secondary (free-running) should remain valid */
+    TEST_ASSERT_TRUE(sec.valid);
+}
+
+static void test_load_gate_rejects_pre_latch(void)
+{
+    /* win18 analog: DC_L=3586, DC_R=1503, quality=9.4 → should be REJECTED */
+    biba_rpm_spectral_result_t prim = {0};
+    prim.mean_adc = 3586.0f; prim.quality = 9.4f; prim.valid = true;
+    prim.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    biba_rpm_spectral_result_t sec = {0};
+    sec.mean_adc = 1503.0f; sec.quality = 15.0f; sec.valid = true;
+    sec.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    biba_rpm_spectral_apply_load_gate(&prim, &sec);
+    TEST_ASSERT_FALSE(prim.valid);
+    TEST_ASSERT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD, prim.invalid_reason);
+}
+
+static void test_load_gate_keeps_light_load(void)
+{
+    /* win14 analog: DC_L=1139, DC_R=860, quality=11.1 → should be KEPT */
+    biba_rpm_spectral_result_t prim = {0};
+    prim.mean_adc = 1139.0f; prim.quality = 11.1f; prim.valid = true;
+    prim.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    biba_rpm_spectral_result_t sec = {0};
+    sec.mean_adc = 860.0f; sec.quality = 18.0f; sec.valid = true;
+    sec.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    biba_rpm_spectral_apply_load_gate(&prim, &sec);
+    TEST_ASSERT_TRUE(prim.valid);
+    TEST_ASSERT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_NONE, prim.invalid_reason);
+}
+
+static void test_load_gate_noop_when_both_invalid(void)
+{
+    /* Both channels already invalid → gate must not modify them */
+    biba_rpm_spectral_result_t prim = {0};
+    prim.mean_adc = 3800.0f; prim.quality = 0.0f; prim.valid = false;
+    prim.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_PEAK_LOW;
+    biba_rpm_spectral_result_t sec = {0};
+    sec.mean_adc = 4000.0f; sec.quality = 0.0f; sec.valid = false;
+    sec.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_PEAK_LOW;
+    biba_rpm_spectral_apply_load_gate(&prim, &sec);
+    TEST_ASSERT_FALSE(prim.valid);
+    TEST_ASSERT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_PEAK_LOW, prim.invalid_reason);
+    TEST_ASSERT_FALSE(sec.valid);
+    TEST_ASSERT_EQUAL(BIBA_RPM_SPECTRAL_INVALID_PEAK_LOW, sec.invalid_reason);
+}
+
 static void run_all(void)
 {
     RUN_TEST(test_512_sample_sine_tracks_target);
@@ -216,6 +278,11 @@ static void run_all(void)
     RUN_TEST(test_hint_far_but_plant_wins_when_stronger);
     RUN_TEST(test_hint_both_below_min_amp_returns_invalid);
     RUN_TEST(test_hint_measured_reason_does_not_alias_none);
+    /* --- Phase 11: load gate tests --- */
+    RUN_TEST(test_load_gate_rejects_high_ratio_low_quality);
+    RUN_TEST(test_load_gate_rejects_pre_latch);
+    RUN_TEST(test_load_gate_keeps_light_load);
+    RUN_TEST(test_load_gate_noop_when_both_invalid);
 }
 
 #if defined(BIBA_TEST_STANDALONE)

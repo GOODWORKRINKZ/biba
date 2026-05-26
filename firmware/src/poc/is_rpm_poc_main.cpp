@@ -1280,6 +1280,8 @@ static void cmd_sweepraw_both(const char *shape, int amp_pct,
         float duty = _sweep_duty(is_sin, amp, t_now, period_ms);
         biba_hal_motor_pwm_left(duty);
         biba_hal_motor_pwm_right(duty);
+        uint16_t vbat_raw = biba_hal_adc_sample(BIBA_ADC_CHAN_VBAT);
+        uint16_t ibat_raw = biba_hal_adc_sample(BIBA_ADC_CHAN_IBAT);
         /* capture LEFT into s_buf */
         if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
             biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
@@ -1290,8 +1292,9 @@ static void cmd_sweepraw_both(const char *shape, int amp_pct,
             biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
             Serial.println("ERROR cap_R"); return;
         }
-        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L\n",
-                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
+        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L %u %u\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f,
+                      (unsigned)vbat_raw, (unsigned)ibat_raw);
         _print_win(s_buf, RPMRUN_N_SAMPLES);
         Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f R\n",
                       (unsigned long)w, (unsigned long)t_now, duty * 100.0f);

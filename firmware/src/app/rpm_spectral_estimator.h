@@ -23,9 +23,11 @@ typedef enum {
     BIBA_RPM_SPECTRAL_INVALID_QUALITY_LOW = 4,
     BIBA_RPM_SPECTRAL_INVALID_EXTRAPOLATED = 5,   /* DR fallback active */
     BIBA_RPM_SPECTRAL_HINT_MEASURED = 6,           /* hint window was better than plant window */
+    BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD = 7,        /* IS-pin DC load gate tripped (Phase 11) */
 } biba_rpm_spectral_invalid_reason_t;
 
 typedef struct {
+    float mean_adc;
     float freq_hz;
     float candidate_hz;
     float quality;
@@ -40,6 +42,9 @@ biba_rpm_spectral_result_t biba_rpm_spectral_estimate(const uint16_t *buf,
                                                       uint32_t sps,
                                                       float target_hz,
                                                       float hint_hz);
+
+void biba_rpm_spectral_apply_load_gate(biba_rpm_spectral_result_t *primary,
+                                       biba_rpm_spectral_result_t *secondary);
 
 #ifdef __cplusplus
 }
