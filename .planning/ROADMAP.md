@@ -168,6 +168,26 @@ Plans:
 - [ ] 08-02-PLAN.md — mode_standalone.c integration: CH8 state machine, session lifecycle, per-tick record write, flash-full flow (wave 2, depends on 08-01)
 - [ ] 08-03-PLAN.md — CDC bb shell commands + scripts/biba_blackbox_download.py (wave 3, depends on 08-01, 08-02)
 
+---
+
+### Phase 9: RPM Estimator Hardening
+**Goal**: Eliminate 19.2% rpm=0 dropout at |duty|>0.15 by adding a dead-reckoning fallback (EMA ratio extrapolation) when the Goertzel spectral estimator returns valid=false. Python simulation validates improvement before any C firmware is written.
+**Depends on**: Phase 8
+**Requirements**: REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-07
+**Success Criteria** (what must be TRUE):
+  1. Python simulation (is_dr_sim.py) shows rpm=0 dropout drops from ≥13% to ≤5% at |duty|>15% on fullsine amp100 sweep data
+  2. biba_rpm_dr_update() returns non-zero for streak ≤ BIBA_RPM_DR_MAX_STREAK when ratio_ema > 0
+  3. Cold start (ratio_ema=0) always returns 0, never extrapolates
+  4. After MAX_STREAK+1 consecutive invalids, DR returns 0 regardless of ratio_ema
+  5. spec_reason_L/R carries value 5 (EXTRAPOLATED) when DR fallback is active
+  6. pio test -e native_test: 71+ passed, 0 failed (new test_rpm_dr suite + no regressions)
+**Plans**: 3 plans, 3 waves
+
+Plans:
+- [ ] 09-01-PLAN.md — Python DR simulation (scripts/is_dr_sim.py) — REQ-06 gate (wave 1)
+- [ ] 09-02-PLAN.md — Firmware DR module (biba_config.h constants, rpm_spectral_estimator.h enum, rpm_dr.h/c) (wave 2, depends on 09-01)
+- [ ] 09-03-PLAN.md — mode_standalone.c integration + Unity test_rpm_dr + platformio.ini (wave 3, depends on 09-02)
+
 Features deferred beyond current milestone (v2+):
 
 | Feature | Rationale |
