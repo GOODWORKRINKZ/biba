@@ -286,4 +286,19 @@
 #  define BIBA_CH_BLACKBOX  6   /* CH7 */
 #endif
 
+/* --- RPM dead-reckoning fallback --------------------------------------- */
+
+#ifndef BIBA_RPM_DR_MAX_STREAK
+#  define BIBA_RPM_DR_MAX_STREAK    5u       /* ~500 ms at 10 Hz ADC loop */
+#endif
+#ifndef BIBA_RPM_DR_RATIO_LO
+#  define BIBA_RPM_DR_RATIO_LO      0.50f    /* p10 floor across all sweep channels */
+#endif
+#ifndef BIBA_RPM_DR_RATIO_HI
+#  define BIBA_RPM_DR_RATIO_HI      1.30f    /* generous ceiling above p95=1.129 LEFT FWD */
+#endif
+#ifndef BIBA_RPM_DR_ALPHA
+#  define BIBA_RPM_DR_ALPHA         0.2f     /* EMA smoothing (5-step time constant) */
+#endif
+
 #endif /* BIBA_CONFIG_H */

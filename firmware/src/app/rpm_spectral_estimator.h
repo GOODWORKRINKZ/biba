@@ -21,6 +21,7 @@ typedef enum {
     BIBA_RPM_SPECTRAL_INVALID_NO_BAND = 2,
     BIBA_RPM_SPECTRAL_INVALID_PEAK_LOW = 3,
     BIBA_RPM_SPECTRAL_INVALID_QUALITY_LOW = 4,
+    BIBA_RPM_SPECTRAL_INVALID_EXTRAPOLATED = 5,   /* DR fallback active */
 } biba_rpm_spectral_invalid_reason_t;
 
 typedef struct {
