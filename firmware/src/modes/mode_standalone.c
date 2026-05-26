@@ -20,6 +20,7 @@
 #include "app/zc_detector.h"
 #include "app/rpm_spectral_estimator.h"
 #include "app/rpm_pi.h"
+#include "app/rpm_dr.h"
 #include "app/telemetry.h"
 #include "drivers/bts7960.h"
 #include "drivers/crsf.h"
@@ -94,6 +95,11 @@ static bool s_last_failsafe;
  * tick reads them. */
 static biba_rpm_pi_state_t  s_rpm_pi_left;
 static biba_rpm_pi_state_t  s_rpm_pi_right;
+/* Dead-reckoning fallback state (per-channel).
+ * Written and read in DMA ISR (on_adc_pair_done).
+ * Reset at all 7 disarm sites — same pattern as s_rpm_pi_*. */
+static biba_rpm_dr_state_t  s_dr_left;
+static biba_rpm_dr_state_t  s_dr_right;
 static biba_ramp_t          s_rpm_setpoint_ramp_left;
 static biba_ramp_t          s_rpm_setpoint_ramp_right;
 static volatile float       s_rpm_duty_left;
@@ -291,6 +297,8 @@ static void process_debug_serial(void)
         s_dbg_open_loop = true;
         biba_rpm_pi_reset(&s_rpm_pi_left);
         biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_rpm_dr_reset(&s_dr_left);
+        biba_rpm_dr_reset(&s_dr_right);
         s_rpm_duty_left = 0.0f;
         s_rpm_duty_right = 0.0f;
         printf("[biba] DBG open-loop ON\r\n");
@@ -298,6 +306,8 @@ static void process_debug_serial(void)
         s_dbg_open_loop = false;
         biba_rpm_pi_reset(&s_rpm_pi_left);
         biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_rpm_dr_reset(&s_dr_left);
+        biba_rpm_dr_reset(&s_dr_right);
         s_rpm_duty_left = 0.0f;
         s_rpm_duty_right = 0.0f;
         printf("[biba] DBG open-loop OFF\r\n");
@@ -362,8 +372,14 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
 
     float raw_hz_left = s_meas_left_enabled ? zc_left.freq_hz : 0.0f;
     float raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;
-    float spec_hz_left = (s_meas_left_enabled && spec_left.valid) ? spec_left.freq_hz : 0.0f;
-    float spec_hz_right = (s_meas_right_enabled && spec_right.valid) ? spec_right.freq_hz : 0.0f;
+    biba_rpm_spectral_invalid_reason_t dr_reason_left  = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    float spec_hz_left = s_meas_left_enabled
+        ? biba_rpm_dr_update(&s_dr_left,  &spec_left,  s_meas_target_hz_left,  &dr_reason_left)
+        : 0.0f;
+    biba_rpm_spectral_invalid_reason_t dr_reason_right = BIBA_RPM_SPECTRAL_INVALID_NONE;
+    float spec_hz_right = s_meas_right_enabled
+        ? biba_rpm_dr_update(&s_dr_right, &spec_right, s_meas_target_hz_right, &dr_reason_right)
+        : 0.0f;
     float pi_meas_hz_left = s_meas_left_reverse ? -spec_hz_left : spec_hz_left;
     float pi_meas_hz_right = s_meas_right_reverse ? -spec_hz_right : spec_hz_right;
     s_meas_raw_hz_left = raw_hz_left;
@@ -378,8 +394,8 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
     s_spec_peak_right = s_meas_right_enabled ? spec_right.peak_amp_lsb : 0.0f;
     s_spec_candidate_left = s_meas_left_enabled ? spec_left.candidate_hz : 0.0f;
     s_spec_candidate_right = s_meas_right_enabled ? spec_right.candidate_hz : 0.0f;
-    s_spec_reason_left = s_meas_left_enabled ? (uint8_t)spec_left.invalid_reason : 0u;
-    s_spec_reason_right = s_meas_right_enabled ? (uint8_t)spec_right.invalid_reason : 0u;
+    s_spec_reason_left  = s_meas_left_enabled  ? (uint8_t)dr_reason_left  : 0u;
+    s_spec_reason_right = s_meas_right_enabled ? (uint8_t)dr_reason_right : 0u;
 
     s_freqdet_blocks_left  = s_meas_left_enabled  ? zc_left.active_blocks : 0u;
     s_freqdet_blocks_right = s_meas_right_enabled ? zc_right.active_blocks : 0u;
@@ -496,6 +512,8 @@ void biba_mode_standalone_init(void)
 
     biba_rpm_pi_reset(&s_rpm_pi_left);
     biba_rpm_pi_reset(&s_rpm_pi_right);
+    biba_rpm_dr_reset(&s_dr_left);
+    biba_rpm_dr_reset(&s_dr_right);
     biba_ramp_init(&s_rpm_setpoint_ramp_left);
     biba_ramp_init(&s_rpm_setpoint_ramp_right);
     s_rpm_duty_left   = 0.0f;
@@ -602,6 +620,8 @@ void biba_mode_standalone_tick(void)
         biba_melody_player_start(&s_player, &biba_melody_failsafe);
         biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on failsafe edge */
         biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_rpm_dr_reset(&s_dr_left);
+        biba_rpm_dr_reset(&s_dr_right);
         biba_ramp_reset(&s_rpm_setpoint_ramp_left);
         biba_ramp_reset(&s_rpm_setpoint_ramp_right);
         s_rpm_duty_left   = 0.0f;
@@ -647,6 +667,8 @@ void biba_mode_standalone_tick(void)
         s_trim_mode_active = false;
         biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on disarm edge */
         biba_rpm_pi_reset(&s_rpm_pi_right);
+        biba_rpm_dr_reset(&s_dr_left);
+        biba_rpm_dr_reset(&s_dr_right);
         biba_ramp_reset(&s_rpm_setpoint_ramp_left);
         biba_ramp_reset(&s_rpm_setpoint_ramp_right);
         s_rpm_duty_left   = 0.0f;
@@ -665,6 +687,8 @@ void biba_mode_standalone_tick(void)
             biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
             biba_rpm_pi_reset(&s_rpm_pi_left);
             biba_rpm_pi_reset(&s_rpm_pi_right);
+            biba_rpm_dr_reset(&s_dr_left);
+            biba_rpm_dr_reset(&s_dr_right);
             s_latch_resets = (uint8_t)(s_latch_resets + 1u);
             printf("[biba] LATCH RESET\r\n");
         }
@@ -854,6 +878,7 @@ void biba_mode_standalone_tick(void)
 
         if (rev_left != s_prev_rev_left) {
             biba_rpm_pi_reset(&s_rpm_pi_left);
+            biba_rpm_dr_reset(&s_dr_left);
             s_rpm_duty_left = 0.0f;
             s_telem_meas_ema_left = 0.0f;
             s_meas_hz_left = 0.0f;
@@ -861,6 +886,7 @@ void biba_mode_standalone_tick(void)
         }
         if (rev_right != s_prev_rev_right) {
             biba_rpm_pi_reset(&s_rpm_pi_right);
+            biba_rpm_dr_reset(&s_dr_right);
             s_rpm_duty_right = 0.0f;
             s_telem_meas_ema_right = 0.0f;
             s_meas_hz_right = 0.0f;
