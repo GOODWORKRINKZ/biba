@@ -2,23 +2,23 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-last_updated: "2026-05-25T00:00:00.000Z"
+status: in-progress
+last_updated: "2026-05-26T00:00:00.000Z"
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 9
   total_plans: 24
   completed_plans: 24
-  percent: 100
+  percent: 90
 ---
 
 # Project State
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 9 — RPM Estimator Hardening
-**Status:** COMPLETE — all 9 phases, all 24 plans done
-**Last updated:** 2026-05-25
+**Phase:** Phase 10 — Goertzel Dual-Window Search
+**Status:** IN PROGRESS — spec-complete, pending discuss/plan/execute
+**Last updated:** 2026-05-26
 
 ## Current Phase
 

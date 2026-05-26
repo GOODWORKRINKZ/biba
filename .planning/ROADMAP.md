@@ -17,8 +17,7 @@
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
 - [x] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow (completed 2026-05-25)
 - [x] **Phase 8: Session Flight Recorder** — LittleFS black box on RP2040 flash, CH8 trigger + SOS tone, binary .bbd session files, Python download script via USB CDC
-- [ ] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox
-
+- [ ] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox- [ ] **Phase 10: Goertzel Dual-Window Search** — Hint-guided second search window centered on previous valid freq, reducing Goertzel dropout at low duty where plant model is inaccurate
 ---
 
 ## Phase Details
@@ -187,6 +186,22 @@ Plans:
 - [ ] 09-01-PLAN.md — Python DR simulation (scripts/is_dr_sim.py) — REQ-06 gate (wave 1)
 - [ ] 09-02-PLAN.md — Firmware DR module (biba_config.h constants, rpm_spectral_estimator.h enum, rpm_dr.h/c) (wave 2, depends on 09-01)
 - [ ] 09-03-PLAN.md — mode_standalone.c integration + Unity test_rpm_dr + platformio.ini (wave 3, depends on 09-02)
+
+---
+
+### Phase 10: Goertzel Dual-Window Search
+**Goal**: Reduce Goertzel spectral estimator dropout at low duty (|duty| < 35%) by running a second search window centered on the previous valid `freq_hz` (hint), taking the candidate with higher `peak_amp`. Research phase validates improvement across all collected sweepraw datasets before firmware is touched.
+**Depends on**: Phase 9
+**Requirements**: RPM-INT-01, RPM-INT-02
+**Success Criteria** (what must be TRUE):
+  1. Research script tests dual-window on ≥5 sweepraw CSV files and reports per-file and pooled dropout improvement (valid %, DR %, invalid %)
+  2. Pooled dropout (DR + invalid) / total_fwd improves by ≥ 5 percentage points vs. current single-window
+  3. `rpm_spectral_estimator_hint()` accepts `hint_hz` parameter; runs second Goertzel search only when `|hint_hz - target_hz| > BIBA_SPEC_HINT_DEADBAND_HZ`
+  4. Best candidate selection: pick window with higher `peak_amp`; original window always evaluated first (no regression if hint is wrong)
+  5. `hint_hz` tracking in `mode_standalone.c`: updated from `spec_hz` only when `spec_reason = SPEC_REASON_MEASURED`; not updated on DR or stale reads
+  6. Unity test suite: hint=0 → identical to current behavior; hint far from target → second window fires; best-of-two selection verified
+  7. pio test -e native_test: all existing tests pass, ≥6 new hint tests added
+**Plans**: TBD
 
 Features deferred beyond current milestone (v2+):
 
