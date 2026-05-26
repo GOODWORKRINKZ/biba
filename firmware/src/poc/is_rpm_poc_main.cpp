@@ -31,6 +31,7 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include <hardware/adc.h>
 
 extern "C" {
 #include "hal/biba_hal.h"
@@ -1236,9 +1237,9 @@ static void cmd_sweepraw_r(const char *shape, int amp_pct,
     Serial.println("SWEEPRAW_END");
 }
 
-/* SWEEPRAW_BOTH: BOTH motors simultaneously, stream L then R per window.
- * Protocol: SWEEPRAW2_START / SWEEPRAW2_WIN <idx> <t> <duty> L / samples /
- *            SWEEPRAW2_WIN <idx> <t> <duty> R / samples / ... / SWEEPRAW2_END */
+/* SWEEPRAW_BOTH: BOTH motors + VBAT/IBAT in 4-channel round-robin DMA.
+ * Protocol: SWEEPRAW2_START / SWEEPRAW2_WIN <idx> <t> <duty> L <vbat> <ibat>
+ * / samples / SWEEPRAW2_WIN <idx> <t> <duty> R / samples / ... */
 static void cmd_sweepraw_both(const char *shape, int amp_pct,
                                uint32_t period_ms, uint32_t n_windows)
 {
@@ -1257,29 +1258,21 @@ static void cmd_sweepraw_both(const char *shape, int amp_pct,
     biba_hal_motor_pwm_right(0.0f);
     delay(200);
 
-    /* Sample VBAT/IBAT BEFORE adc_capture_init — ADC must be in single-shot
-     * mode for adc_read(), not DMA/FIFO mode. One sample per command is
-     * sufficient for battery monitoring (D-B2). */
-    uint16_t vbat_raw = biba_hal_adc_sample(BIBA_ADC_CHAN_VBAT);
-    uint16_t ibat_raw = biba_hal_adc_sample(BIBA_ADC_CHAN_IBAT);
-
-    adc_capture_init(RPMRUN_SPS);
-    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
-        Serial.println("ERROR baseline_L"); return;
+    /* 4-channel round-robin @ RPMRUN_SPS per channel = 40 kSPS total */
+    adc_capture_init_4ch(RPMRUN_SPS * 4u);
+    if (!adc_capture_burst_4ch(RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline"); return;
     }
-    uint32_t bl = 0;
-    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
-    float bl_l = (float)bl / RPMRUN_N_SAMPLES;
-    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
-        Serial.println("ERROR baseline_R"); return;
+    uint32_t bl_l = 0, bl_r = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) {
+        bl_l += s_buf[i];
+        bl_r += s_buf[RPMRUN_N_SAMPLES + i];
     }
-    bl = 0;
-    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
-    float bl_r = (float)bl / RPMRUN_N_SAMPLES;
+    float bl_lf = (float)bl_l / RPMRUN_N_SAMPLES;
+    float bl_rf = (float)bl_r / RPMRUN_N_SAMPLES;
 
-    Serial.printf("SWEEPRAW2_START shape=%s amp=%d period_ms=%lu n_windows=%lu bl_L=%.1f bl_R=%.1f vbat=%u ibat=%u\n",
-                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, bl_l, bl_r,
-                  (unsigned)vbat_raw, (unsigned)ibat_raw);
+    Serial.printf("SWEEPRAW2_START shape=%s amp=%d period_ms=%lu n_windows=%lu bl_L=%.1f bl_R=%.1f\n",
+                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, bl_lf, bl_rf);
 
     float amp = amp_pct / 100.0f;
     uint32_t t_start = millis();
@@ -1288,22 +1281,33 @@ static void cmd_sweepraw_both(const char *shape, int amp_pct,
         float duty = _sweep_duty(is_sin, amp, t_now, period_ms);
         biba_hal_motor_pwm_left(duty);
         biba_hal_motor_pwm_right(duty);
-        /* capture LEFT into s_buf */
-        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+
+        /* 4-channel round-robin: IS_L, IS_R, VBAT, IBAT in one DMA burst */
+        if (!adc_capture_burst_4ch(RPMRUN_N_SAMPLES, s_buf)) {
             biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
-            Serial.println("ERROR cap_L"); return;
+            Serial.println("ERROR cap_4ch"); return;
         }
-        /* capture RIGHT into s_win_r — both motors still running */
-        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_win_r)) {
-            biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
-            Serial.println("ERROR cap_R"); return;
+
+        /* Compute per-channel DC means for VBAT/IBAT */
+        uint32_t sum_vbat = 0, sum_ibat = 0;
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) {
+            sum_vbat += s_buf[RPMRUN_N_SAMPLES * 2 + i];
+            sum_ibat += s_buf[RPMRUN_N_SAMPLES * 3 + i];
         }
-        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L\n",
-                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
-        _print_win(s_buf, RPMRUN_N_SAMPLES);
+        uint16_t vbat_raw = (uint16_t)(sum_vbat / RPMRUN_N_SAMPLES);
+        uint16_t ibat_raw = (uint16_t)(sum_ibat / RPMRUN_N_SAMPLES);
+
+        /* Print LEFT IS channel + VBAT/IBAT means in header */
+        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L %u %u\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f,
+                      (unsigned)vbat_raw, (unsigned)ibat_raw);
+        _print_win(s_buf, RPMRUN_N_SAMPLES);  /* IS_LEFT samples */
+
+        /* Print RIGHT IS channel */
         Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f R\n",
                       (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
-        _print_win(s_win_r, RPMRUN_N_SAMPLES);
+        _print_win(&s_buf[RPMRUN_N_SAMPLES], RPMRUN_N_SAMPLES);  /* IS_RIGHT samples */
+
         if (Serial.available()) {
             String ln = Serial.readStringUntil('\n'); ln.trim();
             if (ln == "STOP") {

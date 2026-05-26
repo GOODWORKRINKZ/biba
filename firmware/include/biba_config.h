@@ -82,7 +82,7 @@
 /* --- Battery voltage divider (default 1:11 for ~33 V max) -------------- */
 
 #ifndef BIBA_VBAT_DIVIDER_RATIO
-#  define BIBA_VBAT_DIVIDER_RATIO      11.0f
+#  define BIBA_VBAT_DIVIDER_RATIO      10.12f  /* calibrated 2026-05-26: APM module, 23.3V bat → 2858 raw */
 #endif
 
 /* 3DR Power Module battery current calibration defaults.
