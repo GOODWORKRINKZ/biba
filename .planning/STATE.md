@@ -5,10 +5,10 @@ milestone_name: milestone
 status: complete
 last_updated: "2026-05-25T00:00:00.000Z"
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 21
-  completed_plans: 21
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 24
+  completed_plans: 24
   percent: 100
 ---
 
@@ -16,13 +16,13 @@ progress:
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 8 — Session Flight Recorder
-**Status:** COMPLETE — all 8 phases, all 21 plans done
+**Phase:** Phase 9 — RPM Estimator Hardening
+**Status:** COMPLETE — all 9 phases, all 24 plans done
 **Last updated:** 2026-05-25
 
 ## Current Phase
 
-All phases complete. Milestone RP2040 Port — DONE.
+All phases complete. Milestone RP2040 Port — DONE (Phase 9 DR fallback added).
 
 ## Completed Phases
 
