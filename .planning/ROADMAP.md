@@ -17,7 +17,9 @@
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
 - [x] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow (completed 2026-05-25)
 - [x] **Phase 8: Session Flight Recorder** — LittleFS black box on RP2040 flash, CH8 trigger + SOS tone, binary .bbd session files, Python download script via USB CDC
-- [ ] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox- [ ] **Phase 10: Goertzel Dual-Window Search** — Hint-guided second search window centered on previous valid freq, reducing Goertzel dropout at low duty where plant model is inaccurate
+- [x] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox (completed 2026-05-26)
+- [x] **Phase 10: Goertzel Dual-Window Search** — Hint-guided second search window centered on previous valid freq, reducing Goertzel dropout at low duty where plant model is inaccurate (completed 2026-05-26)
+- [ ] **Phase 11: IS-Pin Load & Stall Detection** — DC current ratio stall/load detector on IS-pin signal, VBAT/IBAT logging in SWEEPRAW captures, battery sag cross-talk characterisation, throttle-vs-load disambiguation research
 ---
 
 ## Phase Details
@@ -207,6 +209,24 @@ Plans:
 - [ ] 10-02-PLAN.md — Firmware API extension: 5-arg signature, HINT_MEASURED enum, dual-window .c implementation, 8 call sites
 - [ ] 10-03-PLAN.md — mode_standalone hint state + update/reset logic + ≥6 Unity tests (≥84 total)
 
+---
+
+### Phase 11: IS-Pin Load & Stall Detection
+**Goal**: Use IS-pin DC current level as a secondary validity gate for the spectral RPM estimator, detect wheel stall/high-load via `mean_IS / baseline > threshold`, add VBAT/IBAT raw ADC columns to SWEEPRAW captures for battery-sag cross-talk characterisation, and research throttle-vs-load disambiguation from inter-window current+frequency gradients.
+**Depends on**: Phase 10
+**Requirements**: LOAD-01, LOAD-02, LOAD-03
+**Success Criteria** (what must be TRUE):
+  1. IS-pin load detector correctly invalidates spectral results in win3/win18 (false-valid cases) from softhold dataset
+  2. SWEEPRAW_BOTH firmware streams `vbat_raw` and `ibat_raw` per window in protocol header; Python parser saves these columns
+  3. Battery sag cross-talk coefficient measured from dedicated capture (one motor loaded, one free)
+  4. Throttle-vs-load disambiguation: inter-window d_freq / d_dc gradient correctly classifies ≥3 test cases (acceleration vs load increase)
+  5. All new logic has Python-sim unit tests before any firmware changes
+**Plans**: TBD
+
+Plans:
+
+---
+
 Features deferred beyond current milestone (v2+):
 
 | Feature | Rationale |
@@ -246,3 +266,6 @@ Plans:
 | 5. Current Sensing & ADC | 0/TBD | not started | - |
 | 6. IS-Signal RPM PoC | 1/1 | complete | 2026-05-23 |
 | 7. IS-RPM Integration | 0/TBD | not started | - |
+| 9. RPM Estimator Hardening | 3/3 | complete | 2026-05-26 |
+| 10. Goertzel Dual-Window | 3/3 | complete | 2026-05-26 |
+| 11. IS-Pin Load & Stall Detection | 0/TBD | not started | - |
