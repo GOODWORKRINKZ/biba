@@ -40,14 +40,14 @@ typedef struct {
 } biba_rpm_pi_state_t;
 
 /* Default tuning constants (mirrors CONTEXT.md decisions). */
-#define BIBA_RPM_PI_KP             0.002f
+#define BIBA_RPM_PI_KP             0.003f
 #define BIBA_RPM_PI_KI             0.010f
 #define BIBA_RPM_PI_KI_LOW         0.005f
 #define BIBA_RPM_PI_KI_LOW_THRESH  200.0f
 #define BIBA_RPM_PI_FF_SLOPE       10.13f
 #define BIBA_RPM_PI_FF_DEAD        74.6f
 #define BIBA_RPM_PI_STICTION       0.15f  /* sustain threshold ~77 Hz; break stiction needs ~0.20 */
-#define BIBA_RPM_PI_P_CLAMP        0.05f
+#define BIBA_RPM_PI_P_CLAMP        0.20f
 #define BIBA_RPM_PI_DT_S           0.104f
 
 void  biba_rpm_pi_reset(biba_rpm_pi_state_t *s);

@@ -143,7 +143,7 @@
 #  define BIBA_CH_SPEED_MODE        5   /* CH6 */
 #endif
 #ifndef BIBA_CH_DRIVE_MODE
-#  define BIBA_CH_DRIVE_MODE        6   /* CH7 */
+#  define BIBA_CH_DRIVE_MODE        9   /* CH10 */
 #endif
 #ifndef BIBA_CH_BEACON
 #  define BIBA_CH_BEACON            7   /* CH8 */
@@ -268,7 +268,7 @@
 
 /* Recording rate in Hz (records per second written to LittleFS). */
 #ifndef BIBA_BLACKBOX_RATE_HZ
-#  define BIBA_BLACKBOX_RATE_HZ      10
+#  define BIBA_BLACKBOX_RATE_HZ      25
 #endif
 
 /* Bitmask of fields included in each record (0xFFFF = all 16 fields). */
@@ -281,9 +281,9 @@
 #  define BIBA_BLACKBOX_MIN_FREE_KB  64u
 #endif
 
-/* Alias so either name works: CH8 triggers the blackbox (same as BIBA_CH_BEACON). */
+/* CH7 triggers the blackbox recorder (separate from beacon/SOS on CH8). */
 #ifndef BIBA_CH_BLACKBOX
-#  define BIBA_CH_BLACKBOX  BIBA_CH_BEACON
+#  define BIBA_CH_BLACKBOX  6   /* CH7 */
 #endif
 
 #endif /* BIBA_CONFIG_H */

@@ -121,6 +121,8 @@ static volatile float s_meas_raw_hz_left;
 static volatile float s_meas_raw_hz_right;
 static volatile float s_spec_hz_left;
 static volatile float s_spec_hz_right;
+static volatile float s_pi_meas_hz_left;
+static volatile float s_pi_meas_hz_right;
 static volatile float s_spec_quality_left;
 static volatile float s_spec_quality_right;
 static volatile float s_spec_peak_left;
@@ -368,6 +370,8 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
     s_meas_raw_hz_right = raw_hz_right;
     s_spec_hz_left = spec_hz_left;
     s_spec_hz_right = spec_hz_right;
+    s_pi_meas_hz_left  = pi_meas_hz_left;
+    s_pi_meas_hz_right = pi_meas_hz_right;
     s_spec_quality_left = s_meas_left_enabled ? spec_left.quality : 0.0f;
     s_spec_quality_right = s_meas_right_enabled ? spec_right.quality : 0.0f;
     s_spec_peak_left = s_meas_left_enabled ? spec_left.peak_amp_lsb : 0.0f;
@@ -621,7 +625,7 @@ void biba_mode_standalone_tick(void)
                                       BIBA_BLACKBOX_FIELD_MASK,
                                       BIBA_BLACKBOX_RATE_HZ)) {
                 s_bb_recording = true;
-                s_bb_next_ms   = now;
+                s_bb_next_ms   = now + (1000u / BIBA_BLACKBOX_RATE_HZ);
                 printf("[biba] BB: session %04lu opened\r\n",
                        (unsigned long)s_bb_session_num);
             }
@@ -868,12 +872,10 @@ void biba_mode_standalone_tick(void)
         float target_mag_left = left_out < 0.0f ? -left_out : left_out;
         float target_mag_right = right_out < 0.0f ? -right_out : right_out;
 
-        /* IS sensing is hardware-observable only in wired quadrants.  LEFT has
-         * only the forward BTS7960 IS wired, so LEFT reverse ADC content is PWM
-         * coupling, not wheel speed.  RIGHT has valid IS evidence in both dirs.
-         * The PI still runs for every non-zero target; invalid quadrants simply
-         * receive meas=0 and therefore fall back to FF/P-start behaviour. */
-        s_meas_left_enabled  = (!rev_left && left_out > BIBA_MOTOR_DEADBAND);
+        /* IS sensing: both LEFT and RIGHT BTS7960 IS pins are now wired for
+         * both directions.  Enable measurement whenever |duty| > deadband. */
+        s_meas_left_enabled  = ((left_out > BIBA_MOTOR_DEADBAND) ||
+                    (left_out < -BIBA_MOTOR_DEADBAND));
         s_meas_right_enabled = ((right_out > BIBA_MOTOR_DEADBAND) ||
                     (right_out < -BIBA_MOTOR_DEADBAND));
         s_meas_left_reverse  = rev_left;
@@ -993,7 +995,7 @@ void biba_mode_standalone_tick(void)
     s_beacon_active = beacon;
 
     /* ------------------------------------------------------------------ *
-     * Blackbox CH8 state machine (BB trigger = same channel as beacon)
+     * Blackbox channel state machine (BB trigger = BIBA_CH_BLACKBOX)
      * ------------------------------------------------------------------ */
     {
         static bool s_bb_ch_prev;
@@ -1021,6 +1023,18 @@ void biba_mode_standalone_tick(void)
                 s_bb_full_warned = false;
                 biba_melody_player_start(&s_player, &biba_melody_sos);
                 printf("[biba] BB: enabled\r\n");
+                /* If already armed, open a session immediately (re-enable mid-flight). */
+                if (armed && !s_bb_recording) {
+                    s_bb_session_num = blackbox_next_session_num(NULL);
+                    if (blackbox_open_session(s_bb_session_num, now,
+                                              BIBA_BLACKBOX_FIELD_MASK,
+                                              BIBA_BLACKBOX_RATE_HZ)) {
+                        s_bb_recording = true;
+                        s_bb_next_ms   = now + (1000u / BIBA_BLACKBOX_RATE_HZ);
+                        printf("[biba] BB: session %04lu opened\r\n",
+                               (unsigned long)s_bb_session_num);
+                    }
+                }
             }
         } else if (!bb_ch_active && s_bb_ch_prev) {
             /* Falling edge */
@@ -1028,7 +1042,7 @@ void biba_mode_standalone_tick(void)
             if (s_bb_recording) {
                 blackbox_close_session();
                 s_bb_recording = false;
-                printf("[biba] BB: session closed (CH8 LOW)\r\n");
+                printf("[biba] BB: session closed (CH%d LOW)\r\n", BIBA_CH_BLACKBOX + 1);
             }
             printf("[biba] BB: disabled\r\n");
         }
@@ -1039,19 +1053,15 @@ void biba_mode_standalone_tick(void)
      * Blackbox per-tick record write (rate-throttled)
      * ------------------------------------------------------------------ */
     if (s_bb_recording && (int32_t)(now - s_bb_next_ms) >= 0) {
-        s_bb_next_ms = now + (1000u / BIBA_BLACKBOX_RATE_HZ);
+        s_bb_next_ms += (1000u / BIBA_BLACKBOX_RATE_HZ);
         biba_blackbox_record_t rec;
         rec.timestamp_ms    = now;
         rec.throttle        = (int16_t)(throttle * 1000.0f);
         rec.rudder          = (int16_t)(steering * 1000.0f);
         rec.duty_left       = (int16_t)(s_rpm_duty_left  * 1000.0f);
         rec.duty_right      = (int16_t)(s_rpm_duty_right * 1000.0f);
-        rec.rpm_left_hz10   = (uint16_t)(s_spec_hz_left  < 0.0f
-                                         ? -s_spec_hz_left  * 10.0f
-                                         :  s_spec_hz_left  * 10.0f);
-        rec.rpm_right_hz10  = (uint16_t)(s_spec_hz_right < 0.0f
-                                         ? -s_spec_hz_right * 10.0f
-                                         :  s_spec_hz_right * 10.0f);
+        rec.rpm_left_hz10   = (int16_t)(s_pi_meas_hz_left  * 10.0f);
+        rec.rpm_right_hz10  = (int16_t)(s_pi_meas_hz_right * 10.0f);
         rec.active_blocks_l = (uint8_t)s_freqdet_blocks_left;
         rec.active_blocks_r = (uint8_t)s_freqdet_blocks_right;
         rec.mean_is_l       = s_mean_is_left;

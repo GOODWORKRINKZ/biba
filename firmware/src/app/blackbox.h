@@ -45,8 +45,8 @@ typedef struct __attribute__((packed)) {
     int16_t  rudder;          /* bit  2  — rc_to_unit ×1000                  */
     int16_t  duty_left;       /* bit  3  — s_rpm_duty_left ×1000             */
     int16_t  duty_right;      /* bit  4  — s_rpm_duty_right ×1000            */
-    uint16_t rpm_left_hz10;   /* bit  5  — s_spec_hz_left × 10               */
-    uint16_t rpm_right_hz10;  /* bit  6  — s_spec_hz_right × 10              */
+    int16_t  rpm_left_hz10;   /* bit  5  — pi_meas_hz_left  × 10 (signed)   */
+    int16_t  rpm_right_hz10;  /* bit  6  — pi_meas_hz_right × 10 (signed)   */
     uint8_t  active_blocks_l; /* bit  7  — s_freqdet_blocks_left             */
     uint8_t  active_blocks_r; /* bit  8  — s_freqdet_blocks_right            */
     uint16_t mean_is_l;       /* bit  9  — s_mean_is_left (raw ADC counts)   */
