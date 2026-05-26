@@ -93,20 +93,25 @@ def _parse_both_windows(ser, timeout_s: float) -> tuple[list[dict], list[dict], 
                     bl_l = float(tok.split("=", 1)[1])
                 elif tok.startswith("bl_R="):
                     bl_r = float(tok.split("=", 1)[1])
+                elif tok.startswith("vbat="):
+                    _vbat_raw = int(tok.split("=", 1)[1])
+                elif tok.startswith("ibat="):
+                    _ibat_raw = int(tok.split("=", 1)[1])
             print(line)
             continue
         if line.startswith("SWEEPRAW2_WIN"):
-            # SWEEPRAW2_WIN <idx> <t_ms> <duty_pct> <L|R>
+            # SWEEPRAW2_WIN <idx> <t_ms> <duty_pct> <L|R> [vbat ibat]
             parts = line.split()
             current_chan = parts[4] if len(parts) >= 5 else "L"
             current_meta = {"idx": int(parts[1]), "t_ms": int(parts[2]),
                             "duty": float(parts[3])}
+            # vbat/ibat from START line (one pair per capture) or from WIN line (per-window, new format)
             if current_chan == "L" and len(parts) >= 7:
                 current_meta["vbat_raw"] = int(parts[5])
                 current_meta["ibat_raw"] = int(parts[6])
             else:
-                current_meta["vbat_raw"] = float("nan")
-                current_meta["ibat_raw"] = float("nan")
+                current_meta["vbat_raw"] = _vbat_raw if _vbat_raw is not None else float("nan")
+                current_meta["ibat_raw"] = _ibat_raw if _ibat_raw is not None else float("nan")
             continue
         if line.startswith("SWEEPRAW2_END"):
             print(line)
