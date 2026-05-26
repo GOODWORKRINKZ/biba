@@ -33,7 +33,8 @@ static float goertzel_amp_lsb(const uint16_t *buf, uint16_t n, float mean, uint1
 biba_rpm_spectral_result_t biba_rpm_spectral_estimate(const uint16_t *buf,
                                                       uint16_t n,
                                                       uint32_t sps,
-                                                      float target_hz)
+                                                      float target_hz,
+                                                      float hint_hz)
 {
     biba_rpm_spectral_result_t result = {
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
@@ -125,5 +126,69 @@ biba_rpm_spectral_result_t biba_rpm_spectral_estimate(const uint16_t *buf,
     result.freq_hz = result.candidate_hz;
     result.invalid_reason = BIBA_RPM_SPECTRAL_INVALID_NONE;
     result.valid = true;
+
+    /* --- Dual-window hint search ---
+     * If a previous valid frequency (hint_hz) is provided and lies outside
+     * the plant-model search band, run a second Goertzel search centred on
+     * hint_hz.  Take the result with the higher peak amplitude.
+     * hint_hz == 0.0f is the backward-compatible sentinel: suppresses the
+     * second window entirely.
+     */
+    if (hint_hz > 0.0f &&
+        fabsf(hint_hz - target_hz) > BIBA_RPM_SPECTRAL_ABS_BAND_HZ * 0.5f) {
+
+        float h_target = clampf_local(hint_hz,
+                                      BIBA_RPM_SPECTRAL_MIN_TARGET_HZ,
+                                      BIBA_RPM_SPECTRAL_MAX_TARGET_HZ);
+        float h_half = h_target * BIBA_RPM_SPECTRAL_REL_BAND;
+        if (h_half < BIBA_RPM_SPECTRAL_ABS_BAND_HZ) h_half = BIBA_RPM_SPECTRAL_ABS_BAND_HZ;
+        float h_f_lo = clampf_local(h_target - h_half,
+                                    BIBA_RPM_SPECTRAL_MIN_TARGET_HZ,
+                                    BIBA_RPM_SPECTRAL_MAX_TARGET_HZ);
+        float h_f_hi = clampf_local(h_target + h_half,
+                                    BIBA_RPM_SPECTRAL_MIN_TARGET_HZ,
+                                    BIBA_RPM_SPECTRAL_MAX_TARGET_HZ);
+        uint16_t h_k_lo = (uint16_t)ceilf(h_f_lo / bin_hz);
+        uint16_t h_k_hi = (uint16_t)floorf(h_f_hi / bin_hz);
+        if (h_k_lo < 1u) h_k_lo = 1u;
+        if (h_k_hi > k_max) h_k_hi = k_max;
+
+        if (h_k_hi >= h_k_lo) {
+            uint16_t h_best_bin = h_k_lo;
+            float h_best_amp = 0.0f;
+            for (uint16_t k = h_k_lo; k <= h_k_hi; ++k) {
+                float amp = goertzel_amp_lsb(buf, n, mean, k);
+                if (amp > h_best_amp) {
+                    h_best_amp = amp;
+                    h_best_bin = k;
+                }
+            }
+
+            /* Take hint result only if its peak exceeds the plant result */
+            if (h_best_amp > result.peak_amp_lsb) {
+                /* Parabolic interpolation for hint peak */
+                float h_delta = 0.0f;
+                if (h_best_bin > 1u && h_best_bin < k_max) {
+                    float h_left  = goertzel_amp_lsb(buf, n, mean,
+                                                     (uint16_t)(h_best_bin - 1u));
+                    float h_mid   = h_best_amp;
+                    float h_right = goertzel_amp_lsb(buf, n, mean,
+                                                     (uint16_t)(h_best_bin + 1u));
+                    float h_denom = h_left - 2.0f * h_mid + h_right;
+                    if (h_denom != 0.0f) {
+                        h_delta = 0.5f * (h_left - h_right) / h_denom;
+                        if (h_delta < -0.5f) h_delta = -0.5f;
+                        if (h_delta >  0.5f) h_delta =  0.5f;
+                    }
+                }
+                result.peak_amp_lsb  = h_best_amp;
+                result.candidate_hz  = ((float)h_best_bin + h_delta) * bin_hz;
+                result.freq_hz       = result.candidate_hz;
+                result.invalid_reason = BIBA_RPM_SPECTRAL_HINT_MEASURED;
+                result.valid = true;
+            }
+        }
+    }
+
     return result;
 }

@@ -365,10 +365,10 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
                                                     STANDALONE_RPM_WHEEL_SPS);
     biba_rpm_spectral_result_t spec_left = biba_rpm_spectral_estimate(
         s_adc_left_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
-        s_meas_target_hz_left);
+        s_meas_target_hz_left, 0.0f);
     biba_rpm_spectral_result_t spec_right = biba_rpm_spectral_estimate(
         s_adc_right_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
-        s_meas_target_hz_right);
+        s_meas_target_hz_right, 0.0f);
 
     float raw_hz_left = s_meas_left_enabled ? zc_left.freq_hz : 0.0f;
     float raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;

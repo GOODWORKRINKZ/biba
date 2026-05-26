@@ -22,6 +22,7 @@ typedef enum {
     BIBA_RPM_SPECTRAL_INVALID_PEAK_LOW = 3,
     BIBA_RPM_SPECTRAL_INVALID_QUALITY_LOW = 4,
     BIBA_RPM_SPECTRAL_INVALID_EXTRAPOLATED = 5,   /* DR fallback active */
+    BIBA_RPM_SPECTRAL_HINT_MEASURED = 6,           /* hint window was better than plant window */
 } biba_rpm_spectral_invalid_reason_t;
 
 typedef struct {
@@ -37,7 +38,8 @@ typedef struct {
 biba_rpm_spectral_result_t biba_rpm_spectral_estimate(const uint16_t *buf,
                                                       uint16_t n,
                                                       uint32_t sps,
-                                                      float target_hz);
+                                                      float target_hz,
+                                                      float hint_hz);
 
 #ifdef __cplusplus
 }
