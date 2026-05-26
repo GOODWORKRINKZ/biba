@@ -207,6 +207,17 @@ static volatile bool    s_latch_reset_pending;
 static volatile uint8_t s_latch_cooldown;   /* windows remaining in post-reset cooldown */
 static uint8_t          s_latch_resets;     /* cumulative latch resets (wraps at 255) */
 
+/* --- Anti-stall: ramp duty when HIGH_LOAD detected (Phase 11) -----------
+ * When the spectral estimator returns HIGH_LOAD (motor struggling but not
+ * yet latched), gradually increase duty to try to spin free. */
+#define ANTISTALL_RAMP_STEP   0.02f   /* +2% duty per window (~200ms) */
+#define ANTISTALL_MAX_DUTY    0.60f   /* cap at 60% — beyond this, let latch recovery handle it */
+#define ANTISTALL_CONFIRM        2u   /* 2 consecutive HIGH_LOAD windows before ramping */
+static volatile uint8_t  s_antistall_cnt_left;
+static volatile uint8_t  s_antistall_cnt_right;
+static volatile float    s_antistall_duty_left;
+static volatile float    s_antistall_duty_right;
+
 /* --- Blackbox state ---------------------------------------------------- */
 static volatile uint16_t s_mean_is_left;
 static volatile uint16_t s_mean_is_right;
@@ -378,6 +389,34 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
 
     biba_rpm_spectral_apply_load_gate(&spec_left, &spec_right);
 
+    /* --- Anti-stall ramp (Phase 11) ------------------------------------
+     * When HIGH_LOAD is detected: skip DR, ramp duty up gradually.
+     * When the motor recovers (valid=true), reset the ramp. */
+    if (s_meas_left_enabled) {
+        if (!spec_left.valid && spec_left.invalid_reason == BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD) {
+            if (++s_antistall_cnt_left >= ANTISTALL_CONFIRM) {
+                s_antistall_duty_left += ANTISTALL_RAMP_STEP;
+                if (s_antistall_duty_left > ANTISTALL_MAX_DUTY)
+                    s_antistall_duty_left = ANTISTALL_MAX_DUTY;
+            }
+        } else {
+            s_antistall_cnt_left = 0u;
+            s_antistall_duty_left = 0.0f;
+        }
+    }
+    if (s_meas_right_enabled) {
+        if (!spec_right.valid && spec_right.invalid_reason == BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD) {
+            if (++s_antistall_cnt_right >= ANTISTALL_CONFIRM) {
+                s_antistall_duty_right += ANTISTALL_RAMP_STEP;
+                if (s_antistall_duty_right > ANTISTALL_MAX_DUTY)
+                    s_antistall_duty_right = ANTISTALL_MAX_DUTY;
+            }
+        } else {
+            s_antistall_cnt_right = 0u;
+            s_antistall_duty_right = 0.0f;
+        }
+    }
+
     float raw_hz_left = s_meas_left_enabled ? zc_left.freq_hz : 0.0f;
     float raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;
 
@@ -434,6 +473,18 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
                                         s_target_hz_left,  pi_meas_hz_left);
     s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
                                         s_target_hz_right, pi_meas_hz_right);
+
+    /* Anti-stall override: when HIGH_LOAD persists, add ramp on top of PI duty.
+     * Uses the larger of (PI duty, anti-stall duty) so the ramp only kicks in
+     * if PI isn't already commanding more. */
+    if (s_antistall_duty_left > 0.0f && s_meas_left_enabled) {
+        float boosted = s_rpm_duty_left + s_antistall_duty_left;
+        if (boosted > s_rpm_duty_left) s_rpm_duty_left = boosted;
+    }
+    if (s_antistall_duty_right > 0.0f && s_meas_right_enabled) {
+        float boosted = s_rpm_duty_right + s_antistall_duty_right;
+        if (boosted > s_rpm_duty_right) s_rpm_duty_right = boosted;
+    }
 
     /* --- Thermal-latch auto-recovery (ISR context) ----------------------
      * Compute mean IS raw for each channel and check for fault signature:
