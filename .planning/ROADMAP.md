@@ -2,7 +2,7 @@
 
 **Milestone:** RP2040 Port
 **Created:** 2026-05-14
-**Phases:** 4
+**Phases:** 12
 **Requirements mapped:** 22/22 ✓
 
 ---
@@ -19,7 +19,8 @@
 - [x] **Phase 8: Session Flight Recorder** — LittleFS black box on RP2040 flash, CH8 trigger + SOS tone, binary .bbd session files, Python download script via USB CDC
 - [x] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox (completed 2026-05-26)
 - [x] **Phase 10: Goertzel Dual-Window Search** — Hint-guided second search window centered on previous valid freq, reducing Goertzel dropout at low duty where plant model is inaccurate (completed 2026-05-26)
-- [ ] **Phase 11: IS-Pin Load & Stall Detection** — DC current ratio stall/load detector on IS-pin signal, VBAT/IBAT logging in SWEEPRAW captures, battery sag cross-talk characterisation, throttle-vs-load disambiguation research
+- [x] **Phase 11: IS-Pin Load & Stall Detection** — DC current ratio stall/load detector on IS-pin signal, VBAT/IBAT logging in SWEEPRAW captures, battery sag cross-talk characterisation, throttle-vs-load disambiguation research (completed 2026-05-26)
+- [ ] **Phase 12: Signal Chain Feature Gating** — Per-feature compile-time toggles for every stage in the CRSF→motor duty chain; reorganise biba_config.h with feature-scoped config sections; replace BIBA_OPEN_LOOP with BIBA_FEATURE_RPM_CLOSED_LOOP master switch
 ---
 
 ## Phase Details
@@ -224,6 +225,26 @@ Plans:
 **Plans**: TBD
 
 Plans:
+
+---
+
+### Phase 12: Signal Chain Feature Gating
+**Goal**: Провести аудит всей цепочки CRSF → моторный PWM-сигнал, выделить каждую фичу в отдельный compile-time тумблер (`BIBA_FEATURE_*` в `target_config.h`), реорганизовать `biba_config.h` с секциями по фичам. Заменить `BIBA_OPEN_LOOP` на мастер-свитч `BIBA_FEATURE_RPM_CLOSED_LOOP` + 16 индивидуальных тумблеров.
+**Depends on**: Phase 11
+**Requirements**: FEAT-01, FEAT-02, FEAT-03, FEAT-04, FEAT-05, FEAT-06
+**Success Criteria** (what must be TRUE):
+  1. Каждая из 17 фич цепочки имеет `BIBA_FEATURE_<NAME>` тумблер в `biba_config.h`, отключается одним define
+  2. `BIBA_FEATURE_RPM_CLOSED_LOOP=0` эквивалентно старому `BIBA_OPEN_LOOP` — все RPM-фичи выключены, duty идёт напрямую с mixer
+  3. `biba_config.h` реорганизован: каждая фича в своей секции с комментарием, тумблер + все параметры фичи сгруппированы
+  4. Нарушение зависимостей между тумблерами (PI требует DR, dual-window требует spectral, etc.) ловится `#error` на этапе компиляции
+  5. Все существующие тесты проходят при всех тумблерах = 1 (сохранение текущего поведения)
+  6. Сборка с `BIBA_FEATURE_RPM_CLOSED_LOOP=0` проходит и робот едет в open-loop (регрессионный дым-тест)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — Reorganize biba_config.h: 17 feature toggle sections + dependency #error checks + BIBA_OPEN_LOOP backward compat
+- [ ] 12-02-PLAN.md — Inject #if BIBA_FEATURE_* guards into mode_standalone.c at all call sites (ISR + init + tick + blackbox), rename BIBA_REVERSE_PIP_ENABLED
+- [ ] 12-03-PLAN.md — Build verification (7 off-combinations) + unit test run + human smoke test (default + open-loop)
 
 ---
 
