@@ -8,12 +8,26 @@
 extern "C" {
 #endif
 
-#define BIBA_RPM_SPECTRAL_MIN_TARGET_HZ      50.0f
-#define BIBA_RPM_SPECTRAL_MAX_TARGET_HZ    1200.0f
-#define BIBA_RPM_SPECTRAL_REL_BAND           0.35f
-#define BIBA_RPM_SPECTRAL_ABS_BAND_HZ        80.0f
-#define BIBA_RPM_SPECTRAL_MIN_PEAK_AMP_LSB   45.0f
-#define BIBA_RPM_SPECTRAL_MIN_QUALITY         3.0f
+/* Defaults are set in biba_config.h; these #ifndef guards allow target
+ * overrides to propagate through. */
+#ifndef BIBA_RPM_SPECTRAL_MIN_TARGET_HZ
+#  define BIBA_RPM_SPECTRAL_MIN_TARGET_HZ      50.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MAX_TARGET_HZ
+#  define BIBA_RPM_SPECTRAL_MAX_TARGET_HZ    1200.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_REL_BAND
+#  define BIBA_RPM_SPECTRAL_REL_BAND           0.35f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_ABS_BAND_HZ
+#  define BIBA_RPM_SPECTRAL_ABS_BAND_HZ        80.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MIN_PEAK_AMP_LSB
+#  define BIBA_RPM_SPECTRAL_MIN_PEAK_AMP_LSB   45.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MIN_QUALITY
+#  define BIBA_RPM_SPECTRAL_MIN_QUALITY         3.0f
+#endif
 
 typedef enum {
     BIBA_RPM_SPECTRAL_INVALID_NONE = 0,
