@@ -240,16 +240,9 @@
  * their individual toggle settings.
  * ======================================================================== */
 
-/* --- Backward compatibility: BIBA_OPEN_LOOP → RPM_CLOSED_LOOP=0 --------- */
-#ifdef BIBA_OPEN_LOOP
-#  warning "BIBA_OPEN_LOOP is deprecated. Use BIBA_FEATURE_RPM_CLOSED_LOOP=0 instead."
-#  undef  BIBA_FEATURE_RPM_CLOSED_LOOP
-#  define BIBA_FEATURE_RPM_CLOSED_LOOP 0
-#endif
-
 /* --- Feature: RPM Closed-Loop Master ----------------------------------- */
 #ifndef BIBA_FEATURE_RPM_CLOSED_LOOP
-#  define BIBA_FEATURE_RPM_CLOSED_LOOP   1
+#  define BIBA_FEATURE_RPM_CLOSED_LOOP   0
 #endif
 
 /* --- Feature: RPM ZC Detector ------------------------------------------ */
