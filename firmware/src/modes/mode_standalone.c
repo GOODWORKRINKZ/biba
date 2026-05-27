@@ -197,10 +197,16 @@ static bool     s_trim_gesture_consumed;
  *
  * The flag is consumed in the main-context tick (not the IRQ) so that
  * biba_bts7960_thermal_reset() / sleep_us() never run inside an ISR. */
-#define LATCH_IS_RAW_MIN      3500u  /* ≈2.82 V; empirical: normal high-load mean ≈3400,
-                                      * latch saturates ADC to 4095.  Margin: ~600 LSB. */
-#define LATCH_BLOCKS_CONFIRM     3u   /* 3 × ~51 ms DMA window ≈ 150 ms confirmation */
-#define LATCH_COOLDOWN_WINDOWS  20u   /* 20 × ~51 ms ≈ 1 s spin-up grace after reset */
+#ifndef LATCH_IS_RAW_MIN
+#  define LATCH_IS_RAW_MIN      3500u  /* ≈2.82 V; empirical: normal high-load mean ≈3400,
+                                        * latch saturates ADC to 4095.  Margin: ~600 LSB. */
+#endif
+#ifndef LATCH_BLOCKS_CONFIRM
+#  define LATCH_BLOCKS_CONFIRM     3u   /* 3 × ~51 ms DMA window ≈ 150 ms confirmation */
+#endif
+#ifndef LATCH_COOLDOWN_WINDOWS
+#  define LATCH_COOLDOWN_WINDOWS  20u   /* 20 × ~51 ms ≈ 1 s spin-up grace after reset */
+#endif
 static volatile uint8_t s_latch_cnt_left;
 static volatile uint8_t s_latch_cnt_right;
 static volatile bool    s_latch_reset_pending;
@@ -210,9 +216,15 @@ static uint8_t          s_latch_resets;     /* cumulative latch resets (wraps at
 /* --- Anti-stall: ramp duty when HIGH_LOAD detected (Phase 11) -----------
  * When the spectral estimator returns HIGH_LOAD (motor struggling but not
  * yet latched), gradually increase duty to try to spin free. */
-#define ANTISTALL_RAMP_STEP   0.02f   /* +2% duty per window (~200ms) */
-#define ANTISTALL_MAX_DUTY    0.60f   /* cap at 60% — beyond this, let latch recovery handle it */
-#define ANTISTALL_CONFIRM        2u   /* 2 consecutive HIGH_LOAD windows before ramping */
+#ifndef ANTISTALL_RAMP_STEP
+#  define ANTISTALL_RAMP_STEP   0.02f   /* +2% duty per window (~200ms) */
+#endif
+#ifndef ANTISTALL_MAX_DUTY
+#  define ANTISTALL_MAX_DUTY    0.60f   /* cap at 60% — beyond this, let latch recovery handle it */
+#endif
+#ifndef ANTISTALL_CONFIRM
+#  define ANTISTALL_CONFIRM        2u   /* 2 consecutive HIGH_LOAD windows before ramping */
+#endif
 static volatile uint8_t  s_antistall_cnt_left;
 static volatile uint8_t  s_antistall_cnt_right;
 static volatile float    s_antistall_duty_left;
@@ -385,23 +397,31 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
     float pi_meas_hz_left  = 0.0f;
     float pi_meas_hz_right = 0.0f;
 
-#ifndef BIBA_OPEN_LOOP
+    /* --- RPM chain: all sub-features gated by master + individual toggles --- */
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_ZC
     zc_left = zc_freq_analyze(s_adc_left_buf,
                               samples_per_channel,
                               STANDALONE_RPM_WHEEL_SPS);
     zc_right = zc_freq_analyze(s_adc_right_buf,
                                samples_per_channel,
                                STANDALONE_RPM_WHEEL_SPS);
+#endif
+
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_SPECTRAL
     spec_left = biba_rpm_spectral_estimate(
         s_adc_left_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
         s_meas_target_hz_left, s_hint_hz_left);
     spec_right = biba_rpm_spectral_estimate(
         s_adc_right_buf, samples_per_channel, STANDALONE_RPM_WHEEL_SPS,
         s_meas_target_hz_right, s_hint_hz_right);
+#endif
 
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_LOAD_GATE
     biba_rpm_spectral_apply_load_gate(&spec_left, &spec_right);
+#endif
 
     /* --- Anti-stall ramp (Phase 11) ------------------------------------ */
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_ANTI_STALL
     if (s_meas_left_enabled) {
         if (!spec_left.valid && spec_left.invalid_reason == BIBA_RPM_SPECTRAL_INVALID_HIGH_LOAD) {
             if (++s_antistall_cnt_left >= ANTISTALL_CONFIRM) {
@@ -426,10 +446,15 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
             s_antistall_duty_right = 0.0f;
         }
     }
+#else
+    s_antistall_duty_left  = 0.0f;
+    s_antistall_duty_right = 0.0f;
+#endif
 
     raw_hz_left  = s_meas_left_enabled  ? zc_left.freq_hz  : 0.0f;
     raw_hz_right = s_meas_right_enabled ? zc_right.freq_hz : 0.0f;
 
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_DUAL_WINDOW
     if (s_meas_left_enabled && spec_left.valid &&
             spec_left.invalid_reason == BIBA_RPM_SPECTRAL_INVALID_NONE) {
         s_hint_hz_left = spec_left.freq_hz;
@@ -438,7 +463,9 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
             spec_right.invalid_reason == BIBA_RPM_SPECTRAL_INVALID_NONE) {
         s_hint_hz_right = spec_right.freq_hz;
     }
+#endif
 
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_DR
     {
         biba_rpm_spectral_invalid_reason_t dr_reason_left  = BIBA_RPM_SPECTRAL_INVALID_NONE;
         spec_hz_left = s_meas_left_enabled
@@ -451,6 +478,18 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
         pi_meas_hz_left  = s_meas_left_reverse  ? -spec_hz_left  : spec_hz_left;
         pi_meas_hz_right = s_meas_right_reverse ? -spec_hz_right : spec_hz_right;
 
+        s_spec_reason_left    = s_meas_left_enabled  ? (uint8_t)dr_reason_left  : 0u;
+        s_spec_reason_right   = s_meas_right_enabled ? (uint8_t)dr_reason_right : 0u;
+    }
+#else
+    /* When DR is off, use spectral freq_hz directly (with validity check) */
+    spec_hz_left  = s_meas_left_enabled  && spec_left.valid  ? spec_left.freq_hz  : 0.0f;
+    spec_hz_right = s_meas_right_enabled && spec_right.valid ? spec_right.freq_hz : 0.0f;
+    pi_meas_hz_left  = s_meas_left_reverse  ? -spec_hz_left  : spec_hz_left;
+    pi_meas_hz_right = s_meas_right_reverse ? -spec_hz_right : spec_hz_right;
+#endif
+
+    {
         (void)zc_ema_update(&s_telem_meas_ema_left,  spec_hz_left,  s_meas_target_hz_left);
         (void)zc_ema_update(&s_telem_meas_ema_right, spec_hz_right, s_meas_target_hz_right);
 
@@ -460,8 +499,6 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
         s_spec_peak_right     = s_meas_right_enabled ? spec_right.peak_amp_lsb : 0.0f;
         s_spec_candidate_left  = s_meas_left_enabled  ? spec_left.candidate_hz  : 0.0f;
         s_spec_candidate_right = s_meas_right_enabled ? spec_right.candidate_hz : 0.0f;
-        s_spec_reason_left    = s_meas_left_enabled  ? (uint8_t)dr_reason_left  : 0u;
-        s_spec_reason_right   = s_meas_right_enabled ? (uint8_t)dr_reason_right : 0u;
 
         s_freqdet_blocks_left  = s_meas_left_enabled  ? zc_left.active_blocks : 0u;
         s_freqdet_blocks_right = s_meas_right_enabled ? zc_right.active_blocks : 0u;
@@ -472,12 +509,14 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
         s_freqdet_std_left     = s_meas_left_enabled  ? zc_left.max_std : 0.0f;
         s_freqdet_std_right    = s_meas_right_enabled ? zc_right.max_std : 0.0f;
 
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_PI
         s_rpm_duty_left  = biba_rpm_pi_step(&s_rpm_pi_left,  &s_rpm_cfg,
                                              s_target_hz_left,  pi_meas_hz_left);
         s_rpm_duty_right = biba_rpm_pi_step(&s_rpm_pi_right, &s_rpm_cfg,
                                              s_target_hz_right, pi_meas_hz_right);
 
         /* Anti-stall override */
+#if BIBA_FEATURE_RPM_ANTI_STALL
         if (s_antistall_duty_left > 0.0f && s_meas_left_enabled) {
             float boosted = s_rpm_duty_left + s_antistall_duty_left;
             if (boosted > s_rpm_duty_left) s_rpm_duty_left = boosted;
@@ -486,8 +525,9 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
             float boosted = s_rpm_duty_right + s_antistall_duty_right;
             if (boosted > s_rpm_duty_right) s_rpm_duty_right = boosted;
         }
+#endif
+#endif /* BIBA_FEATURE_RPM_PI */
     }
-#endif /* !BIBA_OPEN_LOOP */
 
     s_meas_raw_hz_left  = raw_hz_left;
     s_meas_raw_hz_right = raw_hz_right;
@@ -511,6 +551,7 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
     s_mean_is_left  = (uint16_t)(sum_l / samples_per_channel);
     s_mean_is_right = (uint16_t)(sum_r / samples_per_channel);
 
+#if BIBA_FEATURE_LATCH_RECOVERY
     float duty_l = s_rpm_duty_left;
     float duty_r = s_rpm_duty_right;
     /* Skip detection during post-reset cooldown: motor spinning up from zero
@@ -546,6 +587,9 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
             s_latch_cnt_right = 0u;
         }
     }
+#else
+    s_latch_reset_pending = false;
+#endif
 
     (void)adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
                                        BIBA_ADC_CHAN_IS_RIGHT,
@@ -554,6 +598,7 @@ static void on_adc_pair_done(const uint16_t *buf, uint16_t samples_per_channel)
                                        on_adc_pair_done);
 }
 
+#if BIBA_FEATURE_CURRENT_LIMITER
 static biba_limit_result_t apply_drive_current_limits(biba_mix_output_t mix)
 {
     biba_motor_current_t il = biba_current_sense_left();
@@ -570,6 +615,7 @@ static biba_limit_result_t apply_drive_current_limits(biba_mix_output_t mix)
     };
     return biba_apply_motor_limits(mix.left, mix.right, il, ir, lim, rim);
 }
+#endif /* BIBA_FEATURE_CURRENT_LIMITER */
 
 void biba_mode_standalone_init(void)
 {
@@ -614,7 +660,9 @@ void biba_mode_standalone_init(void)
                                        on_adc_pair_done);
 
     /* Play startup fanfare through motor coils. */
+#if BIBA_FEATURE_MELODY
     biba_melody_player_start(&s_player, &biba_melody_startup);
+#endif
 
     /* Mount LittleFS blackbox partition. */
     if (!blackbox_init()) {
@@ -702,7 +750,9 @@ void biba_mode_standalone_tick(void)
 
     /* Failsafe rising edge: play warning (distinct from normal disarm). */
     if (failsafe && !s_last_failsafe) {
+#if BIBA_FEATURE_MELODY
         biba_melody_player_start(&s_player, &biba_melody_failsafe);
+#endif
         biba_rpm_pi_reset(&s_rpm_pi_left);   /* D-04: hard reset on failsafe edge */
         biba_rpm_pi_reset(&s_rpm_pi_right);
         biba_rpm_dr_reset(&s_dr_left);
@@ -724,7 +774,9 @@ void biba_mode_standalone_tick(void)
          * Recovery is not guaranteed immediately; control loop still applies failsafe. */
         biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
         printf("[biba] ARMED\r\n");
+#if BIBA_FEATURE_MELODY
         biba_melody_player_start(&s_player, &biba_melody_arm);
+#endif
         /* Open blackbox session if BB is enabled and flash is not full. */
         if (s_bb_enabled && !blackbox_is_full(BIBA_BLACKBOX_MIN_FREE_KB)) {
             s_bb_session_num = blackbox_next_session_num(NULL);
@@ -741,7 +793,9 @@ void biba_mode_standalone_tick(void)
         printf("[biba] DISARMED\r\n");
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
+#if BIBA_FEATURE_MELODY
             biba_melody_player_start(&s_player, &biba_melody_disarm);
+#endif
         }
         /* Close blackbox session on disarm edge. */
         if (s_bb_recording) {
@@ -770,6 +824,7 @@ void biba_mode_standalone_tick(void)
 
     /* Thermal-latch auto-recovery: flag set by ADC IRQ, consumed here.
      * Only act while armed; discard stale flag on disarm. */
+#if BIBA_FEATURE_LATCH_RECOVERY
     if (s_latch_reset_pending) {
         s_latch_reset_pending = false;
         if (armed) {
@@ -784,11 +839,15 @@ void biba_mode_standalone_tick(void)
             printf("[biba] LATCH RESET\r\n");
         }
     }
+#else
+    s_latch_reset_pending = false;
+#endif
 
     /* ------------------------------------------------------------------ *
      * Speed mode  (3-position switch → 1/3 / 2/3 / full scale)
      * ------------------------------------------------------------------ */
     float speed_scale;
+#if BIBA_FEATURE_SPEED_MODE
     if (speed_sel < BIBA_SPEED_MODE_LOW_THRESHOLD) {
         speed_scale = BIBA_SPEED_MODE_SLOW_SCALE;
     } else if (speed_sel > BIBA_SPEED_MODE_HIGH_THRESHOLD) {
@@ -796,6 +855,9 @@ void biba_mode_standalone_tick(void)
     } else {
         speed_scale = BIBA_SPEED_MODE_MEDIUM_SCALE;
     }
+#else
+    speed_scale = 1.0f;
+#endif
 
     /* Drive inputs pass through unscaled — the speed_scale is applied
      * AFTER the mixer on left_out/right_out (see below).  This keeps
@@ -806,6 +868,7 @@ void biba_mode_standalone_tick(void)
     /* No-rescale deadband: stick 20%→0, 30%→10%, 100%→80%.
      * Keeps micro-corrections proportional; max authority = 1-DEADBAND. */
     float steering;
+#if BIBA_FEATURE_STEERING_DEADBAND
     {
         float mag = raw_steering < 0.0f ? -raw_steering : raw_steering;
         if (mag <= BIBA_STEERING_DEADBAND)
@@ -814,6 +877,9 @@ void biba_mode_standalone_tick(void)
             steering = raw_steering < 0.0f ? -(mag - BIBA_STEERING_DEADBAND)
                                             :  (mag - BIBA_STEERING_DEADBAND);
     }
+#else
+    steering = raw_steering;
+#endif
 
     /* ------------------------------------------------------------------ *
      * Drive mode  (low position = MANUAL, else = STABILIZED)
@@ -822,6 +888,7 @@ void biba_mode_standalone_tick(void)
      * re-tune kp/kd in s_heading_cfg.
      * ------------------------------------------------------------------ */
     bool stabilized = (drive_sel > BIBA_DRIVE_MODE_LOW_THRESHOLD);
+#if BIBA_FEATURE_HEADING_HOLD
     if (stabilized && armed) {
         float correction = biba_pid_step(&s_heading_pid, &s_heading_cfg,
                                          0.0f, dt);
@@ -829,6 +896,7 @@ void biba_mode_standalone_tick(void)
     } else if (!armed) {
         biba_pid_reset(&s_heading_pid);
     }
+#endif
 
     /* (Envelope limiter removed — output-side scaling below preserves
      *  the full steering authority at any throttle level.) */
@@ -860,11 +928,15 @@ void biba_mode_standalone_tick(void)
                 if (live < -BIBA_MOTOR_TRIM_MAX_EFFECT) live = -BIBA_MOTOR_TRIM_MAX_EFFECT;
                 s_saved_motor_trim = live;
                 s_trim_mode_active = false;
+#if BIBA_FEATURE_MELODY
                 biba_melody_player_start(&s_player, &biba_melody_trim_exit);
+#endif
                 printf("[biba] Trim saved: %.3f\r\n", s_saved_motor_trim);
             } else {
                 s_trim_mode_active = true;
+#if BIBA_FEATURE_MELODY
                 biba_melody_player_start(&s_player, &biba_melody_trim_enter);
+#endif
                 printf("[biba] Trim mode ON\r\n");
             }
             s_trim_gesture_consumed = true;
@@ -901,22 +973,36 @@ void biba_mode_standalone_tick(void)
          * the L:R ratio (≡ direction of motion).  This avoids the
          * envelope-limiter's behaviour where steering authority collapsed
          * once throttle saturated. */
-        float t = biba_clamp_unit(throttle);
-        float s = biba_clamp_unit(steering);
-        float l_raw = t + s;
-        float r_raw = t - s;
-        float al = l_raw < 0.0f ? -l_raw : l_raw;
-        float ar = r_raw < 0.0f ? -r_raw : r_raw;
-        float peak = al > ar ? al : ar;
-        float denom = peak > 1.0f ? peak : 1.0f;
         biba_mix_output_t mix;
-        mix.left  = l_raw * speed_scale / denom;
-        mix.right = r_raw * speed_scale / denom;
+#if BIBA_FEATURE_MIXER_PROJECTION
+        {
+            float t = biba_clamp_unit(throttle);
+            float s = biba_clamp_unit(steering);
+            float l_raw = t + s;
+            float r_raw = t - s;
+            float al = l_raw < 0.0f ? -l_raw : l_raw;
+            float ar = r_raw < 0.0f ? -r_raw : r_raw;
+            float peak = al > ar ? al : ar;
+            float denom = peak > 1.0f ? peak : 1.0f;
+            mix.left  = l_raw * speed_scale / denom;
+            mix.right = r_raw * speed_scale / denom;
+        }
+#else
+        /* Fallback: plain differential mix + post-mix speed scaling. */
+        mix = biba_mix_differential(throttle, steering);
+        mix.left  = biba_clamp_unit(mix.left  * speed_scale);
+        mix.right = biba_clamp_unit(mix.right * speed_scale);
+#endif
+#if BIBA_FEATURE_CURRENT_LIMITER
         biba_limit_result_t out = apply_drive_current_limits(mix);
         left_limited  = out.left_limited;
         right_limited = out.right_limited;
         left_out  = out.left;
         right_out = out.right;
+#else
+        left_out  = mix.left;
+        right_out = mix.right;
+#endif
         (void)trim;  /* trim disabled — see TODO above */
     }
 
@@ -924,7 +1010,8 @@ void biba_mode_standalone_tick(void)
     const float mix_l_log = left_out;
     const float mix_r_log = right_out;
 
-#ifndef BIBA_OPEN_LOOP
+    /* --- RPM setpoint ramp (gated by master + RPM_RAMP toggle) --------- */
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_RAMP
     if (armed && !(s_dbg_active && s_dbg_open_loop)) {
         left_out = biba_ramp_update_with_rates(&s_rpm_setpoint_ramp_left,
                                                left_out, dt,
@@ -942,7 +1029,12 @@ void biba_mode_standalone_tick(void)
         biba_ramp_reset(&s_rpm_setpoint_ramp_left);
         biba_ramp_reset(&s_rpm_setpoint_ramp_right);
     }
+#else
+    biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+    biba_ramp_reset(&s_rpm_setpoint_ramp_right);
+#endif
 
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_PI
     /* Steering integral balance */
     if (steering == 0.0f) {
         float avg = (s_rpm_pi_left.integral + s_rpm_pi_right.integral) * 0.5f;
@@ -1002,16 +1094,15 @@ void biba_mode_standalone_tick(void)
         left_out  = duty_left;
         right_out = duty_right;
     }
-#else  /* BIBA_OPEN_LOOP — throttle maps directly to duty */
+#else  /* !BIBA_FEATURE_RPM_CLOSED_LOOP || !BIBA_FEATURE_RPM_PI — open-loop path */
     (void)dt;
     if (failsafe || !armed) {
         left_out  = 0.0f;
         right_out = 0.0f;
     }
     /* left_out/right_out already hold the mixer output from above.
-     * In open-loop mode they go directly to the motor driver — no PI,
-     * no spectral estimator, no direction-flip logic, nothing. */
-#endif /* BIBA_OPEN_LOOP */
+     * In open-loop or PI-off mode they go directly to the motor driver. */
+#endif /* BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_PI */
 
     (void)dt;   /* PI dt is configured via cfg.dt_s; tick dt no longer used here */
 
@@ -1053,16 +1144,18 @@ void biba_mode_standalone_tick(void)
     bool control_active = armed &&
         ((throttle > BIBA_MOTOR_DEADBAND  || throttle < -BIBA_MOTOR_DEADBAND) ||
          (steering > BIBA_MOTOR_DEADBAND  || steering < -BIBA_MOTOR_DEADBAND));
+#if BIBA_FEATURE_MELODY
     if (control_active && !s_reverse_pip_active) {
         biba_melody_player_stop(&s_player);
     }
+#endif
 
     bool going_reverse = armed &&
         (left_out  < -BIBA_MOTOR_DEADBAND) &&
         (right_out < -BIBA_MOTOR_DEADBAND);
     s_reversing = going_reverse;
 
-#if BIBA_REVERSE_PIP_ENABLED
+#if BIBA_FEATURE_REVERSE_PIP
     /* Detect reverse pip finishing */
     if (s_reverse_pip_active && !s_player.active) {
         s_reverse_pip_active = false;
@@ -1070,20 +1163,26 @@ void biba_mode_standalone_tick(void)
     /* Reverse: stop pip if no longer going backwards */
     if (!going_reverse) {
         if (s_reverse_pip_active) {
+#if BIBA_FEATURE_MELODY
             biba_melody_player_stop(&s_player);
+#endif
             s_reverse_pip_active = false;
         }
         s_reverse_pip_next_ms = 0u;
     }
     /* Schedule next pip while reversing */
     if (going_reverse && !s_player.active && now >= s_reverse_pip_next_ms) {
+#if BIBA_FEATURE_MELODY
         biba_melody_player_start(&s_player, &biba_melody_backup_pip);
+#endif
         s_reverse_pip_active = true;
         s_reverse_pip_next_ms = now + BIBA_REVERSE_PIP_INTERVAL_MS;
     }
 #else
     if (s_reverse_pip_active) {
+#if BIBA_FEATURE_MELODY
         biba_melody_player_stop(&s_player);
+#endif
     }
     s_reverse_pip_active = false;
     s_reverse_pip_next_ms = 0u;
@@ -1093,14 +1192,18 @@ void biba_mode_standalone_tick(void)
      * Priority melodies (failsafe/arm/disarm) may run first; the interval
      * timer keeps firing so the beacon stays audible on schedule. */
     if (beacon && !control_active) {
+#if BIBA_FEATURE_MELODY
         if (!s_player.active && now >= s_sos_next_ms) {
             biba_melody_player_start(&s_player, &biba_melody_sos);
             s_sos_next_ms = now + 8000u;
         }
+#endif
     } else if (!beacon) {
         if (s_beacon_active) {
             /* Beacon just switched off — stop SOS immediately. */
+#if BIBA_FEATURE_MELODY
             biba_melody_player_stop(&s_player);
+#endif
         }
         /* Reset timer so next activation fires immediately. */
         s_sos_next_ms = 0u;
@@ -1123,10 +1226,14 @@ void biba_mode_standalone_tick(void)
                     printf("[biba] BB: deleted oldest session\r\n");
                     /* Fall through: now enable BB for next arm. */
                     s_bb_enabled = true;
+#if BIBA_FEATURE_MELODY
                     biba_melody_player_start(&s_player, &biba_melody_sos);
+#endif
                     printf("[biba] BB: enabled\r\n");
                 } else {
+#if BIBA_FEATURE_MELODY
                     biba_melody_player_start(&s_player, &biba_melody_failsafe);
+#endif
                     s_bb_full_warned = true;
                     printf("[biba] BB: flash full, CH8 again to delete oldest\r\n");
                     /* Do NOT set s_bb_enabled — block until operator confirms. */
@@ -1134,7 +1241,9 @@ void biba_mode_standalone_tick(void)
             } else {
                 s_bb_enabled     = true;
                 s_bb_full_warned = false;
+#if BIBA_FEATURE_MELODY
                 biba_melody_player_start(&s_player, &biba_melody_sos);
+#endif
                 printf("[biba] BB: enabled\r\n");
                 /* If already armed, open a session immediately (re-enable mid-flight). */
                 if (armed && !s_bb_recording) {
@@ -1173,8 +1282,8 @@ void biba_mode_standalone_tick(void)
         rec.rudder          = (int16_t)(steering * 1000.0f);
         rec.duty_left       = (int16_t)(left_out  * 1000.0f);  /* actual motor duty */
         rec.duty_right      = (int16_t)(right_out * 1000.0f);
-#ifdef BIBA_OPEN_LOOP
-        rec.rpm_left_hz10   = 0;   /* PI disabled — no RPM measurement */
+#if !BIBA_FEATURE_RPM_CLOSED_LOOP
+        rec.rpm_left_hz10   = 0;   /* RPM master off — no RPM measurement */
         rec.rpm_right_hz10  = 0;
 #else
         rec.rpm_left_hz10   = (int16_t)(s_pi_meas_hz_left  * 10.0f);
@@ -1186,17 +1295,24 @@ void biba_mode_standalone_tick(void)
         rec.mean_is_r       = s_mean_is_right;
         rec.latch_resets    = s_latch_resets;
         rec.vbat_mv         = biba_voltage_sense_vbat_mv();
+#if BIBA_FEATURE_RPM_CLOSED_LOOP && BIBA_FEATURE_RPM_PI
         rec.pi_integral_l   = (int16_t)(s_rpm_pi_left.integral  * 10000.0f);
         rec.pi_integral_r   = (int16_t)(s_rpm_pi_right.integral * 10000.0f);
         rec.pi_meas_ema_l   = (uint16_t)(s_telem_meas_ema_left < 0.0f
                                           ? -s_telem_meas_ema_left * 10.0f
                                           :  s_telem_meas_ema_left * 10.0f);
+#else
+        rec.pi_integral_l   = 0;
+        rec.pi_integral_r   = 0;
+        rec.pi_meas_ema_l   = 0;
+#endif
         blackbox_write_record((const uint8_t *)&rec, sizeof(rec));
     }
 
     /* Advance melody state machine.
      * During reverse pip: use biased tick so motors keep driving while beeping.
      * All other melodies use standard symmetric push-pull (zero net torque). */
+#if BIBA_FEATURE_MELODY
     if (s_reverse_pip_active) {
         biba_melody_player_tick_biased(&s_player, now, left_out, right_out);
     } else {
@@ -1207,6 +1323,10 @@ void biba_mode_standalone_tick(void)
     if (!s_player.active) {
         biba_bts7960_drive(left_out, right_out);
     }
+#else
+    /* MELODY disabled — always drive motors directly. */
+    biba_bts7960_drive(left_out, right_out);
+#endif
 
     /* Update RGB status LED. */
     update_rgb_led(failsafe, armed, s_trim_mode_active,
