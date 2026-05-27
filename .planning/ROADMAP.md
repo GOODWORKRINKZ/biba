@@ -2,7 +2,7 @@
 
 **Milestone:** RP2040 Port
 **Created:** 2026-05-14
-**Phases:** 12
+**Phases:** 13
 **Requirements mapped:** 22/22 ✓
 
 ---
@@ -21,6 +21,7 @@
 - [x] **Phase 10: Goertzel Dual-Window Search** — Hint-guided second search window centered on previous valid freq, reducing Goertzel dropout at low duty where plant model is inaccurate (completed 2026-05-26)
 - [x] **Phase 11: IS-Pin Load & Stall Detection** — DC current ratio stall/load detector on IS-pin signal, VBAT/IBAT logging in SWEEPRAW captures, battery sag cross-talk characterisation, throttle-vs-load disambiguation research (completed 2026-05-26)
 - [ ] **Phase 12: Signal Chain Feature Gating** — Per-feature compile-time toggles for every stage in the CRSF→motor duty chain; reorganise biba_config.h with feature-scoped config sections; replace BIBA_OPEN_LOOP with BIBA_FEATURE_RPM_CLOSED_LOOP master switch
+- [ ] **Phase 13: Regression Fix — Load Gate / PI Windup** — Fix PI integral windup caused by sustained HIGH_LOAD invalid windows during deceleration; add deceleration bypass to load gate, raise LOAD_QUALITY_MAX, reset PI integral on gate edge
 ---
 
 ## Phase Details
