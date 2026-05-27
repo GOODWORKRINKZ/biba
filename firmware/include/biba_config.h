@@ -312,4 +312,13 @@
 #  define BIBA_RPM_LOAD_ABS_THRESH_ADC   3800u  /* absolute ADC count fallback gate (D-A3) */
 #endif
 
+/* --- Open-loop bypass (disable PI + spectral + ZC entirely) ------------- */
+/* When defined, the firmware runs in pure open-loop mode:
+ *   - CRSF throttle maps directly to motor duty (no PI controller)
+ *   - Spectral estimator, ZC detector, DR, and PI step are all skipped
+ *   - ADC DMA still runs (for IS mean current monitoring)
+ *   - Blackbox still records throttle + actual duty
+ * Comment out to restore closed-loop PI control. */
+#define BIBA_OPEN_LOOP
+
 #endif /* BIBA_CONFIG_H */
