@@ -604,22 +604,19 @@ Not:
 | A4 | Parameter constants moved from module `.h` files to `biba_config.h` will not break module compilation because `biba_config.h` is included first. | 6 | LOW — verified by reading include order in mode_standalone.c line 14 |
 | A5 | No other `.c` files besides `mode_standalone.c` call the gated functions. | 3 | MEDIUM — `motor_bridge.c` exists but is excluded from RP2040 build via `build_src_filter`. The `blackbox.cpp` references `s_rpm_pi_left.integral` indirectly through the record struct, not through function calls. This is handled in Pitfall 4. |
 
-## 16. Open Questions
+## 16. Open Questions (RESOLVED)
 
-1. **Should ZC detector parameters (ZC_SUBWIN_K, ZC_SUBWIN_MIN_PKPK, etc.) move to biba_config.h?**
-   - What we know: They are currently in `zc_detector.h` as `#define`s. They are user-tunable per calibration data.
-   - What's unclear: Whether the user wants these to be toggle-scoped or remain in the module header.
-   - Recommendation: Move them to the `BIBA_FEATURE_RPM_ZC` section per D-04 (all params for a feature grouped). The module `.h` keeps backward-compat `#ifndef` guards.
+1. **Should ZC detector parameters (ZC_SUBWIN_K, ZC_SUBWIN_MIN_PKPK, etc.) move to biba_config.h?** ✅ RESOLVED
+   - Decision: Move them to the `BIBA_FEATURE_RPM_ZC` section per D-04. Module `.h` keeps backward-compat `#ifndef` guards.
+   - Implemented in plan 12-01 task 1.
 
-2. **Should heading-hold PID gains (s_heading_cfg) move to biba_config.h?**
-   - What we know: Currently hardcoded in `mode_standalone.c` lines 85-88 as a static const struct.
-   - What's unclear: Whether the user wants to make these configurable.
-   - Recommendation: Move to `BIBA_FEATURE_HEADING_HOLD` section as `BIBA_HEADING_KP`, `BIBA_HEADING_KI`, `BIBA_HEADING_KD`, `BIBA_HEADING_OUTPUT_LIMIT`, `BIBA_HEADING_INTEGRAL_LIMIT`. Simple migration, no risk.
+2. **Should heading-hold PID gains (s_heading_cfg) move to biba_config.h?** ✅ RESOLVED
+   - Decision: Move to `BIBA_FEATURE_HEADING_HOLD` section as `BIBA_HEADING_KP`, `BIBA_HEADING_KI`, `BIBA_HEADING_KD`, `BIBA_HEADING_OUTPUT_LIMIT`, `BIBA_HEADING_INTEGRAL_LIMIT`.
+   - Implemented in plan 12-01 task 1.
 
-3. **Should state variables be `#if`-gated for RAM savings?**
-   - What we know: ~219 bytes potential savings (Section 4).
-   - What's unclear: Whether RP2040 RAM pressure warrants the added complexity.
-   - Recommendation: Gate only the largest consumers (RPM_PI ~76 bytes, HEADING_HOLD ~44 bytes) in Wave 1. Leave smaller variables ungated for simplicity. Add full gating in Wave 2 if needed.
+3. **Should state variables be `#if`-gated for RAM savings?** ✅ RESOLVED
+   - Decision: Gate only RPM_PI (~76 bytes) and HEADING_HOLD (~44 bytes) in Wave 1. Smaller variables left ungated for simplicity.
+   - Implemented in plan 12-02 task 2.
 
 ## 17. Environment Availability
 

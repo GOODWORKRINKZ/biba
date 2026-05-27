@@ -3,26 +3,26 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-05-26T19:05:00.000Z"
+last_updated: "2026-05-27T12:00:00.000Z"
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 11
   total_plans: 32
   completed_plans: 32
-  percent: 100
+  percent: 92
 ---
 
 # Project State
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 11 — IS-Pin Load & Stall Detection
-**Status:** COMPLETE
-**Last updated:** 2026-05-26
+**Phase:** Phase 12 — Signal Chain Feature Gating
+**Status:** IN PROGRESS (Context gathered)
+**Last updated:** 2026-05-27
 
 ## Current Phase
 
-Phase 11 complete (5/5 plans, 88/88 tests). IS-pin DC load gate implemented and tested. VBAT/IBAT columns added to SWEEPRAW protocol. Battery sag cross-talk confirmed (r=0.890). Throttle vs load disambiguation researched (ADR written).
+Phase 12 context gathered (2026-05-27). 17 feature toggles identified across RPM chain, safety, comfort, and drive categories. Decisions captured in 12-CONTEXT.md. Ready for planning.
 
 ## Completed Phases
 
