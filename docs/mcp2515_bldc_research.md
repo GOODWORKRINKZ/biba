@@ -10,7 +10,8 @@
 2. **SPI mode 0,0** (CPOL=0, CPHA=0), **максимум 10 МГц** по datasheet MCP2515. На RP2040 берём `spi_clk ≈ 7.8 МГц` (делитель 16 от 125 МГц clk_peri) — целое число делителя, ниже 10 МГц cap модуля, совместимо с кварцем 8 МГц.
 3. **Топология шины CAN** — два ODrive (left/right wheel) на одной витой паре, 120 Ω терминация на каждом конце. Включаем перемычку терминатора только на **последнем** физическом узле (на одном из ODrive — у ODrive Pro/S1 есть DIP "CAN 120R"; на самом MCP2515-модуле перемычка `RTERM`).
 4. **Целевой BLDC-контроллер — ODrive (CANSimple)**. У пользователя уже есть пара ODrive, протокол документирован, есть дисcovery/broadcast (важно для первого включения), watchdog, и цикл `Set_Input_Vel` 8 байт укладывается в одну CAN-frame. См. §5 и §6.
-5. **Длина проводов SPI ≤ 100 мм** при 10 МГц на макетной плате; CAN — витая пара, ≤ 5 м на 500 кбит/с (типичная скорость ODrive по умолчанию), ≤ 40 м на 125 кбит/с.
+5. **Альтернативный канал — ODrive UART ASCII** (см. §6.8). Тот же ODrive, тот же watchdog, но текстовый протокол по UART-A @ 115200 8N1, 3.3 В логика (RX 5V-tolerant — можно напрямую с RP2040 без level-shifter). Подходит для bench-test / debug / одноплатного PoC без MCP2515. **Не заменяет CAN** в production, но даёт вторую точку опоры при отладке.
+6. **Длина проводов SPI ≤ 100 мм** при 10 МГц на макетной плате; CAN — витая пара, ≤ 5 м на 500 кбит/с (типичная скорость ODrive по умолчанию), ≤ 40 м на 125 кбит/с. UART @ 115200 — до 3 м.
 
 ---
 
@@ -379,6 +380,105 @@ Trade-offs:
 - MCP2515 SPI round-trip (read status + write TX buffer) ≈ 50 мкс при 8 МГц SPI.
 - Итого round-trip host → CAN → ODrive: **~500 мкс** на 250 кбит/с. Это вписывается в CRSF control loop 50 Гц (20 мс).
 
+### 6.8 ODrive UART ASCII — альтернатива CAN для single-board / debugging setup
+
+Источники:
+- [ODrive ASCII Protocol (latest docs)](https://docs.odriverobotics.com/v/latest/manual/ascii-protocol.html)
+- [ODrive UART Interface (latest docs)](https://docs.odriverobotics.com/v/latest/manual/uart.html)
+- [ODrive — Arduino UART guide](https://docs.odriverobotics.com/v/latest/guides/arduino-uart-guide.html)
+
+ODrive, помимо CAN/CANSimple, поддерживает **text-based ASCII-протокол** через UART или USB-CDC. Это тот самый протокол, через который работает `odrivetool` и Arduino-библиотека `ODriveArduino`. Для нашего use-case он интересен в двух ситуациях:
+
+1. **Отладочный/лабораторный setup** — когда хочется посмотреть параметры (`r vbus_voltage`, `r axis0.controller.input_vel`) или погонять мотор одной строкой, без поднятия MCP2515 и всей CAN-инфраструктуры.
+2. **Одноплатная конфигурация без отдельного CAN-модуля** — если решено отказаться от MCP2515 и управлять парой ODrive по UART напрямую (на каждый ODrive свой UART-порт RP2040). Это упрощает BOM и устраняет 5V/3.3V-проблему с MCP2515.
+
+#### 6.8.1 Физический уровень
+
+| Параметр | Значение |
+|----------|----------|
+| UART-порт на ODrive | `UART_A` (по умолчанию), пины GPIO1 (TX) / GPIO2 (RX). Альтернатива — `UART_B` на GPIO3/GPIO4, если GPIO1/2 нужны под другое. |
+| Логические уровни | **3.3 В**. RX **5V-tolerant** (это явно сказано в [ODrive UART docs](https://docs.odriverobotics.com/v/latest/manual/uart.html)) — то есть с RP2040 (3.3 В) можно подключать **напрямую**, без level-shifter. |
+| Baudrate по умолчанию | **115200** 8N1. Меняется через `odrv0.config.uart_a_baudrate`. |
+| Half/Full duplex | **Full duplex** (отдельные TX/RX линии). |
+| Flow control | None (аппаратного нет — нужно держать частоту команд ≤ ~500 Гц, чтобы RX-буфер ODrive не переполнялся). |
+| Длина проводов | UART 115200 — до **3 м** при нормальной земле. На 921600 (максимум, который тянет ODrive UART-A) — до ~1 м. |
+
+#### 6.8.2 Сравнение с CAN
+
+| Критерий | CANSimple (§6) | UART ASCII (§6.8) |
+|----------|----------------|--------------------|
+| Кол-во ODrive на шине | До 63 (по `node_id`) | **1 ODrive = 1 UART-порт** (на RP2040 два UART'а — два ODrive, дальше только software-UART, что для 50 Гц неудобно) |
+| Доп. железо | MCP2515+TJA1050 модуль | **Ничего** (прямой UART) |
+| Latency round-trip | ~500 мкс @ 250 кбит/с | ~870 мкс @ 115200 (14 байт ASCII-строки `v 0 1.0 0\n` ≈ 14 × 87 мкс + 1 ms turnaround от ODrive на парсинг). В реальности — **1–2 мс**. |
+| Размер команды | 8 байт binary | 10–20 байт ASCII |
+| Конфигурация/параметры | Через RxSdo/TxSdo (overhead) | Нативно: `r property` / `w property value` |
+| Discovery | CAN Address broadcast | Нет — адресация по UART-порту |
+| Документация | Хорошая | Отличная (каждый параметр через `r`/`w`) |
+| Watchdog | Сбрасывается на каждый `Set_Input_*` | Тоже сбрасывается на каждый setpoint command (`v`/`q`/`p`/`c`/`t`/`u`) |
+| Подходит для production на BiBa | **Да** (CAN — основной путь) | Как **fallback / debug** или для одноплатного PoC |
+| Подходит для bench-test | Требует MCP2515 | **Идеален** — один USB-UART + терминал |
+
+#### 6.8.3 Протокол ASCII — команды
+
+Из [ODrive ASCII Protocol Reference](https://docs.odriverobotics.com/v/latest/manual/ascii-protocol.html). Все команды — ASCII-строки, заканчиваются `\n` (LF). ODrive **не эхо** команды. Опциональный GCode-checksum: `*XX` после команды, где `XX` — XOR всех предыдущих байт.
+
+| Команда | Формат | Назначение | Пример | Watchdog |
+|---------|--------|------------|--------|----------|
+| `t` | `t motor destination` | Trapezoidal trajectory (position) | `t 0 -2\n` | ✓ |
+| `q` | `q motor pos [vel_lim] [torque_lim]` | Position (одиночный setpoint) | `q 0 -2 1 0.1\n` | ✓ |
+| `p` | `p motor pos [vel_ff] [torque_ff]` | Position в real-time loop | `p 0 -2 0 0\n` | ✓ |
+| `v` | `v motor vel [torque_ff]` | **Velocity (наш основной)** | `v 0 1.0 0\n` | ✓ |
+| `c` | `c motor torque` | Torque | `c 0 0.5\n` | ✓ |
+| `f` | `f motor` → ответ `pos vel` | Feedback (pos/vel) | `f 0\n` → `1.234 0.567\n` | — |
+| `u` | `u motor` | Touch watchdog (без setpoint) | `u 0\n` | ✓ |
+| `r` | `r property` → ответ: текстовое значение | Read параметр | `r vbus_voltage\n` → `24.087744\n` | — |
+| `w` | `w property value` | Write параметр | `w axis0.controller.input_pos -123.456\n` | — |
+| `ss` | `ss` | Save config | `ss\n` | — |
+| `se` | `se` | Erase config | `se\n` | — |
+| `sr` | `sr` | Reboot ODrive | `sr\n` | — |
+| `sc` | `sc` | Clear errors | `sc\n` | — |
+
+`motor` — `0` или `1` (M0 / M1 на одном ODrive). `velocity` — в turns/s (= rev/s в терминах §6). `torque` — в Nm.
+
+#### 6.8.4 Минимальный цикл управления (UART)
+
+```c
+// RP2040 / pico-sdk — отправка setpoint на левый ODrive (UART1, GP4/GP5)
+char buf[32];
+int n = snprintf(buf, sizeof buf, "v 0 %.4f 0\n", target_vel_left);
+uart_write_blocking(uart1, (uint8_t*)buf, n);
+// на правый — тот же шаблон через uart0 (GP12/GP13)
+```
+
+Цикл (50 Гц, как в §6.6 для CAN):
+
+1. **Конфигурация (один раз, при старте)**: через ASCII `w axis0.controller.config.control_mode 2` (velocity), `w axis0.requested_state 8` (CLOSED_LOOP), `ss` (save config).
+2. **Каждый тик**: `v 0 <vel>\n` на левый ODrive + `v 0 <vel>\n` на правый ODrive (через два UART'а).
+3. **Feedback (опционально, по желанию)**: `f 0\n` → парсим строку `pos vel\n` (используем DMA RX на PIO UART, чтобы не блокировать loop).
+4. **Failsafe**: перестать слать `v` → ODrive задизармится по watchdog (тот же механизм, что и в CAN-варианте).
+
+#### 6.8.5 Latency budget
+
+- 14 байт ASCII-строки `v 0 1.0000 0\n` @ 115200 = 14 × 87 мкс ≈ **1.2 мс** на передачу.
+- ODrive парсит строку в основном loop, отзыв — **~500 мкс** (по измерениям ODriveArduino-комьюнити).
+- Round-trip `host → UART → ODrive`: **~1.7 мс** (без feedback). С feedback через `f` — ещё +1.2 мс на запрос-ответ.
+- В CRSF 50 Гц цикле (20 мс) — вписывается с запасом (~10%).
+
+#### 6.8.6 Ограничения и подводные камни
+
+1. **Один UART = один ODrive**. RP2040 имеет два аппаратных UART'а (UART0, UART1). Это покрывает наш случай (2 ODrive = 2 колеса). Если когда-нибудь добавится третий привод — придётся либо поднимать software-UART на PIO (реалистично, 115200 на PIO стабильно тянется), либо переходить обратно на CAN.
+2. **Нет broadcast** — нельзя одной строкой сбросить оба ODrive. Дублируем команду на оба UART'а (это дешевле, чем CAN-альтернатива с broadcast на оба node_id).
+3. **Нет hardware flow control** — если RP2040 будет слать команды быстрее, чем ODrive успевает парсить (например, > 500 Гц), ODrive начнёт терять байты. Держим частоту ≤ 200 Гц с запасом.
+4. **Парсинг ASCII на ODrive** — заметный CPU-overhead. На одном ODrive при двух моторах одновременно это ~10% CPU по сравнению с CAN-binary. На PoC это неважно, на нагруженном контроллере — может стать узким местом.
+5. **ACK/ответ приходит асинхронно** — нужно правильно разделять TX и RX-буферы на стороне RP2040, либо использовать DMA на RX.
+6. **`f` не гарантирует актуальность данных** — это snapshot, между запросом и ответом мотор может уехать. Для closed-loop контроля достаточно `v` + опциональный `f`.
+
+#### 6.8.7 Рекомендация для BiBa
+
+- **Production target** — оставляем CANSimple как основной канал (§6.1–§6.7). UART ASCII держим как **debug-канал**: можно подключиться USB-UART к ODrive напрямую и через `screen` диагностировать параметры без участия RP2040.
+- **Bench-test target** — если будет отдельный PoC с одним ODrive без CAN-модуля, UART ASCII — основной канал. Это убирает 5V/3.3V-проблему, BOM упрощается, latency всё равно укладывается.
+- В `RPICO_RP2040_BLDC` target header'е имеет смысл оставить UART1 (GP4/GP5) как `ODRIVE_UART_TX/RX` и заложить опциональный код-путь для ASCII-протокола, активируемый через Kconfig (`-DODRIVE_LINK=UART`).
+
 ---
 
 ## 7. Альтернативы: VESC (для справки)
@@ -490,12 +590,32 @@ ASCII-вариант для печати:
 | Status LED | GP25 | GPIO | встроенный LED Pico |
 | NeoPixel | GP23 | PWM / PIO | WS2812 на YD-RP2040 |
 
+### 9.1 Опциональная раскладка при использовании UART ASCII-протокола (см. §6.8)
+
+Если в target выбран режим `-DODRIVE_LINK=UART`, MCP2515 не нужен, и пины перераспределяются:
+
+| Функция | Pico GPIO | Peripheral | Цель |
+|---------|-----------|------------|------|
+| ODrive-UART TX (host→ODrive) | GP4 | UART1 TX | ODrive UART-A RX (GPIO2) |
+| ODrive-UART RX (ODrive→host) | GP5 | UART1 RX | ODrive UART-A TX (GPIO1) |
+
+> На Pico 5V-tolerant RX у ODrive снимает проблему level-shifter'а (см. §6.8.1).
+> **Один аппаратный UART = один ODrive.** RP2040 имеет ровно два аппаратных UART'а: UART0 занят под CRSF (GP0/GP1), UART1 — под один ODrive (GP4/GP5). На второй ODrive варианты:
+> 1. Поднять **PIO-UART** (библиотека `pico-pio-uart` от Карлоса Гамбоа / `pio_uart` пример из pico-sdk-extras). 115200 на PIO тянется стабильно, остаётся GPIO-свобода.
+> 2. Остаться на CAN для второго ODrive (гибрид: левый мотор — UART, правый — CAN). На практике это усложняет код, не рекомендуется.
+> 3. Для полноценной пары ODrive по UART — мигрировать на RP2350 (3 аппаратных UART'а) или взять плату с двумя RP2040. Для BiBa — overkill, поэтому **production остаётся на CAN**, UART-вариант держим как bench-test.
+
+### 9.2 Комбинированная раскладка (CAN — production, UART — debug)
+
+Основная продакшен-конфигурация использует MCP2515 на SPI0 (GP16–GP19, GP17=CS, GP15=INT) + ODrive по CAN. Дополнительно оставляем UART1 (GP4/GP5) как опциональный debug-канал: при необходимости можно подключить USB-UART-кабель к ODrive напрямую (минуя RP2040) и через терминал (`screen`, `minicom` или odrivetool по USB) посмотреть параметры, либо подключить UART1 RP2040 к ODrive UART-A как в §9.1 для отдельного bench-теста без полной CAN-инфраструктуры.
+
 > GP10/11/14 остаются свободными — могут быть резервом для второй MCP2515 (если когда-нибудь понадобится отдельная CAN-сеть для BMS/IMU) или для GPIO-выхода общего назначения.
 
 Питание:
 
 - Pico питается от USB (development) или от BEC 5 В через VBUS (на роботе).
 - MCP2515-модуль питается от **BEC 5 В робота** (один общий rail с ODrive). Если используется модуль с on-board level-shifter — VCC модуля = 3V3 Pico (предпочтительно, чтобы не городить делители).
+- Для UART-варианта: питание Pico и ODrive общее, дополнительных модулей нет.
 
 ---
 
@@ -504,9 +624,11 @@ ASCII-вариант для печати:
 1. **Galvanic isolation**: на ODrive Pro есть изолированный CAN, на старой линейке — нет. Решение — поставить iso-coupler (ISO1050 / ADM3050) в разрыв CANH/CANL. **Для PoC — отложено**.
 2. **RTR-сообщения**: MCP2515 умеет автоматически отвечать на RTR из буфера, но удобнее хосту самому опрашивать через periodic-encoder-msg, настроив `axis.config.can.encoder_msg_rate_ms`. Это упрощает код на стороне RP2040.
 3. **Heartbeat → failsafe gate**: использовать Heartbeat от ODrive как дополнительный safety-канал. Если ODrive ушёл в disarmed state — host тоже должен перейти в failsafe (прекратить слать Set_Input_Vel).
-4. **Boot-up time**: ODrive autobaud может занять 200–500 мс. RP2040 на это время должен уметь отдавать нулевые команды или явно ждать `Get_Version` от ODrive, и только потом слать `Set_Axis_State(CLOSED_LOOP)`.
-5. **Термомониторинг**: на ODrive есть `Get_Temperature` (FET + Motor). У PICО пока нет IMU/ADC на этом target — можно переиспользовать GP26/GP27 как ADC0/ADC1 для NTC-термистора на радиаторе (если нужно).
-6. **Двухмоторный режим**: команды на левый/правый ODrive идут параллельно, ID разные (node_id=0, node_id=1). Шина успевает при частоте 50 Гц: `2 × 8 байт × ~500 мкс = 1 мс/cycle` из 20 мс — огромный запас.
+4. **Boot-up time**: ODrive autobaud может занять 200–500 мс. RP2040 на это время должен уметь отдавать нулевые команды или явно ждать `Get_Version` от ODrive, и только потом слать `Set_Axis_State(CLOSED_LOOP)`. В UART-варианте этой задержки нет — autobaud касается только CAN.
+5. **Термомониторинг**: на ODrive есть `Get_Temperature` (FET + Motor). У PICО пока нет IMU/ADC на этом target — можно переиспользовать GP26/GP27 как ADC0/ADC1 для NTC-термистора на радиаторе (если нужно). В UART-варианте есть нативный `r axis0.motor_thermistor.temperature` без CAN-overhead.
+6. **Двухмоторный режим**: команды на левый/правый ODrive идут параллельно, ID разные (node_id=0, node_id=1). Шина успевает при частоте 50 Гц: `2 × 8 байт × ~500 мкс = 1 мс/cycle` из 20 мс — огромный запас. В UART-варианте — два UART'а (один аппаратный + один PIO), либо PIO на оба, либо гибрид с CAN.
+7. **Конфликт UART0**: GP0/GP1 заняты под CRSF (UART0). Если в production хотим UART-debug канал на ODrive — он идёт через UART1 (GP4/GP5) и работает одновременно с CAN-шиной. Никаких конфликтов.
+8. **PIO-UART как опция для второго ODrive** (см. §9.1): нужно выбрать готовую библиотеку. Кандидаты: `pico-pio-uart` (Camel CASE, GitHub), пример `pio_uart` в pico-sdk-extras, либо самописный PIO-программный UART. Размер PIO-программы ~12 инструкций, RAM-буфер на 32 байта хватит для 14-байт команды + ответа.
 
 ---
 
@@ -530,6 +652,11 @@ ASCII-вариант для печати:
 - [ODrive — CAN Protocol (latest)](https://docs.odriverobotics.com/v/latest/manual/can-protocol.html)
 - [ODrive — CAN Bus Guide](https://docs.odriverobotics.com/v/latest/guides/can-guide.html)
 - [ODrive — DBC file (firmware repo)](https://github.com/odriverobotics/ODrive/blob/master/docs/can-protocol.md)
+- [ODrive — ASCII Protocol (latest)](https://docs.odriverobotics.com/v/latest/manual/ascii-protocol.html)
+- [ODrive — UART Interface (latest)](https://docs.odriverobotics.com/v/latest/manual/uart.html)
+- [ODrive — Arduino UART guide](https://docs.odriverobotics.com/v/latest/guides/arduino-uart-guide.html)
+- [ODriveArduino library](https://github.com/madcowswe/ODrive/tree/master/Arduino/ODriveArduino) — эталонная реализация ASCII-протокола для MCU
+- [pico-pio-uart (Camel CASE)](https://github.com/camel-case/pico-pio-uart) — PIO-UART библиотека для RP2040 (опция для второго ODrive по UART)
 - [VESC — CAN-bus communication (vedderb/bldc)](https://github.com/vedderb/bldc/blob/master/documentation/comm_can.md)
 - [VESC 6 CAN formats (PDF)](https://vesc-project.com/sites/default/files/imce/u15301/VESC6_CAN_CommandsTelemetry.pdf)
 - [DroneCAN (UAVCAN v0) protocol spec](https://dronecan.github.io)
@@ -556,9 +683,12 @@ ASCII-вариант для печати:
 | Уровни | Предпочтительно модуль с **on-board level-shifter** (3.3 V), либо резистивный делитель 2k/1k на 5V-линиях с последовательным 1k на MISO/INT |
 | Шина | CAN 2.0B active, **11-bit ID**, autobaud, начальный битрейт **250 кбит/с** |
 | Целевой BLDC | **ODrive Pro / S1 / Micro** (CANSimple) |
-| Протокол | CANSimple: `message_id = (node_id << 5) | cmd_id`, little-endian, IEEE-754 float |
-| Command loop | `Set_Input_Vel(0x0D)` каждые 10–20 мс, watchdog сбрасывается сам |
-| Discovery | Broadcast `Address(0x06)` с RTR=1 при инициализации |
-| Failsafe | Прекратить `Set_Input_*` при потере CRSF → ODrive задизармится по своему watchdog |
+| Протокол (production) | CANSimple: `message_id = (node_id << 5) &#124; cmd_id`, little-endian, IEEE-754 float |
+| Протокол (альтернатива) | ODrive ASCII через **UART_A** @ 115200 8N1, 3.3 В логика (RX 5V-tolerant), команда `v motor vel torque_ff`. См. §6.8. |
+| Command loop | `Set_Input_Vel(0x0D)` каждые 10–20 мс по CAN, watchdog сбрасывается сам; либо `v 0 <vel>\n` каждые 10–20 мс по UART |
+| Discovery (CAN) | Broadcast `Address(0x06)` с RTR=1 при инициализации |
+| Discovery (UART) | Не требуется — адресация по выделенному UART-порту на каждый ODrive |
+| Debug-канал | UART1 (GP4/GP5) — подключение к ODrive UART-A напрямую, ASCII-протокол через терминал (`screen /dev/ttyUSB0 115200`) |
+| Failsafe | Прекратить `Set_Input_*` при потере CRSF → ODrive задизармится по своему watchdog (одинаково работает и для CAN, и для UART-варианта) |
 
 Дальнейшие шаги — в задаче `t_3cca56ce` (Architecture нового таргета) и `t_a3ed6b73` / `t_6c05e712` / `t_add4db37` (зависит от декомпозиции). Настоящий документ служит опорой для ADR и `target.md` нового таргета `RPICO_RP2040_BLDC`.
