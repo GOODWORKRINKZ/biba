@@ -54,6 +54,10 @@ bool adc_capture_start_async_pair(uint8_t channel_a, uint8_t channel_b,
  * is safe to read and a new capture can be started. */
 bool adc_capture_busy(void);
 
+/* --- 4-channel round-robin (Phase 11: IS_L + IS_R + VBAT + IBAT) --------- */
+void adc_capture_init_4ch(uint32_t sample_rate_sps);
+bool adc_capture_burst_4ch(uint16_t n_per_ch, uint16_t *out_buf);
+
 #ifdef __cplusplus
 }
 #endif

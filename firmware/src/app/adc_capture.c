@@ -222,3 +222,67 @@ bool adc_capture_busy(void)
 {
     return s_dma_ch >= 0;
 }
+
+/* --- 4-channel round-robin (Phase 11: IS_L + IS_R + VBAT + IBAT) --------- */
+
+void adc_capture_init_4ch(uint32_t sample_rate_sps)
+{
+    adc_init();
+    adc_gpio_init(26);  /* GP26 = ADC0 = IS_LEFT  */
+    adc_gpio_init(27);  /* GP27 = ADC1 = IS_RIGHT */
+    adc_gpio_init(28);  /* GP28 = ADC2 = VBAT     */
+    adc_gpio_init(29);  /* GP29 = ADC3 = IBAT     */
+
+    adc_set_round_robin(
+        (1u << 0) |     /* ADC0 = IS_LEFT  */
+        (1u << 1) |     /* ADC1 = IS_RIGHT */
+        (1u << 2) |     /* ADC2 = VBAT     */
+        (1u << 3)       /* ADC3 = IBAT     */
+    );
+
+    adc_fifo_setup(true, true, 1, false, false);
+
+    float div = (float)48000000u / (float)sample_rate_sps - 1.0f;
+    if (div < 0.0f) div = 0.0f;
+    adc_set_clkdiv(div);
+}
+
+bool adc_capture_burst_4ch(uint16_t n_per_ch, uint16_t *out_buf)
+{
+    uint32_t total = (uint32_t)n_per_ch * 4u;
+
+    int dma_ch = dma_claim_unused_channel(true);
+    dma_channel_config cfg = dma_channel_get_default_config(dma_ch);
+    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
+    channel_config_set_read_increment(&cfg, false);
+    channel_config_set_write_increment(&cfg, true);
+    channel_config_set_dreq(&cfg, DREQ_ADC);
+
+    static uint16_t tmp[ADC_CAPTURE_MAX_SAMPLES];
+    dma_channel_configure(dma_ch, &cfg, tmp, &adc_hw->fifo, total, true);
+    adc_run(true);
+
+    uint32_t t0 = to_ms_since_boot(get_absolute_time());
+    while (dma_channel_is_busy(dma_ch)) {
+        if (to_ms_since_boot(get_absolute_time()) - t0 > 500u) {
+            adc_run(false); adc_fifo_drain();
+            dma_channel_abort(dma_ch);
+            dma_channel_unclaim(dma_ch);
+            return false;
+        }
+    }
+
+    adc_run(false);
+    adc_fifo_drain();
+    dma_channel_unclaim(dma_ch);
+
+    /* Deinterleave: tmp[0,4,8,...]=IS_L  tmp[1,5,9,...]=IS_R
+     *               tmp[2,6,10,...]=VBAT  tmp[3,7,11,...]=IBAT */
+    for (uint16_t i = 0; i < n_per_ch; ++i) {
+        out_buf[i]                = tmp[(uint32_t)i * 4u];
+        out_buf[n_per_ch + i]     = tmp[(uint32_t)i * 4u + 1u];
+        out_buf[n_per_ch * 2 + i] = tmp[(uint32_t)i * 4u + 2u];
+        out_buf[n_per_ch * 3 + i] = tmp[(uint32_t)i * 4u + 3u];
+    }
+    return true;
+}

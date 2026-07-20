@@ -2,7 +2,7 @@
 
 **Milestone:** RP2040 Port
 **Created:** 2026-05-14
-**Phases:** 4
+**Phases:** 12
 **Requirements mapped:** 22/22 ✓
 
 ---
@@ -15,8 +15,12 @@
 - [x] **Phase 4: Thermal Hardening & ESC Architecture** — BTN8982TA/IFX007T evaluation + cooling design + production validation (completed 2026-05-19)
 - [x] **Phase 5: Current Sensing & ADC Architecture** — BTS7960 IS-pins study + ADS1115 I2C ADC allocation + battery/per-wheel current + temp/hum telemetry (completed 2026-05-22)
 - [x] **Phase 6: IS-Signal RPM Proof-of-Concept** — RC-filtered IS-pin ADC capture + FFT/ZC/autocorr algorithm comparison + Python analysis scripts (completed 2026-05-23)
-- [ ] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow
-
+- [x] **Phase 7: IS-RPM Integration** — A2 Sub-window ZC detector + FF+PI RPM loop ported to main firmware (both wheels), wheel_rpm_hz in biba_proto, m/s estimation, calibration workflow (completed 2026-05-25)
+- [x] **Phase 8: Session Flight Recorder** — LittleFS black box on RP2040 flash, CH8 trigger + SOS tone, binary .bbd session files, Python download script via USB CDC
+- [x] **Phase 9: RPM Estimator Hardening** — Dead-reckoning fallback for Goertzel-invalid cycles, ADC saturation detection, measurement quality flags in blackbox (completed 2026-05-26)
+- [x] **Phase 10: Goertzel Dual-Window Search** — Hint-guided second search window centered on previous valid freq, reducing Goertzel dropout at low duty where plant model is inaccurate (completed 2026-05-26)
+- [x] **Phase 11: IS-Pin Load & Stall Detection** — DC current ratio stall/load detector on IS-pin signal, VBAT/IBAT logging in SWEEPRAW captures, battery sag cross-talk characterisation, throttle-vs-load disambiguation research (completed 2026-05-26)
+- [ ] **Phase 12: Signal Chain Feature Gating** — Per-feature compile-time toggles for every stage in the CRSF→motor duty chain; reorganise biba_config.h with feature-scoped config sections; replace BIBA_OPEN_LOOP with BIBA_FEATURE_RPM_CLOSED_LOOP master switch
 ---
 
 ## Phase Details
@@ -141,15 +145,108 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — ZC Detector C module (zc_detector.h/c) + async ADC capture (adc_capture.h/c moved + extended) + Unity test_zc_detector
-- [ ] 07-02-PLAN.md — Proto extension (biba_proto.h + telemetry.h/c) + Python decoder (protocol.py + config.py + main.py) + test_stm32_link_protocol
-- [ ] 07-03-PLAN.md — CALRUN command in PoC firmware + scripts/is_rpm_calibrate.py calibration script
-- [ ] 07-04-PLAN.md — RPM PI C module (rpm_pi.h/c) + Unity test_rpm_pi (wave 2, depends on 07-01)
-- [ ] 07-05-PLAN.md — Wire PI into mode_standalone.c (replaces ramp), DMA IRQ state machine, build + smoke test (wave 3)
+- [x] 07-01-PLAN.md — ZC Detector C module (zc_detector.h/c) + async ADC capture (adc_capture.h/c moved + extended) + Unity test_zc_detector
+- [x] 07-02-PLAN.md — Proto extension (biba_proto.h + telemetry.h/c) + Python decoder (protocol.py + config.py + main.py) + test_stm32_link_protocol
+- [x] 07-03-PLAN.md — CALRUN command in PoC firmware + scripts/is_rpm_calibrate.py calibration script
+- [x] 07-04-PLAN.md — RPM PI C module (rpm_pi.h/c) + Unity test_rpm_pi (wave 2, depends on 07-01)
+- [x] 07-05-PLAN.md — Wire PI into mode_standalone.c (replaces ramp), DMA IRQ state machine, build + smoke test (wave 3)
 
 ---
 
-## Backlog
+### Phase 8: Session Flight Recorder
+**Goal**: Чёрный ящик на RP2040 — запись телеметрии сессии в LittleFS flash + чтение через USB CDC Python-скрипт
+**Depends on**: Phase 7
+**Requirements**: BB-01, BB-02, BB-03
+**Success Criteria** (what must be TRUE):
+  1. CH8 HIGH — биба играет SOS-мелодию, режим записи активирован
+  2. При арминге с активным BB — открывается session_NNNN.bbd, запись с BIBA_BLACKBOX_RATE_HZ
+  3. Файл содержит все поля: timestamp, throttle, rudder, duty L/R, rpm L/R, active_blocks, mean_is, latch_resets, vbat, PI state
+  4. При полном flash: звук ошибки при первом CH8; второй CH8 — удаляет старейшую сессию
+  5. `python3 scripts/biba_blackbox_download.py` скачивает файлы и конвертирует в CSV без ручных команд
+**Plans**: 3 plans, 3 waves
+
+Plans:
+- [ ] 08-01-PLAN.md — LittleFS C++ wrapper (blackbox.h/cpp), config defines, biba_hal serial write, native Unity tests (wave 1)
+- [ ] 08-02-PLAN.md — mode_standalone.c integration: CH8 state machine, session lifecycle, per-tick record write, flash-full flow (wave 2, depends on 08-01)
+- [ ] 08-03-PLAN.md — CDC bb shell commands + scripts/biba_blackbox_download.py (wave 3, depends on 08-01, 08-02)
+
+---
+
+### Phase 9: RPM Estimator Hardening
+**Goal**: Eliminate 19.2% rpm=0 dropout at |duty|>0.15 by adding a dead-reckoning fallback (EMA ratio extrapolation) when the Goertzel spectral estimator returns valid=false. Python simulation validates improvement before any C firmware is written.
+**Depends on**: Phase 8
+**Requirements**: REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-06, REQ-07
+**Success Criteria** (what must be TRUE):
+  1. Python simulation (is_dr_sim.py) shows rpm=0 dropout drops from ≥13% to ≤5% at |duty|>15% on fullsine amp100 sweep data
+  2. biba_rpm_dr_update() returns non-zero for streak ≤ BIBA_RPM_DR_MAX_STREAK when ratio_ema > 0
+  3. Cold start (ratio_ema=0) always returns 0, never extrapolates
+  4. After MAX_STREAK+1 consecutive invalids, DR returns 0 regardless of ratio_ema
+  5. spec_reason_L/R carries value 5 (EXTRAPOLATED) when DR fallback is active
+  6. pio test -e native_test: 71+ passed, 0 failed (new test_rpm_dr suite + no regressions)
+**Plans**: 3 plans, 3 waves
+
+Plans:
+- [ ] 09-01-PLAN.md — Python DR simulation (scripts/is_dr_sim.py) — REQ-06 gate (wave 1)
+- [ ] 09-02-PLAN.md — Firmware DR module (biba_config.h constants, rpm_spectral_estimator.h enum, rpm_dr.h/c) (wave 2, depends on 09-01)
+- [ ] 09-03-PLAN.md — mode_standalone.c integration + Unity test_rpm_dr + platformio.ini (wave 3, depends on 09-02)
+
+---
+
+### Phase 10: Goertzel Dual-Window Search
+**Goal**: Reduce Goertzel spectral estimator dropout at low duty (|duty| < 35%) by running a second search window centered on the previous valid `freq_hz` (hint), taking the candidate with higher `peak_amp`. Research phase validates improvement across all collected sweepraw datasets before firmware is touched.
+**Depends on**: Phase 9
+**Requirements**: RPM-INT-01, RPM-INT-02
+**Success Criteria** (what must be TRUE):
+  1. Research script tests dual-window on ≥5 sweepraw CSV files and reports per-file and pooled dropout improvement (valid %, DR %, invalid %)
+  2. Pooled dropout (DR + invalid) / total_fwd improves by ≥ 5 percentage points vs. current single-window
+  3. `rpm_spectral_estimator_hint()` accepts `hint_hz` parameter; runs second Goertzel search only when `|hint_hz - target_hz| > BIBA_SPEC_HINT_DEADBAND_HZ`
+  4. Best candidate selection: pick window with higher `peak_amp`; original window always evaluated first (no regression if hint is wrong)
+  5. `hint_hz` tracking in `mode_standalone.c`: updated from `spec_hz` only when `spec_reason = SPEC_REASON_MEASURED`; not updated on DR or stale reads
+  6. Unity test suite: hint=0 → identical to current behavior; hint far from target → second window fires; best-of-two selection verified
+  7. pio test -e native_test: all existing tests pass, ≥6 new hint tests added
+**Plans**: 3 plans
+Plans:
+- [ ] 10-01-PLAN.md — Python research script: spectral_estimate_hint() + is_hint_research.py (28 CSV files, ≥5pp gate)
+- [ ] 10-02-PLAN.md — Firmware API extension: 5-arg signature, HINT_MEASURED enum, dual-window .c implementation, 8 call sites
+- [ ] 10-03-PLAN.md — mode_standalone hint state + update/reset logic + ≥6 Unity tests (≥84 total)
+
+---
+
+### Phase 11: IS-Pin Load & Stall Detection
+**Goal**: Use IS-pin DC current level as a secondary validity gate for the spectral RPM estimator, detect wheel stall/high-load via `mean_IS / baseline > threshold`, add VBAT/IBAT raw ADC columns to SWEEPRAW captures for battery-sag cross-talk characterisation, and research throttle-vs-load disambiguation from inter-window current+frequency gradients.
+**Depends on**: Phase 10
+**Requirements**: LOAD-01, LOAD-02, LOAD-03
+**Success Criteria** (what must be TRUE):
+  1. IS-pin load detector correctly invalidates spectral results in win3/win18 (false-valid cases) from softhold dataset
+  2. SWEEPRAW_BOTH firmware streams `vbat_raw` and `ibat_raw` per window in protocol header; Python parser saves these columns
+  3. Battery sag cross-talk coefficient measured from dedicated capture (one motor loaded, one free)
+  4. Throttle-vs-load disambiguation: inter-window d_freq / d_dc gradient correctly classifies ≥3 test cases (acceleration vs load increase)
+  5. All new logic has Python-sim unit tests before any firmware changes
+**Plans**: TBD
+
+Plans:
+
+---
+
+### Phase 12: Signal Chain Feature Gating
+**Goal**: Провести аудит всей цепочки CRSF → моторный PWM-сигнал, выделить каждую фичу в отдельный compile-time тумблер (`BIBA_FEATURE_*` в `target_config.h`), реорганизовать `biba_config.h` с секциями по фичам. Заменить `BIBA_OPEN_LOOP` на мастер-свитч `BIBA_FEATURE_RPM_CLOSED_LOOP` + 16 индивидуальных тумблеров.
+**Depends on**: Phase 11
+**Requirements**: FEAT-01, FEAT-02, FEAT-03, FEAT-04, FEAT-05, FEAT-06
+**Success Criteria** (what must be TRUE):
+  1. Каждая из 17 фич цепочки имеет `BIBA_FEATURE_<NAME>` тумблер в `biba_config.h`, отключается одним define
+  2. `BIBA_FEATURE_RPM_CLOSED_LOOP=0` эквивалентно старому `BIBA_OPEN_LOOP` — все RPM-фичи выключены, duty идёт напрямую с mixer
+  3. `biba_config.h` реорганизован: каждая фича в своей секции с комментарием, тумблер + все параметры фичи сгруппированы
+  4. Нарушение зависимостей между тумблерами (PI требует DR, dual-window требует spectral, etc.) ловится `#error` на этапе компиляции
+  5. Все существующие тесты проходят при всех тумблерах = 1 (сохранение текущего поведения)
+  6. Сборка с `BIBA_FEATURE_RPM_CLOSED_LOOP=0` проходит и робот едет в open-loop (регрессионный дым-тест)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — Reorganize biba_config.h: 17 feature toggle sections + dependency #error checks + BIBA_OPEN_LOOP backward compat
+- [ ] 12-02-PLAN.md — Inject #if BIBA_FEATURE_* guards into mode_standalone.c at all call sites (ISR + init + tick + blackbox), rename BIBA_REVERSE_PIP_ENABLED
+- [ ] 12-03-PLAN.md — Build verification (7 off-combinations) + unit test run + human smoke test (default + open-loop)
+
+---
 
 Features deferred beyond current milestone (v2+):
 
@@ -190,3 +287,6 @@ Plans:
 | 5. Current Sensing & ADC | 0/TBD | not started | - |
 | 6. IS-Signal RPM PoC | 1/1 | complete | 2026-05-23 |
 | 7. IS-RPM Integration | 0/TBD | not started | - |
+| 9. RPM Estimator Hardening | 3/3 | complete | 2026-05-26 |
+| 10. Goertzel Dual-Window | 3/3 | complete | 2026-05-26 |
+| 11. IS-Pin Load & Stall Detection | 0/TBD | not started | - |

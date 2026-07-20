@@ -48,4 +48,8 @@
 #define BIBA_LEFT_MAX_POWER_W        0.0f
 #define BIBA_RIGHT_MAX_POWER_W       0.0f
 
+/* --- Feature toggle overrides (D-07) ----------------------------------- */
+/* Reverse backup beep is OFF on RP2040 by default (match legacy behaviour). */
+#define BIBA_FEATURE_REVERSE_PIP          0
+
 #endif /* BIBA_TARGET_CONFIG_H */
