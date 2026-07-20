@@ -95,7 +95,6 @@ static void spi_slave_init(void)
 /* --- Mode-select latch -------------------------------------------------- */
 
 static bool s_mode_sel_latched_companion;
-#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
 /* --- WS2812 forward declaration ---------------------------------------- */
 
@@ -136,6 +135,7 @@ void biba_hal_init(void)
     gpio_pull_up(BIBA_PIN_MODE_SEL_GPIO);
     s_mode_sel_latched_companion = !gpio_get(BIBA_PIN_MODE_SEL_GPIO);
 #endif /* !BLDC */
+#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
     /* IMU interrupt input, no pull (external pull on board). */
     gpio_init(BIBA_PIN_IMU_INT1_GPIO);

@@ -27,6 +27,8 @@
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
 #include "app/melody.h"
+#include "app/blackbox.h"
+#include "drivers/voltage_sense.h"
 
 #if BIBA_TARGET_HAS_BTS7960_2CH
 #  include "drivers/bts7960.h"
@@ -845,7 +847,9 @@ void biba_mode_standalone_tick(void)
     if (s_latch_reset_pending) {
         s_latch_reset_pending = false;
         if (armed) {
+#if BIBA_TARGET_HAS_BTS7960_2CH
             biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+#endif
             biba_rpm_pi_reset(&s_rpm_pi_left);
             biba_rpm_pi_reset(&s_rpm_pi_right);
             biba_rpm_dr_reset(&s_dr_left);
