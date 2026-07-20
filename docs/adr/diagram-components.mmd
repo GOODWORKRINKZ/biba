@@ -1,92 +1,47 @@
 flowchart TB
-    subgraph RP2040["RP2040 (Raspberry Pi Pico)"]
-        CRSF_UART["CRSF / ELRS UART0\nGP0 TX, GP1 RX"]
-        SPI0["HW SPI0\nGP16 MISO, GP17 CS\nGP18 SCK, GP19 MOSI"]
-        I2C0["I2C0\nGP20 SDA, GP21 SCL"]
-        GPIO_INT["GPIO IRQ\nGP15 INT (MCP2515)\nGP22 INT1 (IMU)"]
-        LEDS["Status LEDs\nGP25 onboard LED\nGP23 WS2812 NeoPixel"]
-    end
-
-    subgraph CAN_BUS["CAN Bus 2.0B, 250 kbps"]
-        MCP2515["MCP2515 SPI→CAN Bridge\nMode 0,0 @ 7.8125 MHz"]
-        ODRIVE1["ODrive #1 (LEFT wheel)\nnode_id = 0"]
-        ODRIVE2["ODrive #2 (RIGHT wheel)\nnode_id = 1"]
-    end
-
-    subgraph SENSORS["I2C Sensors"]
-        IMU["IMU (ICM-42688-P)"]
-        ADC_EXT["ADS1115\nExternal ADC"]
-        AHT30["AHT30\nTemp/Humidity"]
-    end
-
-    CRSF["CRSF/ELRS Receiver\nRC + Telemetry"] <-->|UART0| CRSF_UART
-    SPI0 <-->|SPI| MCP2515
-    MCP2515 -->|INT| GPIO_INT
-    MCP2515 <-->|CAN| ODRIVE1
-    MCP2515 <-->|CAN| ODRIVE2
-    I2C0 <-->|I2C| IMU
-    I2C0 <-->|I2C| ADC_EXT
-    I2C0 <-->|I2C| AHT30
-    IMU -->|INT1| GPIO_INT
-
-    ODRIVE1 ---|"Set_Input_Vel @ 50 Hz"| ODRIVE1
-    ODRIVE2 ---|"Set_Input_Vel @ 50 Hz"| ODRIVE2
-
-    style RP2040 fill:#4a90d9,stroke:#2c5f8a,color:#fff
-    style CAN_BUS fill:#5cb85c,stroke:#3d7a3d,color:#fff
-    style SENSORS fill:#f0ad4e,stroke:#c78c2e,color:#fff
-
-%%
-%% Mermaid C4-style diagram. Не подгоняем под идеальный C4-статус —
-%% проект до сих пор не использует строгий C4. Цель — дать читателю
-%% 5-минутную mental model: «что лежит в firmware/src, как оно
-%% говорит с MCP2515/ODrive по шине, и где сидит точка переключения
-%% target vs mode».
-
-flowchart TB
-    %% --- Modes (то, что запускается на core0) --------------------------
-    subgraph MODES["firmware/src/modes/ (код по mode — не по таргету)"]
-        MD["mode_dispatcher.c<br/>biba_mode_dispatcher_boot<br/>biba_mode_dispatcher_run_forever"]
-        MS["mode_standalone.c<br/>biba_mode_standalone_init / _tick<br/>(CRSF → drive выход)"]
-        MC["mode_companion.c<br/>biba_mode_companion_init / _tick<br/>(SPI link → SBC)"]
+    %% --- Modes -----------------------------------------------------------
+    subgraph MODES["firmware/src/modes/"]
+        MD["mode_dispatcher.c"]
+        MS["mode_standalone.c"]
+        MC["mode_companion.c"]
         MD --> MS
         MD --> MC
     end
 
-    %% --- Application code -----------------------------------------------
-    subgraph APP["firmware/src/app/ (control loop, ramp, failsafe)"]
-        CTRL["control_loop.c<br/>ramp.c<br/>failsafe.c"]
+    %% --- Application code ------------------------------------------------
+    subgraph APP["firmware/src/app/"]
+        CTRL["control_loop.c / ramp.c / failsafe.c"]
         CTRL --> MS
         CTRL --> MC
     end
 
-    %% --- Motor backend (САМАЯ ГРАНЬ архитектуры ADR-0001 §1.5) ----------
-    subgraph BACKEND["Motor backend — выбор через BIBA_TARGET_HAS_*"]
-        BTS["drivers/bts7960.c<br/>biba_bts7960_drive(...)<br/>(только RPICO_RP2040)"]
-        ODRV["drivers/odrive_can.c<br/>biba_odrive_drive(left, right)<br/>(только RPICO_RP2040_BLDC)"]
+    %% --- Motor backend ---------------------------------------------------
+    subgraph BACKEND["Motor backend"]
+        BTS["drivers/bts7960.c"]
+        ODRV["drivers/odrive_can.c"]
     end
 
-    MS -. "#if BIBA_TARGET_HAS_BTS7960_2CH" .-> BTS
-    MS -. "#elif BIBA_TARGET_HAS_BLDC_2CH" .-> ODRV
-    MC -. "#if BIBA_TARGET_HAS_BTS7960_2CH" .-> BTS
-    MC -. "#elif BIBA_TARGET_HAS_BLDC_2CH" .-> ODRV
+    MS -.-> BTS
+    MS -.-> ODRV
+    MC -.-> BTS
+    MC -.-> ODRV
 
     %% --- HAL -------------------------------------------------------------
-    subgraph HAL["firmware/src/hal/ (target-specific shims)"]
-        HAL_F103["biba_hal.c<br/>biba_hal_motor.c<br/>(STM32 targets)"]
-        HAL_RP["biba_hal_rp2040.c<br/>biba_hal_motor_rp2040.c<br/>(RPICO_RP2040: PWM)"]
-        HAL_BLDC["biba_hal_motor_bldc.c<br/>(RPICO_RP2040_BLDC: bind CAN к MCP2515 SPI)"]
+    subgraph HAL["firmware/src/hal/"]
+        HAL_F103["biba_hal.c / biba_hal_motor.c"]
+        HAL_RP["biba_hal_rp2040.c"]
+        HAL_BLDC["biba_hal_motor_bldc.c"]
     end
 
     BTS --> HAL_F103
     BTS --> HAL_RP
     ODRV --> HAL_BLDC
 
-    %% --- Drivers (новое для BLDC target) --------------------------------
-    subgraph DRV["firmware/src/drivers/ (новые модули BLDC)"]
-        CANQ["can_queue.c<br/>lock-free ring: TX + RX"]
-        MCP["mcp2515.c<br/>SPI0 → MCP2515 регистровый<br/>(RESET/RTS/BIT-MODIFY/RX-stat)"]
-        ODC["odrive_can.c<br/>CANSimple encode/decode<br/>encode Set_Input_Vel<br/>heartbeat poll"]
+    %% --- Drivers ---------------------------------------------------------
+    subgraph DRV["firmware/src/drivers/"]
+        CANQ["can_queue.c"]
+        MCP["mcp2515.c"]
+        ODC["odrive_can.c"]
     end
 
     HAL_BLDC --> MCP
@@ -96,48 +51,45 @@ flowchart TB
     ODC --> MCP
     CANQ --> MCP
 
-    %% --- Target / config / CRSF / I2C — общая периферия обоих target'ов -
-    subgraph TGT["targets/ (точка переключения, ADR-0001 §1.4)"]
-        T1["RPICO_RP2040/target.h<br/>+target_config.h<br/>BIBA_TARGET_HAS_BTS7960_2CH=1<br/>BIBA_TARGET_HAS_BLDC_2CH=0"]
-        T2["RPICO_RP2040_BLDC/target.h<br/>+target_config.h<br/>BIBA_TARGET_HAS_BTS7960_2CH=0<br/>BIBA_TARGET_HAS_BLDC_2CH=1<br/>распиновка SPI0 GP16-19, MCP2515 INT=GP15"]
-        T1 -. "выбор через pio run -e rpico_rp2040_*" .- T1
-        T2 -. "выбор через pio run -e rpico_rp2040_bldc_*" .- T2
+    %% --- Targets ---------------------------------------------------------
+    subgraph TGT["targets/"]
+        T1["RPICO_RP2040"]
+        T2["RPICO_RP2040_BLDC"]
     end
 
     HAL_RP --> T1
     HAL_BLDC --> T2
     HAL_F103 --> T1
-    HAL_F103 -. "также" .-> T2
 
-    %% --- Внешние компоненты (то, что за RP2040) -------------------------
-    subgraph EXT["Внешние компоненты"]
-        CRSF["ELRS приёмник<br/>(UART0 GP0/1)"]
-        IMU["IMU<br/>(I2C0 GP20/21)"]
-        MCPEXT["MCP2515+TJA1050<br/>(SPI0 GP16-19, CS=GP17, INT=GP15)"]
-        CANBUS(("CAN bus<br/>250 kbps<br/>120Ω на концах"))
-        OD_L["ODrive #1<br/>(left wheel, node_id=0)"]
-        OD_R["ODrive #2<br/>(right wheel, node_id=1)"]
+    %% --- External --------------------------------------------------------
+    subgraph EXT["External"]
+        CRSF["ELRS receiver"]
+        IMU_EXT["IMU"]
+        MCPEXT["MCP2515+TJA1050"]
+        CANBUS(("CAN bus"))
+        OD_L["ODrive LEFT"]
+        OD_R["ODrive RIGHT"]
     end
 
     CRSF --> MD
-    IMU --> CTRL
-    MCP <-->|"SPI Mode 0,0<br/>7.8125 MHz"| MCPEXT
-    MCPEXT <-->|"CANH/CANL diff"| CANBUS
+    IMU_EXT --> CTRL
+    MCP <-->|SPI| MCPEXT
+    MCPEXT <-->|CAN| CANBUS
     CANBUS --> OD_L
     CANBUS --> OD_R
-    OD_L -->|"Heartbeat<br/>Encoder Estimates"| CANQ
-    OD_R -->|"Heartbeat<br/>Encoder Estimates"| CANQ
+    OD_L -->|Heartbeat| CANQ
+    OD_R -->|Heartbeat| CANQ
 
-    %% --- core0 vs core1 --------------------------------------------------
-    subgraph CPUS["Выполнение на RP2040"]
-        C0["core0: setup() → mode_dispatcher boot + run_forever<br/>control loop 500 Hz"]
-        C1["core1: SPI DMA TX/RX для MCP2515 (опц.)<br/>ADC1 scan (если нужно)"]
+    %% --- CPUs ------------------------------------------------------------
+    subgraph CPUS["RP2040 cores"]
+        C0["core0: mode dispatcher + control loop 500 Hz"]
+        C1["core1: SPI DMA for MCP2515"]
     end
 
     CPUS --> MODES
     CPUS --> HAL
 
-    %% --- Стили -----------------------------------------------------------
+    %% --- Styles ----------------------------------------------------------
     classDef targetBox fill:#264653,stroke:#1d3540,color:#fff
     classDef newDriver fill:#2a9d8f,stroke:#1d7a6f,color:#fff
     classDef external fill:#e76f51,stroke:#a8503b,color:#fff
@@ -145,5 +97,5 @@ flowchart TB
 
     class T1,T2 targetBox
     class MCP,ODC,CANQ,HAL_BLDC newDriver
-    class CRSF,IMU,MCPEXT,CANBUS,OD_L,OD_R external
+    class CRSF,IMU_EXT,MCPEXT,CANBUS,OD_L,OD_R external
     class MD,MS,MC,CTRL modeCode
