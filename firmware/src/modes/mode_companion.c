@@ -10,10 +10,21 @@
 #include "app/control_loop.h"
 #include "app/failsafe.h"
 #include "app/telemetry.h"
-#include "drivers/bts7960.h"
 #include "drivers/current_sense.h"
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
+
+#if BIBA_TARGET_HAS_BTS7960_2CH
+#  include "drivers/bts7960.h"
+#elif BIBA_TARGET_HAS_BLDC_2CH
+#  include "drivers/odrive_can.h"
+#endif
+/* The companion mode is wired through the SBC link (SPI slave on F103,
+ * planned USB-CDC on RP2040).  On the BLDC target there is no SBC link
+ * in this PoC, so the entire SPI-slave exchange is stubbed out and the
+ * mode degenerates to a setpoint mirror / failsafe (no driving).  See
+ * docs/adr/0001-pico-bldc-target.md §3 for the planned USB-CDC
+ * upgrade path. */
 
 static uint8_t s_rx_frame[BIBA_PROTO_FRAME_SIZE];
 static uint8_t s_tx_frame[BIBA_PROTO_FRAME_SIZE];
@@ -36,13 +47,21 @@ static void handle_command(const biba_proto_frame_t *cmd)
         break;
     case BIBA_CMD_ARM:
         s_armed = true;
+#if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_set_enabled(true);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+        biba_odrive_set_enabled(true);
+#endif
         break;
     case BIBA_CMD_DISARM:
         s_armed = false;
         s_setpoint_left = 0.0f;
         s_setpoint_right = 0.0f;
+#if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_set_enabled(false);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+        biba_odrive_set_enabled(false);
+#endif
         break;
     case BIBA_CMD_SET_SETPOINT:
         if (cmd->payload_len >= 4) {
@@ -153,7 +172,12 @@ void biba_mode_companion_tick(void)
     float right_cmd = failsafe ? 0.0f : s_setpoint_right;
     biba_limit_result_t out = biba_apply_motor_limits(left_cmd, right_cmd,
                                                        il, ir, lim, rim);
+#if BIBA_TARGET_HAS_BTS7960_2CH
     biba_bts7960_drive(out.left, out.right);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+    biba_odrive_drive(out.left, out.right);
+    biba_odrive_can_tick_50hz();
+#endif
 
     uint8_t flags = (s_armed ? BIBA_PROTO_FLAG_ARMED : 0)
                   | (failsafe ? BIBA_PROTO_FLAG_FAILSAFE : 0)

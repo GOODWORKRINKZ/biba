@@ -27,6 +27,8 @@ PlatformIO в каждом env. Никаких лесенок `#ifdef TARGET == 
 | `BLUEPILL_F103C8`       | Эталон: серийный STM32F103C8T6 «Blue Pill» (20 КБ ОЗУ)      |
 | `BLUEPILL_F103C8_CLONE` | Та же распиновка, клон-чип с реальными 8 КБ ОЗУ             |
 | `BIBA_F103_REV_A`       | Пример кастомной платы (прототип ревизии A)                 |
+| `RPICO_RP2040`          | Pico с BTS7960 и SBC по UART1 (default `env`); см. его `target.md` |
+| `RPICO_RP2040_BLDC`     | Альтернативный таргет на той же board: пара BLDC через ODrive по CAN (MCP2515 на SPI0 GP16–19, INT=GP15). BTS7960 и native ADC отключены. Архитектура — `docs/adr/0001-pico-bldc-target.md`. |
 
 У варианта `_CLONE` нет отдельной директории внутри `targets/`. Он
 переиспользует `BLUEPILL_F103C8/target.h` буква в букву и отличается
@@ -53,6 +55,11 @@ pio run -e bluepill_f103c8_clone_combined
 # кастомная плата
 pio run -e biba_f103_rev_a_standalone
 pio run -e biba_f103_rev_a_companion
+
+# RP2040 BLDC/CAN вариант (alias на ту же board, но другой backend)
+pio run -e rpico_rp2040_bldc_standalone
+pio run -e rpico_rp2040_bldc_companion
+pio run -e rpico_rp2040_bldc_combined
 
 # переносимые хостовые тесты (без таргета)
 pio test -e native_test
@@ -117,7 +124,18 @@ CI-workflow `.github/workflows/G-Build-STM32F103.yml` итерируется п�
 `BLUEPILL_F103C8/target.h`:
 
 - `BIBA_TARGET_NAME`
-- `BIBA_TARGET_HAS_BTS7960_2CH`
+- `BIBA_TARGET_HAS_BTS7960_2CH` — `1`, если две BTS7960-линии +
+  токовые шунты присутствуют и режим `biba_bts7960_*` собирается; `0`,
+  если используется альтернативный motor backend (ODrive/CAN на
+  `RPICO_RP2040_BLDC`).
+- `BIBA_TARGET_HAS_BLDC_2CH` — `1`, если таргет компонуется с
+  `biba_odrive_*` API (ODrive / иной BLDC-контроллер по CAN). Только
+  один из `BTS7960_2CH` / `BLDC_2CH` может быть `1` одновременно.
+  Введён ADR-0001.
+- `BIBA_TARGET_HAS_MCP2515` — `1`, если на плате есть
+  аппаратный мост SPI↔CAN (MCP2515). Используется
+  `biba_odrive_can_state_init` для условной инициализации. Введён
+  ADR-0001.
 - `BIBA_TARGET_HAS_CRSF`
 - `BIBA_TARGET_HAS_IMU`
 - `BIBA_TARGET_HAS_SPI_SLAVE`
@@ -135,3 +153,9 @@ CI-workflow `.github/workflows/G-Build-STM32F103.yml` итерируется п�
 (нет SPI-slave, нет IMU и т. п.) — выставь соответствующий
 `BIBA_TARGET_HAS_*` в 0 и не определяй макросы пинов; HAL уже
 загораживает соответствующий init-код этим флагом.
+
+Пин-макросы SPI0 (`BIBA_PIN_SPI0_MISO_GPIO`, `BIBA_PIN_SPI0_SCK_GPIO`,
+`BIBA_PIN_SPI0_MOSI_GPIO`, `BIBA_PIN_SPI0_CS_GPIO`) и
+`BIBA_PIN_MCP2515_INT_GPIO` обязательны только при
+`BIBA_TARGET_HAS_MCP2515 == 1`; на остальных таргетах они не
+определяются.

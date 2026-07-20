@@ -21,12 +21,17 @@
 #include "app/rpm_spectral_estimator.h"
 #include "app/rpm_pi.h"
 #include "app/telemetry.h"
-#include "drivers/bts7960.h"
 #include "drivers/crsf.h"
 #include "drivers/current_sense.h"
 #include "hal/biba_hal.h"
 #include "proto/biba_proto.h"
 #include "app/melody.h"
+
+#if BIBA_TARGET_HAS_BTS7960_2CH
+#  include "drivers/bts7960.h"
+#elif BIBA_TARGET_HAS_BLDC_2CH
+#  include "drivers/odrive_can.h"
+#endif
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
 #define CRSF_FRAMETYPE_DEVICE_PING  0x28u
@@ -377,7 +382,14 @@ void biba_mode_standalone_init(void)
     biba_failsafe_init(&s_crsf_failsafe, BIBA_CRSF_TIMEOUT_MS);
     biba_pid_reset(&s_heading_pid);
     s_last_tick_ms = biba_hal_now_ms();
+
+#if BIBA_TARGET_HAS_BTS7960_2CH
     biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+    /* ODrive has no thermal latch; the BLDC backend resets setpoints
+     * and disarms via biba_odrive_thermal_reset(). */
+    biba_odrive_thermal_reset(0u);
+#endif
 
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
     s_last_failsafe = true;
@@ -509,7 +521,14 @@ void biba_mode_standalone_tick(void)
     if (armed && !s_armed) {
         /* Best-effort reset: clears possible BTS7960 thermal latch on arm edge.
          * Recovery is not guaranteed immediately; control loop still applies failsafe. */
+#if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+        /* ODrive performs its own power-stage thermal protection; the
+         * shutdown here is a setpoint-zero + disarm — same semantics
+         * as the BTS7960 case but driven over CAN. */
+        biba_odrive_thermal_reset(0u);
+#endif
         printf("[biba] ARMED\r\n");
         biba_melody_player_start(&s_player, &biba_melody_arm);
     } else if (!armed && s_armed) {
@@ -847,9 +866,19 @@ void biba_mode_standalone_tick(void)
         biba_melody_player_tick(&s_player, now);
     }
 
-    /* Drive motors only when audio is not occupying the PWM hardware. */
+    /* Drive motors only when audio is not occupying the PWM hardware.
+     *
+     * On the BLDC target the ODrive uses CANSimple velocity commands,
+     * which don't fight PWM duty for the audio API surface — but we
+     * still gate on `s_player.active` for compatibility with whatever
+     * Beeper feature may one day share the bus. */
     if (!s_player.active) {
+#if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_drive(left_out, right_out);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+        biba_odrive_drive(left_out, right_out);
+        biba_odrive_can_tick_50hz();
+#endif
     }
 
     /* Update RGB status LED. */
