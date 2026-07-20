@@ -1,4 +1,41 @@
-%% Диаграмма компонентов для ADR-0001 (новый таргет RPICO_RP2040_BLDC).
+flowchart TB
+    subgraph RP2040["RP2040 (Raspberry Pi Pico)"]
+        CRSF_UART["CRSF / ELRS UART0\nGP0 TX, GP1 RX"]
+        SPI0["HW SPI0\nGP16 MISO, GP17 CS\nGP18 SCK, GP19 MOSI"]
+        I2C0["I2C0\nGP20 SDA, GP21 SCL"]
+        GPIO_INT["GPIO IRQ\nGP15 INT (MCP2515)\nGP22 INT1 (IMU)"]
+        LEDS["Status LEDs\nGP25 onboard LED\nGP23 WS2812 NeoPixel"]
+    end
+
+    subgraph CAN_BUS["CAN Bus 2.0B, 250 kbps"]
+        MCP2515["MCP2515 SPI→CAN Bridge\nMode 0,0 @ 7.8125 MHz"]
+        ODRIVE1["ODrive #1 (LEFT wheel)\nnode_id = 0"]
+        ODRIVE2["ODrive #2 (RIGHT wheel)\nnode_id = 1"]
+    end
+
+    subgraph SENSORS["I2C Sensors"]
+        IMU["IMU (ICM-42688-P)"]
+        ADC_EXT["ADS1115\nExternal ADC"]
+        AHT30["AHT30\nTemp/Humidity"]
+    end
+
+    CRSF["CRSF/ELRS Receiver\nRC + Telemetry"] <-->|UART0| CRSF_UART
+    SPI0 <-->|SPI| MCP2515
+    MCP2515 -->|INT| GPIO_INT
+    MCP2515 <-->|CAN| ODRIVE1
+    MCP2515 <-->|CAN| ODRIVE2
+    I2C0 <-->|I2C| IMU
+    I2C0 <-->|I2C| ADC_EXT
+    I2C0 <-->|I2C| AHT30
+    IMU -->|INT1| GPIO_INT
+
+    ODRIVE1 ---|"Set_Input_Vel @ 50 Hz"| ODRIVE1
+    ODRIVE2 ---|"Set_Input_Vel @ 50 Hz"| ODRIVE2
+
+    style RP2040 fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    style CAN_BUS fill:#5cb85c,stroke:#3d7a3d,color:#fff
+    style SENSORS fill:#f0ad4e,stroke:#c78c2e,color:#fff
+
 %%
 %% Mermaid C4-style diagram. Не подгоняем под идеальный C4-статус —
 %% проект до сих пор не использует строгий C4. Цель — дать читателю
