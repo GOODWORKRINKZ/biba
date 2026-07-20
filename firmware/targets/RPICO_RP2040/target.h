@@ -57,7 +57,6 @@
 #define BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM 0
 
 #if !defined(BIBA_NATIVE_TEST)
-#  include "pico/stdlib.h"
 #  include "hardware/gpio.h"
 #  include "hardware/uart.h"
 #  include "hardware/spi.h"

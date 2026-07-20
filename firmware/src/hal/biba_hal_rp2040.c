@@ -16,7 +16,6 @@
 #include "drivers/ads1115.h"
 #include "drivers/aht30.h"
 
-#include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
 #include "hardware/spi.h"
@@ -54,8 +53,10 @@ static void crsf_uart_isr(void)
 
 static volatile uint32_t s_adc_scan_count;
 
-/* --- SPI slave (DMA-driven, non-blocking) ------------------------------- */
+/* --- SPI slave (DMA-driven, non-blocking) ------------------------------- *
+ * SPI1 frequency ignored in slave mode; set to 1 MHz as a placeholder. */
 
+#if BIBA_TARGET_HAS_SPI_SLAVE
 static int  s_spi_dma_tx = -1;
 static int  s_spi_dma_rx = -1;
 static bool s_spi_init_done;
@@ -90,6 +91,7 @@ static void spi_slave_init(void)
 
     s_spi_init_done = true;
 }
+#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
 /* --- Mode-select latch -------------------------------------------------- */
 
@@ -108,6 +110,7 @@ void biba_hal_init(void)
     gpio_set_dir(BIBA_PIN_STATUS_LED_GPIO, GPIO_OUT);
     biba_hal_status_led_set(false);
 
+#if BIBA_TARGET_HAS_BTS7960_2CH
     /* BTS7960 enables: output, start disabled. */
     const uint en_pins[] = {
         BIBA_PIN_LEFT_REN_GPIO, BIBA_PIN_LEFT_LEN_GPIO,
@@ -118,8 +121,10 @@ void biba_hal_init(void)
         gpio_set_dir(en_pins[i], GPIO_OUT);
         gpio_put(en_pins[i], 0);
     }
+#endif
 
     /* DATA_READY output, start low. */
+#if !BIBA_TARGET_HAS_BLDC_2CH
     gpio_init(BIBA_PIN_DATA_READY_GPIO);
     gpio_set_dir(BIBA_PIN_DATA_READY_GPIO, GPIO_OUT);
     gpio_put(BIBA_PIN_DATA_READY_GPIO, 0);
@@ -129,20 +134,31 @@ void biba_hal_init(void)
     gpio_set_dir(BIBA_PIN_MODE_SEL_GPIO, GPIO_IN);
     gpio_pull_up(BIBA_PIN_MODE_SEL_GPIO);
     s_mode_sel_latched_companion = !gpio_get(BIBA_PIN_MODE_SEL_GPIO);
+#endif /* !BLDC */
 
     /* IMU interrupt input, no pull (external pull on board). */
     gpio_init(BIBA_PIN_IMU_INT1_GPIO);
     gpio_set_dir(BIBA_PIN_IMU_INT1_GPIO, GPIO_IN);
 
-    /* Motor PWM (topology: two slices, each pair shares a carrier). */
+    /* Motor PWM (topology: two slices, each pair shares a carrier).
+     * On the BLDC target this brings up MCP2515 + ODrive CAN. */
     biba_hal_motor_pwm_init();
     biba_hal_ssr_init();   /* D-13: SSR LOW before any mode code runs */
 
+#if BIBA_TARGET_HAS_BLDC_2CH
+    /* No native ADC channels are wired on the BLDC target — the
+     * ODrive unit reports Bus_Voltage / Bus_Current via CAN.  We keep
+     * ADC init active only so unrelated code that calls
+     * `biba_hal_adc_sample(...)` behaves correctly (returns 0 and
+     * doesn't touch GPIOs that are wired as SPI0 / CAN). */
+    (void)0;
+#else
     /* ADC --------------------------------------------------------------- */
     adc_init();
     /* Phase 06: GP26 = ADC0 = IS_LEFT (RC-filtered), GP27 = ADC1 = IS_RIGHT (RC-filtered). */
     adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_LEFT  */
     adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_RIGHT */
+#endif
 
     /* I2C0 for IMU, ADS1115 (0x48), AHT30 (0x38) ----------------------- */
     i2c_init(BIBA_I2C_INST, 400000u);
@@ -240,23 +256,39 @@ void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
 #endif
 }
 
+#if !BIBA_TARGET_HAS_BLDC_2CH
 void biba_hal_data_ready_set(bool on)
 {
     gpio_put(BIBA_PIN_DATA_READY_GPIO, on ? 1u : 0u);
 }
+#endif /* !BLDC */
 
+#if !BIBA_TARGET_HAS_BLDC_2CH
 void biba_hal_data_ready_pulse(void)
 {
     biba_hal_data_ready_set(true);
     sleep_us(1u);
     biba_hal_data_ready_set(false);
 }
+#else
+/* No SBC link on the BLDC target — DATA_READY has no consumer. */
+void biba_hal_data_ready_pulse(void) { (void)0; }
+#endif
 
 bool biba_hal_mode_sel_is_companion(void)
 {
+#if BIBA_TARGET_HAS_BLDC_2CH
+    /* BLDC targets are always built in standalone mode (BIBA_MODE_*
+     * compile-time flag selects).  Returning false here keeps the
+     * mode dispatcher on the standalone path even for envs that try
+     * to use MODE_SEL for runtime selection. */
+    return false;
+#else
     return s_mode_sel_latched_companion;
+#endif
 }
 
+#if BIBA_TARGET_HAS_BTS7960_2CH
 void biba_hal_left_enable(bool enabled)
 {
     gpio_put(BIBA_PIN_LEFT_REN_GPIO, enabled ? 1u : 0u);
@@ -268,6 +300,7 @@ void biba_hal_right_enable(bool enabled)
     gpio_put(BIBA_PIN_RIGHT_REN_GPIO, enabled ? 1u : 0u);
     gpio_put(BIBA_PIN_RIGHT_LEN_GPIO, enabled ? 1u : 0u);
 }
+#endif
 
 void biba_hal_ssr_init(void)  {}
 
@@ -348,6 +381,7 @@ biba_hal_crsf_diag_t biba_hal_crsf_diag(void)
 
 /* --- SPI2 slave --------------------------------------------------------- */
 
+#if BIBA_TARGET_HAS_SPI_SLAVE
 void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx)
 {
     if (!s_spi_init_done) {
@@ -385,6 +419,13 @@ bool biba_hal_spi_slave_poll(void)
 {
     return !s_spi_busy;
 }
+#else /* !BIBA_TARGET_HAS_SPI_SLAVE */
+void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx)
+{
+    (void)tx; (void)rx;
+}
+bool biba_hal_spi_slave_poll(void) { return true; }
+#endif
 
 /* --- I2C0 (IMU) --------------------------------------------------------- */
 
