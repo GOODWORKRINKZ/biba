@@ -3,26 +3,30 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-05-27T18:00:00.000Z"
+last_updated: "2026-05-27T20:00:00.000Z"
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 12
   total_plans: 35
   completed_plans: 35
-  percent: 100
+  percent: 92
 ---
 
 # Project State
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 12 — Signal Chain Feature Gating
-**Status:** COMPLETE (plans 01-03 executed; physical smoke test pending)
+**Phase:** Phase 13 — Regression Fix (Load Gate / PI Windup)
+**Status:** DISCUSSED (CONTEXT.md written; root cause confirmed; ready for planning)
 **Last updated:** 2026-05-27
 
 ## Current Phase
 
-Phase 12 complete: 17 `BIBA_FEATURE_*` compile-time toggles implemented across the entire CRSF→PWM signal chain. `biba_config.h` reorganized into named feature sections with dependency `#error` validation. All call sites in `mode_standalone.c` individually gated. 88/88 tests pass with default config. All key build combinations (open-loop, MELODY=0, RPM_PI=0, RPM_SPECTRAL=0 with dependents) compile cleanly.
+Phase 13 diagnosed: the load gate (`BIBA_FEATURE_RPM_LOAD_GATE`, Phase 11) creates **sustained** invalid spectral windows during deceleration (18+ consecutive, vs 1-2 before Phase 11). DR holds stale RPM → PI integral winds to saturation (+3.0 ↔ -1.0) → permanent duty oscillation → wheels jerk and reverse.
+
+Three-tier fix agreed: (1) deceleration bypass in load gate, (2) raise LOAD_QUALITY_MAX 10→15, (3) PI integral reset on gate edge.
+
+Blackbox session_0012 confirms: 72 duty oscillation events, PI integral at limits, negative duty at zero throttle. Simulation models at `scripts/artifacts/phase13_*.png`.
 
 ## Completed Phases
 
@@ -37,6 +41,7 @@ Phase 12 complete: 17 `BIBA_FEATURE_*` compile-time toggles implemented across t
 - Phase 10: Goertzel Dual-Window — complete (84/84 tests)
 - Phase 11: IS-Pin Load & Stall Detection — complete (88/88 tests)
 - Phase 12: Signal Chain Feature Gating — complete (88/88 tests, 3 plans executed)
+- Phase 13: Regression Fix — discussed (root cause confirmed, CONTEXT.md written)
 
 ## Notes
 
