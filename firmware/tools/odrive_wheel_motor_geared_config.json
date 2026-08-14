@@ -86,7 +86,7 @@
       "config": {
         "abs_spi_cs_gpio_pin": 1,
         "bandwidth": 1000.0,
-        "calib_range": 0.05000000074505806,
+        "calib_range": 0.5,
         "calib_scan_distance": 50.26548385620117,
         "calib_scan_omega": 12.566370964050293,
         "cpr": 90,
@@ -95,8 +95,8 @@
         "idx_search_unidirectional": false,
         "ignore_illegal_hall_state": false,
         "mode": 1,
-        "offset_float": 1.4767500162124634,
-        "offset": 26,
+        "offset_float": 0.494422,
+        "offset": -80,
         "pre_calibrated": true,
         "sincos_gpio_pin_cos": 4,
         "sincos_gpio_pin_sin": 3,
@@ -271,7 +271,7 @@
       "config": {
         "abs_spi_cs_gpio_pin": 1,
         "bandwidth": 1000.0,
-        "calib_range": 0.05000000074505806,
+        "calib_range": 0.5,
         "calib_scan_distance": 50.26548385620117,
         "calib_scan_omega": 12.566370964050293,
         "cpr": 90,
@@ -280,8 +280,8 @@
         "idx_search_unidirectional": false,
         "ignore_illegal_hall_state": false,
         "mode": 1,
-        "offset_float": 1.4841874837875366,
-        "offset": 26,
+        "offset_float": 1.478297,
+        "offset": -138,
         "pre_calibrated": true,
         "sincos_gpio_pin_cos": 4,
         "sincos_gpio_pin_sin": 3,
@@ -372,7 +372,7 @@
   "can": {
     "config": {
       "baud_rate": 250000,
-      "protocol": 0
+      "protocol": 1
     }
   },
   "config": {

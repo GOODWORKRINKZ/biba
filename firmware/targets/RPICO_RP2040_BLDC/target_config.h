@@ -45,7 +45,7 @@
  * "forward" on both wheels. If a particular ODrive is mounted in the
  * reverse direction relative to the wheel it drives, flip its macro to
  * -1.0 so the rest of the firmware does not change. */
-#define BIBA_ODRIVE_LEFT_DIR   1.0f
+#define BIBA_ODRIVE_LEFT_DIR   -1.0f
 #define BIBA_ODRIVE_RIGHT_DIR  1.0f
 
 /* Current / torque limits sent to ODrive at boot via Set_Limits. */

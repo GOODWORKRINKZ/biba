@@ -113,8 +113,11 @@ void biba_odrive_can_init(void)
      * firmwares ignore Set_Limits until the axis has been requested
      * once, so we re-issue this on every Set_Axis_State edge too. */
     uint8_t payload[8];
-    pack_f32_le(&payload[0], BIBA_ODRIVE_MAX_CURRENT_A);
-    pack_f32_le(&payload[4], BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S);
+    /* ODrive CANSimple Set_Limits layout: [velocity_limit (float)] then
+     * [current_limit (float)].  Order matters — the swapped version put
+     * the current value into vel_limit and vice versa. */
+    pack_f32_le(&payload[0], BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S);
+    pack_f32_le(&payload[4], BIBA_ODRIVE_MAX_CURRENT_A);
     send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_SET_LIMITS,
                 payload, sizeof(payload));
     send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_LIMITS,
@@ -123,20 +126,35 @@ void biba_odrive_can_init(void)
 
 void biba_odrive_set_enabled(bool enabled)
 {
-    if (enabled == s_enabled) {
+    /* Always (re-)send the disarm request so a stale CLOSED_LOOP state on
+     * the ODrive (left over from a previous Pico session, e.g. after the
+     * Pico was re-plugged) gets cleared even when our local flag already
+     * thinks we are disabled.  Re-arming remains edge-triggered. */
+    if (enabled && (enabled == s_enabled)) {
         return;
     }
     s_enabled = enabled;
 
-    /* CLOSED_LOOP_CONTROL = 8 on ODrive.  IDLE = 0.  See ADR §6.6
-     * of the research. */
-    const uint8_t new_state = enabled ? 0x08u : 0x00u;
+    /* CLOSED_LOOP_CONTROL = 8, IDLE = 1 on ODrive (0 = UNDEFINED, which the
+     * ODrive treats as "no request" and ignores).  See ADR §6.6. */
+    const uint8_t new_state = enabled ? 0x08u : 0x01u;
     uint8_t payload[8] = { 0 };
     pack_u32_le(&payload[0], new_state);
     send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_SET_AXIS_STATE,
                 payload, 4u);
     send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE,
                 payload, 4u);
+
+    /* Re-issue limits on every state request.  Some ODrive firmwares
+     * ignore Set_Limits until the axis has been requested at least
+     * once, so the boot-time Set_Limits alone is not guaranteed to
+     * land.  This keeps the hard limits in effect even if the ODrive
+     * was power-cycled or its NVM was changed externally. */
+    uint8_t limits[8];
+    pack_f32_le(&limits[0], BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S);
+    pack_f32_le(&limits[4], BIBA_ODRIVE_MAX_CURRENT_A);
+    send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_SET_LIMITS, limits, 8u);
+    send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_LIMITS, limits, 8u);
 
     /* Push the latest setpoint too, so the moment we close-loop we
      * don't have a stale value from the previous session. */
@@ -226,7 +244,10 @@ static void decode_heartbeat(const biba_can_frame_t *f, uint32_t now_ms)
     if (node_id >= MAX_ODRIVE_NODES) return;
     s_nodes[node_id].valid = true;
     s_nodes[node_id].last_heartbeat_ms = now_ms;
-    s_nodes[node_id].last_state = f->data[0];
+    /* Heartbeat layout (ODrive CANSimple): bytes 0-3 = axis_error,
+     * byte 4 = axis_state, byte 5 = controller_flags, bytes 6-7 =
+     * encoder_flags.  We want the axis_state. */
+    s_nodes[node_id].last_state = (f->dlc >= 5u) ? f->data[4] : 0u;
 }
 
 static void decode_get_iq(const biba_can_frame_t *f)
@@ -340,6 +361,36 @@ void biba_odrive_can_tick_50hz(void)
                     NULL, 0u);
         send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_GET_BUS_VOLTAGE_CURRENT,
                     NULL, 0u);
+    }
+
+    /* If disarmed but a node still reports CLOSED_LOOP (8), keep
+     * re-issuing IDLE (1) until the node confirms it left closed loop.
+     * Recovers from lost frames and stale states (e.g. Pico reboot
+     * while the ODrive was still closed-loop). */
+    if (!s_enabled) {
+        uint8_t idle[4] = { 0x01u, 0u, 0u, 0u };
+        if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
+            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state == 0x08u) {
+            send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID, OD_CMD_SET_AXIS_STATE, idle, 4u);
+        }
+        if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
+            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state == 0x08u) {
+            send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE, idle, 4u);
+        }
+    } else {
+        /* Symmetric retry on the arm side: while armed but a node has
+         * not confirmed CLOSED_LOOP (8) yet (e.g. the initial request
+         * was dropped or rejected by a transient ODrive error), keep
+         * re-issuing CLOSED_LOOP until the heartbeat confirms it. */
+        uint8_t clo[4] = { 0x08u, 0u, 0u, 0u };
+        if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
+            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state != 0x08u) {
+            send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID, OD_CMD_SET_AXIS_STATE, clo, 4u);
+        }
+        if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
+            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state != 0x08u) {
+            send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE, clo, 4u);
+        }
     }
 
     /* Drain the MCP2515 TX queue into the controller once per tick

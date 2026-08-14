@@ -39,7 +39,7 @@
 #define MCP2515_REG_RXM0SIDL   0x21u
 #define MCP2515_REG_RXM1SIDH   0x24u
 #define MCP2515_REG_RXM1SIDL   0x25u
-#define MCP2515_REG_RXF0SIDH   0x00u   /* Mask = 0x7E0, matches cmd_id   */
+#define MCP2515_REG_RXF0SIDH   0x00u   /* Mask = 0x01F, matches cmd_id   */
 #define MCP2515_REG_RXF0SIDL   0x01u
 #define MCP2515_REG_RXF0EID8   0x02u   /* unused (11-bit ID only)         */
 #define MCP2515_REG_RXF0EID0   0x03u
@@ -74,30 +74,51 @@
  * Output: CNF1 = 0b0000_0001 = 0x01. */
 #define MCP2515_CNF1_BRP_250K   0x01u
 
-/* CNF2[6] = 1 → phase1 is programmable (PHSEG2-1 = 5); CNF2[5:3] = PHSEG1
- * -1 (= 5 → 0b101); CNF2[2:0] = PRSEG - 1 (= 0 → 0b000).
- * CNF2 also has BTLMODE = 1 (CNF2[7]) → 8 TQ total:
- *   0b1_101_000 = 0xD0.
+/* CNF2[6] = SAM (0 = sample once); CNF2[5:3] = PHSEG1-1; CNF2[2:0] = PRSEG-1.
+ * Nominal bit time = SYNC(1) + PROPSEG(PRSEG+1) + PS1(PHSEG1+1) + PS2(PHSEG2+1).
+ * For 8 TQ total with TQ = 500 ns (4 µs = 250 kbit @ 8 MHz):
+ *   1 + 1 + 5 + 1 = 8 TQ → PRSEG=0, PHSEG1=4, PHSEG2=0.
+ * CNF2 = BTLMODE(1)<<7 | PHSEG1(4)<<3 | PRSEG(0) = 0b1_0_100_000 = 0xA0.
  *
- * (DS20001801J §11: BTLMODE=1 with CNF3.PHSEG2 gives programmable
- * phase2; with our 1 TQ phase2 the requirement is BTLMODE=1.) */
-#define MCP2515_CNF2_250K       0xD0u
+ * (Previous value 0xD0 had PHSEG1=5 → PS1=6 → 9 TQ = 4.5 µs ≈ 222 kbit,
+ * a 12% mismatch vs the 250 kbit ODrive — enough to make the CAN engine
+ * rack up TEC/REC and go error-passive/bus-off.  See ADR-0001 §1.3.) */
+#define MCP2515_CNF2_250K       0xA0u
 
 /* CNF3[2:0] = PHSEG2 - 1 = 0 (1 TQ).  CNF3[7] = WAKFIL = 0.
  *   0b0000_0000 = 0x00. */
 #define MCP2515_CNF3_250K       0x00u
 
+/* --- 100 kbit/s @ 8 MHz crystal ---------------------------------------- */
+/* TQ = 2×(BRP+1)/8MHz.  BRP=3 → TQ = 1 µs.  Bit = 10 µs = 10 TQ.
+ * SYNC(1) + PROPSEG(2) + PS1(5) + PS2(2) = 10 TQ, sample point 80%.
+ *   PRSEG=1, PHSEG1=4, PHSEG2=1.
+ *   CNF1 = (SJW=0)<<6 | (BRP-1=2) = 0x02
+ *   CNF2 = BTLMODE(1)<<7 | PHSEG1(4)<<3 | PRSEG(1) = 0xA1
+ *   CNF3 = PHSEG2-1 = 1 = 0x01 */
+#define MCP2515_CNF1_BRP_100K   0x02u
+#define MCP2515_CNF2_100K       0xA1u
+#define MCP2515_CNF3_100K       0x01u
+
+/* Selected bus bit rate.  The ODrive must be configured to the same
+ * value (can.config.baud_rate).  NOTE: ODrive v3 (0.5.1) hardcodes
+ * CAN at 250 kbit/s — `can.config.baud_rate` is read-only there, so
+ * 250000 is the only supported value on this target. */
+#ifndef BIBA_MCP2515_BITRATE_BPS
+#define BIBA_MCP2515_BITRATE_BPS 250000
+#endif
+
 /* Acceptance mask layout.  DS20001801J §6.2: for an 11-bit mask, the
  * relevant bits are MSID10..MSID3 (8 bits → SIDH) and MSID2..MSID0
  * (3 bits → SIDL[7:5]).  EXIDE (SIDL[3]) must be 0 for standard-ID
- * matching.  Mask = 0x7E0 lets bits 10..5 through (cmd_id family)
- * and ignores bits 4..0 (node_id portion).  Encoding:
- *   SIDH = (mask >> 3)        = 0xFF
- *   SIDL = (mask & 7) << 5    = 0x00
+ * matching.  Mask = 0x01F masks the low 5 bits (cmd_id) and ignores
+ * bits 10..5 (node_id portion).  Encoding:
+ *   SIDH = (mask >> 3)        = 0x03
+ *   SIDL = (mask & 7) << 5    = 0xE0
  * (SIDL bits 0..2 reserved, bit 4 also reserved for SID buffer pointer
  * modes; leave them 0 for filters, never touch them from a mask.) */
-#define MCP2515_MASK_SIDH       0xFFu
-#define MCP2515_MASK_SIDL       0x00u
+#define MCP2515_MASK_SIDH       0x03u
+#define MCP2515_MASK_SIDL       0xE0u
 
 /* CANINTE bits (RX0IE / RX1IE). */
 #define MCP2515_CANINTE_RX0IE   0x01u
@@ -160,22 +181,29 @@ static void spi_read_block(uint8_t *buf, size_t len)
 /* Register-level accessors. */
 uint8_t biba_mcp2515_reg_modify(uint8_t addr, uint8_t mask, uint8_t value)
 {
+    /* BIT MODIFY is exactly 4 bytes: [0x05][addr][mask][value]; the
+     * register's old value is clocked out during the 4th byte.  One
+     * full-duplex 4-byte transaction, not write-4-then-read-4 (the
+     * extra 4 clocks would be parsed as a second instruction). */
     uint8_t tx[4] = { MCP2515_INSTR_BIT_MODIFY, addr, mask, value };
     uint8_t rx[4] = { 0 };
     cs_select();
-    spi_write_blocking(MCP2515_SPI, tx, 4u);
-    spi_read_blocking(MCP2515_SPI, 0u, rx, 4u);
+    spi_write_read_blocking(MCP2515_SPI, tx, rx, 4u);
     cs_deselect();
     return rx[3];
 }
 
 static uint8_t reg_read(uint8_t addr)
 {
+    /* READ is exactly 3 bytes: [0x03][addr][data].  The register
+     * value arrives in the 3rd byte of a single full-duplex
+     * transaction.  Clocks beyond that get parsed as a new
+     * instruction, so the old write-3-then-read-3 pattern returned
+     * a phantom byte instead of the register. */
     uint8_t tx[3] = { MCP2515_INSTR_READ, addr, 0u };
     uint8_t rx[3] = { 0 };
     cs_select();
-    spi_write_block(tx, 3u);
-    spi_read_block(rx, 3u);
+    spi_write_read_blocking(MCP2515_SPI, tx, rx, 3u);
     cs_deselect();
     return rx[2];
 }
@@ -238,7 +266,9 @@ static bool reset_and_wait(void)
     sleep_ms(1u);
     for (unsigned i = 0; i < 100u; ++i) {
         uint8_t canstat = reg_read(MCP2515_REG_CANSTAT);
-        if ((canstat & 0xE0u) == MCP2515_OPMODE_CONFIG) {
+        /* OPMOD lives in CANSTAT[7:5]; CONFIG = 0b100 there, so the
+         * masked value is 0x80, not the 3-bit code 0x04. */
+        if ((canstat & 0xE0u) == (MCP2515_OPMODE_CONFIG << 5u)) {
             return true;
         }
         sleep_ms(1u);
@@ -248,9 +278,17 @@ static bool reset_and_wait(void)
 
 static void configure_bit_timing_and_filters(void)
 {
+#if BIBA_MCP2515_BITRATE_BPS == 250000
     reg_write(MCP2515_REG_CNF1, MCP2515_CNF1_BRP_250K);
     reg_write(MCP2515_REG_CNF2, MCP2515_CNF2_250K);
     reg_write(MCP2515_REG_CNF3, MCP2515_CNF3_250K);
+#elif BIBA_MCP2515_BITRATE_BPS == 100000
+    reg_write(MCP2515_REG_CNF1, MCP2515_CNF1_BRP_100K);
+    reg_write(MCP2515_REG_CNF2, MCP2515_CNF2_100K);
+    reg_write(MCP2515_REG_CNF3, MCP2515_CNF3_100K);
+#else
+#  error "BIBA_MCP2515_BITRATE_BPS must be 100000 or 250000"
+#endif
 
     /* Mask 0: matches all 11-bit IDs that share the same cmd_id
      * (mask = 0x7E0).  Both masks configured identically for
@@ -275,9 +313,9 @@ static void configure_bit_timing_and_filters(void)
      * SIDH = (id >> 3); SIDL[7] = 0 (std), SIDL[6:5] = id[1:0] << 5.
      * (ODrive always uses 11-bit IDs, so the extended-ID bit stays 0.) */
     /* Six MCP2515 acceptance filters (per ADR-0001 §1.3).  With mask
-     * 0x7E0 each SID register is interpreted as the upper bits of
-     * cmd_id (cmd_id & 0xF8).  We whitelist six ODrive cmd_ids and
-     * zero out the extended-ID slot. */
+     * 0x01F the low 5 bits (cmd_id) must match exactly; the upper
+     * bits (node_id) are 'don't care'.  We whitelist six ODrive
+     * cmd_ids and zero out the extended-ID slot. */
     static const struct {
         uint8_t reg_sidh;
         uint8_t cmd_id;
@@ -291,10 +329,10 @@ static void configure_bit_timing_and_filters(void)
     };
     for (unsigned i = 0; i < (sizeof(k_filters) / sizeof(k_filters[0])); ++i) {
         /* 11-bit ID: SIDH = id >> 3, SIDL = (id & 7) << 5, EXIDE=0.
-         * For "match any node on this cmd_id" the lower 5 bits are
-         * 'don't care' (covered by mask 0x7E0). */
+         * For "match any node on this cmd_id" the low 5 bits (cmd_id)
+         * must match and bits 10..5 (node_id) are masked off by 0x01F. */
         uint8_t cmd = k_filters[i].cmd_id & 0x1Fu;
-        uint8_t sidh = (uint8_t)((cmd << 3u) & 0xFFu);
+        uint8_t sidh = (uint8_t)(cmd >> 3u);
         uint8_t sidl = (uint8_t)((cmd << 5u) & 0xE0u);
         reg_write(k_filters[i].reg_sidh,     sidh);
         reg_write((uint8_t)(k_filters[i].reg_sidh + 1u), sidl);
@@ -305,8 +343,8 @@ static void configure_bit_timing_and_filters(void)
     /* RX0 = accept all messages that pass any filter (rollover=1 lets
      * unmatched-but-rejected frames pass via RX0).  We deliberately
      * keep this simple since ODrive is the only bus traffic. */
-    reg_write(MCP2515_REG_RXB0CTRL, 0x04u);    /* RXM = accept-any */
-    reg_write(MCP2515_REG_RXB1CTRL, 0x04u);    /* same for RX1      */
+    reg_write(MCP2515_REG_RXB0CTRL, 0x04u);    /* RXM=00 filter-match + BUKT rollover */
+    reg_write(MCP2515_REG_RXB1CTRL, 0x04u);    /* same for RX1                       */
 
     /* Interrupt routing: RX0 + RX1 + error.  The host ISR unblocks
      * the main loop on the GPIO IRQ; per-flag handling happens in

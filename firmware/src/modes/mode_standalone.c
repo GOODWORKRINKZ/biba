@@ -787,10 +787,10 @@ void biba_mode_standalone_tick(void)
 #if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
 #elif BIBA_TARGET_HAS_BLDC_2CH
-        /* ODrive performs its own power-stage thermal protection; the
-         * shutdown here is a setpoint-zero + disarm — same semantics
-         * as the BTS7960 case but driven over CAN. */
-        biba_odrive_thermal_reset(0u);
+        /* ODrive has no thermal latch to clear — request
+         * CLOSED_LOOP_CONTROL (8) over CAN so it starts obeying the
+         * Set_Input_Vel commands from the drive loop. */
+        biba_odrive_set_enabled(true);
 #endif
         printf("[biba] ARMED\r\n");
 #if BIBA_FEATURE_MELODY
@@ -810,6 +810,10 @@ void biba_mode_standalone_tick(void)
         }
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
+#if BIBA_TARGET_HAS_BLDC_2CH
+        /* Return ODrive to IDLE (0) over CAN so the wheels coast. */
+        biba_odrive_set_enabled(false);
+#endif
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
 #if BIBA_FEATURE_MELODY
@@ -1367,7 +1371,18 @@ void biba_mode_standalone_tick(void)
      * Telemetry / DATA_READY / status LED
      * ------------------------------------------------------------------ */
     uint32_t scan_count = biba_hal_adc_scan_count();
-    if (scan_count != s_last_scan_count) {
+#if BIBA_ADC_SCAN_LEN == 0u
+    /* No native ADC on this target (BLDC/CAN): the ADC scan count never
+     * advances, so trigger telemetry on a fixed 10 Hz time base instead. */
+    static uint32_t s_last_telem_ms;
+    bool telem_ready = (now - s_last_telem_ms >= 100u);
+    if (telem_ready) {
+        s_last_telem_ms = now;
+    }
+#else
+    bool telem_ready = (scan_count != s_last_scan_count);
+#endif
+    if (telem_ready) {
         s_last_scan_count = scan_count;
         biba_motor_current_t il = biba_current_sense_left();
         biba_motor_current_t ir = biba_current_sense_right();
@@ -1400,11 +1415,13 @@ void biba_mode_standalone_tick(void)
             s_last_log_ms = now;
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
             int current_limited = (left_limited || right_limited) ? 1 : 0;
-            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d rssi=%d lq=%d\r\n",
+            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d alL=%d alR=%d rx=%lu rssi=%d lq=%d\r\n",
                    now, (int)failsafe, (int)armed, spd, (int)stabilized,
                    (int)(raw_throttle * 100), (int)(raw_steering * 100),
                    (int)(left_out * 100), (int)(right_out * 100),
                    current_limited,
+                   (int)biba_odrive_node_alive(0u), (int)biba_odrive_node_alive(1u),
+                   (unsigned long)biba_odrive_rx_count(),
                    s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
             /* CRSF/DMA health line every 5 s */
