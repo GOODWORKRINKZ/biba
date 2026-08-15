@@ -11,6 +11,12 @@
 #  error "odrive_can.c is for the BLDC target only — guard with src_filter or BIBA_TARGET_HAS_BLDC_2CH."
 #endif
 
+/* Transport selection: this TU is the CAN backend.  When the UART
+ * backend is selected (BIBA_ODRIVE_LINK_UART != 0), the whole file
+ * compiles to nothing — drivers/odrive_uart.c provides the API. */
+#if BIBA_ODRIVE_LINK_UART
+#else
+
 /* ---- Forward declarations of MCP2515 driver ------------------------- */
 
 #include "drivers/mcp2515.h"
@@ -85,6 +91,7 @@ static node_state_t s_nodes[MAX_ODRIVE_NODES];
 static volatile uint32_t s_tx_count;
 static volatile uint32_t s_rx_count;
 static volatile uint32_t s_decode_errors;
+static volatile uint32_t s_odrive_reset_count;
 
 /* ---- High-level BTS7960-shaped API --------------------------------- */
 
@@ -95,7 +102,7 @@ static uint32_t s_last_setpoint_ms_left;
 static uint32_t s_last_setpoint_ms_right;
 static uint32_t s_init_ms;
 
-void biba_odrive_can_init(void)
+void biba_odrive_init(void)
 {
     memset(s_nodes, 0, sizeof(s_nodes));
     s_enabled = false;
@@ -295,7 +302,7 @@ static void decode_get_temperature(const biba_can_frame_t *f)
 
 /* Pop MCP2515 RX buffers until they report empty, drain whatever
  * came back into can_queue, then drain it into our decoders. */
-void biba_odrive_can_drain_rx(void)
+void biba_odrive_drain_rx(void)
 {
     biba_can_frame_t f;
     while (biba_mcp2515_rx_pop(&f)) {
@@ -331,15 +338,58 @@ void biba_odrive_can_drain_rx(void)
 
 /* ---- Tick -------------------------------------------------------------- */
 
-void biba_odrive_can_tick_50hz(void)
+void biba_odrive_tick_50hz(void)
 {
     uint32_t now = biba_hal_now_ms();
 
     /* Always drain incoming frames before acting on anything else. */
-    biba_odrive_can_drain_rx();
+    biba_odrive_drain_rx();
 
     if (!biba_mcp2515_ready()) {
         return;
+    }
+
+    /* Auto-recover the MCP2515 from a bus-off wedge (CAN errors from
+     * bad termination / motor noise).  Checked at 10 Hz to keep SPI
+     * traffic low; recovery resets + reprograms the chip in place. */
+    static uint32_t s_bus_off_check_ms;
+    if ((now - s_bus_off_check_ms) >= 100u) {
+        s_bus_off_check_ms = now;
+        if (biba_mcp2515_recover()) {
+            /* The chip was reset — ODrive node state is stale until the
+             * next heartbeat re-validates it. */
+            for (unsigned i = 0; i < MAX_ODRIVE_NODES; ++i) {
+                s_nodes[i].valid = false;
+            }
+        }
+    }
+
+    /* Watchdog for the ODrive-side CAN TX stall (the "silent bus": the
+     * ODrive stops sending heartbeats, but its RX keeps working so it
+     * stays in closed loop).  If a node we have seen before goes silent
+     * for > 1 s while the MCP2515 is healthy, reboot the ODrive over CAN
+     * (MSG_RESET_ODRIVE) — a reboot re-initialises the ODrive's CAN
+     * stack and clears the stall.  Rate-limited so we don't spam resets
+     * while the ODrive is still booting. */
+    static uint32_t s_silent_since_ms;
+    static bool     s_reset_sent;
+    bool silent = false;
+    if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
+        !biba_odrive_node_alive(BIBA_ODRIVE_LEFT_NODE_ID)) silent = true;
+    if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
+        !biba_odrive_node_alive(BIBA_ODRIVE_RIGHT_NODE_ID)) silent = true;
+    if (silent && !s_reset_sent) {
+        if (s_silent_since_ms == 0u) {
+            s_silent_since_ms = now;
+        }
+        if ((now - s_silent_since_ms) >= 1000u) {
+            send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID, OD_CMD_RESET_ODRIVE, NULL, 0u);
+            s_reset_sent = true;
+            s_odrive_reset_count++;
+        }
+    } else if (!silent) {
+        s_silent_since_ms = 0u;
+        s_reset_sent = false;
     }
 
     /* Send Set_Input_Vel, rate-limited per-node. */
@@ -413,3 +463,20 @@ bool biba_odrive_node_alive(uint8_t node_id)
 uint32_t biba_odrive_tx_count(void)      { return s_tx_count; }
 uint32_t biba_odrive_rx_count(void)      { return s_rx_count; }
 uint32_t biba_odrive_decode_errors(void) { return s_decode_errors; }
+uint32_t biba_odrive_recovery_count(void) { return biba_mcp2515_recovery_count(); }
+uint32_t biba_odrive_reset_count(void)   { return s_odrive_reset_count; }
+
+/* ---- Telemetry getters ------------------------------------------------ */
+
+float biba_odrive_bus_voltage(void)
+{
+    return s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_bus_voltage;
+}
+
+float biba_odrive_iq_measured(uint8_t node_id)
+{
+    if (node_id >= MAX_ODRIVE_NODES) return 0.0f;
+    return s_nodes[node_id].last_iq_measured;
+}
+
+#endif /* !BIBA_ODRIVE_LINK_UART */

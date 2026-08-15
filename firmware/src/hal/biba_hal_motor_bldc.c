@@ -28,7 +28,7 @@
 #include "biba_config.h"
 
 #include "drivers/mcp2515.h"
-#include "drivers/odrive_can.h"
+#include "drivers/odrive.h"
 
 #include "hardware/gpio.h"
 #include "pico/time.h"
@@ -63,7 +63,7 @@ static void biba_hal_motor_pwm_init_bldc(void)
 {
     /* Begin the high-level ODrive driver; it owns the SPI bring-up
      * and Set_Limits dispatch. */
-    biba_odrive_can_init();
+    biba_odrive_init();
 
     if (!s_motor_bldc_irq_registered) {
         /* Enable the falling-edge IRQ and register the per-pin
@@ -156,17 +156,26 @@ void biba_current_sense_configure(biba_current_calibration_t left,
 
 biba_motor_current_t biba_current_sense_left(void)
 {
-    biba_motor_current_t z = { .current_a = 0.0f, .valid = false };
+    biba_motor_current_t z = {
+        .current_a = biba_odrive_iq_measured(BIBA_ODRIVE_LEFT_NODE_ID),
+        .valid = biba_odrive_node_alive(BIBA_ODRIVE_LEFT_NODE_ID),
+    };
     return z;
 }
 
 biba_motor_current_t biba_current_sense_right(void)
 {
-    biba_motor_current_t z = { .current_a = 0.0f, .valid = false };
+    biba_motor_current_t z = {
+        .current_a = biba_odrive_iq_measured(BIBA_ODRIVE_RIGHT_NODE_ID),
+        .valid = biba_odrive_node_alive(BIBA_ODRIVE_RIGHT_NODE_ID),
+    };
     return z;
 }
 
-uint16_t biba_voltage_sense_vbat_mv(void) { return 0u; }
+uint16_t biba_voltage_sense_vbat_mv(void)
+{
+    return (uint16_t)(biba_odrive_bus_voltage() * 1000.0f);
+}
 uint16_t biba_voltage_sense_rail_mv(void) { return 0u; }
 float    biba_voltage_sense_ibat_a(void)  { return 0.0f; }
 

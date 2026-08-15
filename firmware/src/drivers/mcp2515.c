@@ -33,6 +33,7 @@
 #define MCP2515_REG_CNF1       0x2Au
 #define MCP2515_REG_CANINTE    0x2Bu
 #define MCP2515_REG_CANINTF    0x2Cu
+#define MCP2515_REG_EFLG       0x2Du   /* Error flags (TEC/REC status)     */
 #define MCP2515_REG_RXB0CTRL   0x60u
 #define MCP2515_REG_RXB1CTRL   0x70u
 #define MCP2515_REG_RXM0SIDH   0x20u
@@ -130,6 +131,17 @@
 #define MCP2515_CANINTF_RX0IF   0x01u
 #define MCP2515_CANINTF_RX1IF   0x02u
 
+/* EFLG error-flag bits (DS20001801J §11.14).  A wedged bus shows up as
+ * TXBO (bus-off): the controller stops transmitting/receiving and does
+ * NOT auto-recover while the bus is silent or persistently erroring, so
+ * the driver force-resets the chip when it sees this. */
+#define MCP2515_EFLG_EWARN      0x01u
+#define MCP2515_EFLG_RXWAR      0x02u
+#define MCP2515_EFLG_TXWAR      0x04u
+#define MCP2515_EFLG_RXEP       0x08u   /* receive error-passive       */
+#define MCP2515_EFLG_TXEP       0x10u   /* transmit error-passive      */
+#define MCP2515_EFLG_TXBO       0x20u   /* transmit bus-off            */
+
 /* Pin macros — driven entirely from BIBA_MCP2515_*_GPIO in
  * target.h.  Falls back to no-ops on targets without MCP2515 (the
  * src_filter keeps this translation unit out of those builds). */
@@ -144,6 +156,7 @@ typedef struct {
     uint32_t    tx_count;
     uint32_t    rx_count;
     uint32_t    rx_drop_count;
+    uint32_t    recovery_count; /* bus-off force-resets              */
 } mcp2515_state_t;
 
 static mcp2515_state_t s_mcp;
@@ -366,6 +379,7 @@ biba_mcp2515_status_t biba_mcp2515_init(void)
     s_mcp.tx_count  = 0u;
     s_mcp.rx_count  = 0u;
     s_mcp.rx_drop_count = 0u;
+    s_mcp.recovery_count = 0u;
 
     /* CS as a manual GPIO. */
     gpio_init(MCP2515_CS_GPIO);
@@ -385,15 +399,9 @@ biba_mcp2515_status_t biba_mcp2515_init(void)
     gpio_set_function(BIBA_PIN_SPI0_SCK_GPIO,  GPIO_FUNC_SPI);
     gpio_set_function(BIBA_PIN_SPI0_MOSI_GPIO, GPIO_FUNC_SPI);
 
-    if (!reset_and_wait()) {
-        return BIBA_MCP2515_ERR_RESET;
-    }
-    if (!enter_config_mode()) {
-        return BIBA_MCP2515_ERR_CONFIG;
-    }
-    configure_bit_timing_and_filters();
-    if (!enter_normal_mode()) {
-        return BIBA_MCP2515_ERR_CONFIG;
+    biba_mcp2515_status_t st = biba_mcp2515_reconfigure();
+    if (st != BIBA_MCP2515_OK) {
+        return st;
     }
 
     /* INT as a falling-edge IRQ input.  Pull-up done on the MCP2515
@@ -407,9 +415,48 @@ biba_mcp2515_status_t biba_mcp2515_init(void)
     return BIBA_MCP2515_OK;
 }
 
+biba_mcp2515_status_t biba_mcp2515_reconfigure(void)
+{
+    if (!reset_and_wait()) {
+        return BIBA_MCP2515_ERR_RESET;
+    }
+    if (!enter_config_mode()) {
+        return BIBA_MCP2515_ERR_CONFIG;
+    }
+    configure_bit_timing_and_filters();
+    if (!enter_normal_mode()) {
+        return BIBA_MCP2515_ERR_CONFIG;
+    }
+    return BIBA_MCP2515_OK;
+}
+
 bool biba_mcp2515_ready(void)
 {
     return s_mcp_initialised;
+}
+
+bool biba_mcp2515_bus_off(void)
+{
+    if (!s_mcp_initialised) {
+        return false;
+    }
+    uint8_t eflg = reg_read(MCP2515_REG_EFLG);
+    return (eflg & (MCP2515_EFLG_TXBO | MCP2515_EFLG_TXEP)) != 0u;
+}
+
+bool biba_mcp2515_recover(void)
+{
+    if (!biba_mcp2515_bus_off()) {
+        return false;
+    }
+    if (biba_mcp2515_reconfigure() != BIBA_MCP2515_OK) {
+        return false;
+    }
+    /* A reset clears RX/TX buffers and latched error flags.  Re-arm the
+     * INT bookkeeping so the next real RX edge is picked up cleanly. */
+    s_mcp_int_seen = false;
+    s_mcp.recovery_count++;
+    return true;
 }
 
 uint32_t biba_mcp2515_bitrate_bps(void)
@@ -420,6 +467,7 @@ uint32_t biba_mcp2515_bitrate_bps(void)
 uint32_t biba_mcp2515_tx_count(void)  { return s_mcp.tx_count;       }
 uint32_t biba_mcp2515_rx_count(void)  { return s_mcp.rx_count;       }
 uint32_t biba_mcp2515_rx_drop_count(void) { return s_mcp.rx_drop_count; }
+uint32_t biba_mcp2515_recovery_count(void) { return s_mcp.recovery_count; }
 
 /* --- TX ------------------------------------------------------------------ */
 

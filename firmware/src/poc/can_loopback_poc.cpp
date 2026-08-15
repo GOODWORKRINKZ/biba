@@ -251,7 +251,7 @@ void setup()
 
     /* Boot-time Set_Limits so a real ODrive applies our safe envelope
      * the moment it sees us on the bus. */
-    biba_odrive_can_init();
+    biba_odrive_init();
 
     /* One initial broadcast heartbeat so a logic analyser / ODrive
      * can immediately tell "host alive". */

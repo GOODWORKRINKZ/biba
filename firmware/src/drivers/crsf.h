@@ -21,6 +21,7 @@ extern "C" {
 #define CRSF_FRAMETYPE_RC_CHANNELS  0x16u
 #define CRSF_FRAMETYPE_LINK_STATS   0x14u
 #define CRSF_FRAMETYPE_BATTERY      0x08u
+#define CRSF_FRAMETYPE_GPS          0x02u
 
 #define CRSF_RC_CHANNEL_COUNT       16u
 

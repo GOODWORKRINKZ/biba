@@ -56,6 +56,20 @@ biba_mcp2515_status_t biba_mcp2515_init(void);
 /* True once biba_mcp2515_init() has returned BIBA_MCP2515_OK. */
 bool biba_mcp2515_ready(void);
 
+/* (Re)program the chip: RESET, config mode, bit timing + filters,
+ * normal mode.  Used at bring-up and to recover from a bus-off wedge.
+ * Assumes SPI0 is already configured. */
+biba_mcp2515_status_t biba_mcp2515_reconfigure(void);
+
+/* True when the controller reports a transmit error-passive/bus-off
+ * condition (EFLG TXEP/TXBO).  A bus-off wedge stops TX/RX until the
+ * chip is reset. */
+bool biba_mcp2515_bus_off(void);
+
+/* If the controller is in bus-off, force a full chip reset +
+ * reconfigure.  Returns true when a recovery was actually performed. */
+bool biba_mcp2515_recover(void);
+
 /* Number of bits per second the CAN bus runs at.  Defaults to
  * BIBA_CAN_BITRATE_BPS.  Returns 0 if the controller is not configured
  * (i.e. mcp2515_init was never called or failed). */
@@ -81,6 +95,7 @@ bool biba_mcp2515_rx_pop(biba_can_frame_t *out);
 uint32_t biba_mcp2515_tx_count(void);
 uint32_t biba_mcp2515_rx_count(void);
 uint32_t biba_mcp2515_rx_drop_count(void);
+uint32_t biba_mcp2515_recovery_count(void);
 
 /* Bit-modify helper.  Exposed for unit tests only. */
 uint8_t biba_mcp2515_reg_modify(uint8_t addr, uint8_t mask, uint8_t value);

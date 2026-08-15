@@ -37,7 +37,7 @@
 #if BIBA_TARGET_HAS_BTS7960_2CH
 #  include "drivers/bts7960.h"
 #elif BIBA_TARGET_HAS_BLDC_2CH
-#  include "drivers/odrive_can.h"
+#  include "drivers/odrive.h"
 #endif
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
@@ -83,6 +83,84 @@ static void send_crsf_ping(void)
     } else {
         s_dbg_tx_fail++;
     }
+}
+
+/* ---- CRSF telemetry uplink (battery + GPS/system frames) -------------
+ *
+ * Mirrors biba-controller/crsf/telemetry.py so the lua telemetry screen
+ * (lua/SCRIPTS/TELEMETRY/biba.lua) decodes the same fields:
+ *   - BATTERY (0x08): motor-supply voltage (V × 10).
+ *   - GPS (0x02): left wheel current → heading (deci-amps),
+ *                 right wheel current → altitude (1000 + deci-amps).
+ * Current / capacity / SOC come from the Daly BMS on the SBC, so they
+ * are 0 here in standalone mode. */
+
+static void send_crsf_frame(uint8_t type, const uint8_t *payload, size_t payload_len)
+{
+    /* body = [type] + payload; crc over body; frame = [sync, len, body, crc] */
+    uint8_t body[CRSF_MAX_FRAME_SIZE];
+    body[0] = type;
+    if (payload_len > 0u && payload != NULL) {
+        memcpy(&body[1], payload, payload_len);
+    }
+    const size_t body_len = payload_len + 1u;
+    uint8_t crc = biba_crsf_crc8_dvb_s2(body, body_len);
+
+    uint8_t frame[CRSF_MAX_FRAME_SIZE + 3u];
+    frame[0] = CRSF_SYNC_BYTE;
+    frame[1] = (uint8_t)(body_len + 1u);
+    memcpy(&frame[2], body, body_len);
+    frame[2u + body_len] = crc;
+
+    if (biba_hal_crsf_write(frame, body_len + 3u) == 0) {
+        s_dbg_tx_ok++;
+    } else {
+        s_dbg_tx_fail++;
+    }
+}
+
+static void send_crsf_battery(void)
+{
+    uint16_t voltage = (uint16_t)(biba_voltage_sense_vbat_mv() / 100u); /* V × 10 */
+    uint8_t payload[8];
+    payload[0] = (uint8_t)(voltage >> 8);
+    payload[1] = (uint8_t)(voltage & 0xFFu);
+    payload[2] = 0u;  /* current (A × 10) */
+    payload[3] = 0u;
+    payload[4] = 0u;  /* capacity (mAh, 24-bit) */
+    payload[5] = 0u;
+    payload[6] = 0u;
+    payload[7] = 0u;  /* remaining % */
+    send_crsf_frame(CRSF_FRAMETYPE_BATTERY, payload, sizeof(payload));
+}
+
+static void send_crsf_gps(void)
+{
+    biba_motor_current_t il = biba_current_sense_left();
+    biba_motor_current_t ir = biba_current_sense_right();
+
+    /* Wheel currents in deci-amps (A × 10), clamped non-negative. */
+    float il_a = (il.current_a < 0.0f) ? 0.0f : il.current_a;
+    float ir_a = (ir.current_a < 0.0f) ? 0.0f : ir.current_a;
+    uint16_t heading  = (uint16_t)(il_a * 10.0f);
+    uint16_t altitude = (uint16_t)(1000.0f + ir_a * 10.0f);
+
+    uint8_t payload[15];
+    payload[0] = 0u; payload[1] = 0u; payload[2] = 0u; payload[3] = 1u; /* lat = 1 */
+    payload[4] = 0u; payload[5] = 0u; payload[6] = 0u; payload[7] = 1u; /* lon = 1 */
+    payload[8] = 0u; payload[9] = 0u;   /* ground speed (CPU%) = 0 on Pico */
+    payload[10] = (uint8_t)(heading >> 8);
+    payload[11] = (uint8_t)(heading & 0xFFu);
+    payload[12] = (uint8_t)(altitude >> 8);
+    payload[13] = (uint8_t)(altitude & 0xFFu);
+    payload[14] = 0u;                   /* satellites (RAM%) = 0 on Pico */
+    send_crsf_frame(CRSF_FRAMETYPE_GPS, payload, sizeof(payload));
+}
+
+static void send_crsf_telemetry(void)
+{
+    send_crsf_battery();
+    send_crsf_gps();
 }
 
 static biba_pid_state_t s_heading_pid;
@@ -774,6 +852,13 @@ void biba_mode_standalone_tick(void)
         send_crsf_ping();
     }
 
+    /* Send CRSF telemetry (battery + GPS/system) at 2 Hz. */
+    static uint32_t s_last_tlm_ms;
+    if (now - s_last_tlm_ms >= 500u) {
+        s_last_tlm_ms = now;
+        send_crsf_telemetry();
+    }
+
     float dt = (float)(now - s_last_tick_ms) / 1000.0f;
     s_last_tick_ms = now;
 
@@ -1408,7 +1493,7 @@ void biba_mode_standalone_tick(void)
         biba_bts7960_drive(left_out, right_out);
 #elif BIBA_TARGET_HAS_BLDC_2CH
         biba_odrive_drive(left_out, right_out);
-        biba_odrive_can_tick_50hz();
+        biba_odrive_tick_50hz();
 #endif
     }
 #else
@@ -1473,25 +1558,16 @@ void biba_mode_standalone_tick(void)
             s_last_log_ms = now;
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
             int current_limited = (left_limited || right_limited) ? 1 : 0;
-#if BIBA_TARGET_HAS_BLDC_2CH
-            const int alive_l = (int)biba_odrive_node_alive(0u);
-            const int alive_r = (int)biba_odrive_node_alive(1u);
-            const unsigned long can_rx = (unsigned long)biba_odrive_rx_count();
-#else
-            /* No CAN backend on the brushed target. The ODrive health
-             * fields stay zero so the log line keeps one format across
-             * targets and the existing log parsers do not care which
-             * firmware produced it. */
-            const int alive_l = 0;
-            const int alive_r = 0;
-            const unsigned long can_rx = 0uL;
-#endif
-            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d alL=%d alR=%d rx=%lu rssi=%d lq=%d\r\n",
+            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d alL=%d alR=%d tx=%lu rx=%lu rc=%lu or=%lu rssi=%d lq=%d\r\n",
                    now, (int)failsafe, (int)armed, spd, (int)stabilized,
                    (int)(raw_throttle * 100), (int)(raw_steering * 100),
                    (int)(left_out * 100), (int)(right_out * 100),
                    current_limited,
-                   alive_l, alive_r, can_rx,
+                   (int)biba_odrive_node_alive(0u), (int)biba_odrive_node_alive(1u),
+                   (unsigned long)biba_odrive_tx_count(),
+                   (unsigned long)biba_odrive_rx_count(),
+                   (unsigned long)biba_odrive_recovery_count(),
+                   (unsigned long)biba_odrive_reset_count(),
                    s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
             /* CRSF/DMA health line every 5 s */

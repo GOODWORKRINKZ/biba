@@ -114,6 +114,18 @@
 #define BIBA_CRSF_UART_INST          uart0
 #define BIBA_CRSF_UART_IRQ           UART0_IRQ
 
+/* --- ODrive UART-A (UART1, GP4=TX / GP5=RX) ---------------------------- *
+ *
+ * ASCII-protocol fallback transport (drivers/odrive_uart.c), selected
+ * when BIBA_ODRIVE_LINK_UART != 0.  Same pins as the "ODRIVE_ASY_*"
+ * notes in the pin table at the top of this file.  UART0 is CRSF, so
+ * ODrive gets UART1.  ODrive-side UART-A must be enabled (baud matched
+ * to BIBA_ODRIVE_UART_BAUD) — see drivers/odrive_uart.c header note. */
+#define BIBA_PIN_ODRIVE_UART_TX_GPIO 4
+#define BIBA_PIN_ODRIVE_UART_RX_GPIO 5
+#define BIBA_ODRIVE_UART_INST        uart1
+#define BIBA_ODRIVE_UART_BAUD        115200
+
 /* --- SBC link -----------------------------------------------------------
  * SPI slave (used on F103 / non-BLDC targets) is replaced on this
  * target by USB-CDC → SBC (Serial over USB on the YD-RP2040 board).

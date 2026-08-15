@@ -36,10 +36,41 @@
 #define BIBA_ODRIVE_RIGHT_NODE_ID      1   /* maps to RIGHT wheel */
 #define BIBA_ODRIVE_DISCOVERY_NODE_ID  0x3F    /* broadcast (cmd_id 0x06, RTR=1) */
 
-#define BIBA_ODRIVE_LEFT_MAX_VEL_REV_S    6.0f   /* ≈ 360 rpm @ wheel */
-#define BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S   6.0f
+/* --- ODrive link transport selection ---------------------------------
+ *
+ *   0 = CAN (MCP2515, default)  → drivers/odrive_can.c
+ *   1 = UART ASCII (GP4/GP5)    → drivers/odrive_uart.c
+ *
+ * The CANSimple stack in ODrive fw 0.5.6 silently wedges at idle, so
+ * the UART ASCII path is the preferred production transport.  Flip
+ * this to 1 (or pass -DBIBA_ODRIVE_LINK_UART=1) to switch — the other
+ * backend's TU compiles to nothing, so there is no linker conflict.
+ */
+#ifndef BIBA_ODRIVE_LINK_UART
+#  define BIBA_ODRIVE_LINK_UART        0
+#endif
+
+/* Liveness timeout for the UART backend (BIBA_ODRIVE_LINK_UART == 1).
+ * Each axis is polled ~every 200 ms; 500 ms gives 2.5× margin. */
+#define BIBA_ODRIVE_UART_TIMEOUT_MS    500
+
+#define BIBA_ODRIVE_LEFT_MAX_VEL_REV_S    15.0f   /* ≈ 900 rpm @ motor */
+#define BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S   15.0f
 #define BIBA_ODRIVE_LEFT_TORQUE_FF_NM      0.0f   /* feed-forward torque */
 #define BIBA_ODRIVE_RIGHT_TORQUE_FF_NM     0.0f
+
+/* Wheel gearbox reduction ratio (motor turns : wheel turns).
+ *
+ * The ODrive measures and commands the MOTOR shaft (input_vel /
+ * vel_estimate are in motor rev/s).  The wheel turns this many times
+ * slower through the gearbox:
+ *
+ *   wheel_rev_s = motor_rev_s / BIBA_ODRIVE_GEAR_RATIO
+ *
+ * 1:6 → the motor spins 6× faster than the wheel.  With
+ * BIBA_ODRIVE_*_MAX_VEL_REV_S = 15 rev/s (motor) the wheel tops out at
+ * 15 / 6 = 2.5 rev/s (≈ 150 rpm). */
+#define BIBA_ODRIVE_GEAR_RATIO            6.0f
 
 /* Polarities: matches the biBa BTS7960 convention — positive duty =
  * "forward" on both wheels. If a particular ODrive is mounted in the
@@ -50,7 +81,7 @@
 
 /* Current / torque limits sent to ODrive at boot via Set_Limits. */
 #define BIBA_ODRIVE_MAX_CURRENT_A        30.0f   /* per axis; ODrive enforces */
-#define BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S  10.0f   /* hard ceiling; 6 rad ≈ 60 rad/s */
+#define BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S  15.0f   /* hard ceiling; 15 rev/s ≈ 94 rad/s */
 
 /* --- CAN bus timing -------------------------------------------------- */
 
