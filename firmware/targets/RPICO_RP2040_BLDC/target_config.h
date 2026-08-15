@@ -47,7 +47,7 @@
  * backend's TU compiles to nothing, so there is no linker conflict.
  */
 #ifndef BIBA_ODRIVE_LINK_UART
-#  define BIBA_ODRIVE_LINK_UART        0
+#  define BIBA_ODRIVE_LINK_UART        1
 #endif
 
 /* Liveness timeout for the UART backend (BIBA_ODRIVE_LINK_UART == 1).

@@ -121,7 +121,9 @@ static void send_crsf_frame(uint8_t type, const uint8_t *payload, size_t payload
 
 static void send_crsf_battery(void)
 {
-    uint16_t voltage = (uint16_t)(biba_voltage_sense_vbat_mv() / 100u); /* V × 10 */
+    uint16_t vbat_mv = biba_voltage_sense_vbat_mv();
+    uint16_t voltage = (uint16_t)(vbat_mv / 100u); /* V × 10 */
+    printf("[tlm] BAT vbat_mv=%u -> volt=%u (0.1V)\r\n", vbat_mv, voltage);
     uint8_t payload[8];
     payload[0] = (uint8_t)(voltage >> 8);
     payload[1] = (uint8_t)(voltage & 0xFFu);
@@ -144,6 +146,8 @@ static void send_crsf_gps(void)
     float ir_a = (ir.current_a < 0.0f) ? 0.0f : ir.current_a;
     uint16_t heading  = (uint16_t)(il_a * 10.0f);
     uint16_t altitude = (uint16_t)(1000.0f + ir_a * 10.0f);
+    printf("[tlm] GPS iqL=%.2fA iqR=%.2fA -> hdg=%u alt=%u\r\n",
+           il_a, ir_a, heading, altitude);
 
     uint8_t payload[15];
     payload[0] = 0u; payload[1] = 0u; payload[2] = 0u; payload[3] = 1u; /* lat = 1 */
@@ -269,11 +273,16 @@ static bool     s_forwarding;
 static bool     s_reverse_pip_active;
 static uint32_t s_reverse_pip_next_ms;
 
-/* Motor trim state (ported from biba-controller/main.py) */
+/* Motor trim state (ported from biba-controller/main.py).
+ * On the BLDC target the trim gesture machinery is compiled out
+ * (see the #if !BIBA_TARGET_HAS_BLDC_2CH block below); s_trim_mode_active
+ * is kept because the LED/disarm paths still reference it (always false). */
 static bool     s_trim_mode_active;
+#if !BIBA_TARGET_HAS_BLDC_2CH
 static float    s_saved_motor_trim;
 static uint32_t s_trim_gesture_start_ms;
 static bool     s_trim_gesture_consumed;
+#endif
 
 /* BTS7960 thermal-latch auto-recovery detector ---------------------------
  * Condition (all three, in DMA IRQ): duty > 0.05, active_blocks == 0,
@@ -868,7 +877,9 @@ void biba_mode_standalone_tick(void)
      * Channel reads (normalised -1..+1, mirroring biba-controller/config.py)
      * ------------------------------------------------------------------ */
     float raw_throttle = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_THROTTLE]);
-    float raw_steering = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_STEERING]);
+    /* Steering sign inverted: left/right turn swapped to match operator
+     * expectation.  Remove the leading '-' to flip back. */
+    float raw_steering = failsafe ? 0.0f : -rc_to_unit(s_channels[BIBA_CH_STEERING]);
     float arm_ch       = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_ARM]);
     float speed_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_SPEED_MODE]);
     float drive_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_DRIVE_MODE]);
@@ -1056,6 +1067,12 @@ void biba_mode_standalone_tick(void)
     /* (Envelope limiter removed — output-side scaling below preserves
      *  the full steering authority at any throttle level.) */
 
+    /* Motor trim is a brushed-DC (open-loop duty) feature.  On the BLDC
+     * target the ODrive runs RPM/velocity closed-loop and the PI balances
+     * each wheel to the same target, so duty-level trim has no meaningful
+     * effect (and would fight the integrator).  The gesture + LED + melody
+     * machinery is compiled out entirely here. */
+#if !BIBA_TARGET_HAS_BLDC_2CH
     /* ------------------------------------------------------------------ *
      * Motor trim  (ported from biba-controller/main.py)
      *
@@ -1100,6 +1117,7 @@ void biba_mode_standalone_tick(void)
         s_trim_gesture_start_ms = 0u;
         s_trim_gesture_consumed = false;
     }
+#endif
     /* TODO(trim): Motor trim was designed for open-loop duty control (Phase ≤6).
      * With RPM closed-loop (Phase 7+) the PI independently regulates each wheel
      * to the same target_hz, so duty-level trim has no meaningful effect and
@@ -1483,19 +1501,25 @@ void biba_mode_standalone_tick(void)
     }
 
     /* Drive motors only when audio is not occupying the PWM hardware.
-     *
-     * On the BLDC target the ODrive uses CANSimple velocity commands,
-     * which don't fight PWM duty for the audio API surface — but we
-     * still gate on `s_player.active` for compatibility with whatever
-     * Beeper feature may one day share the bus. */
+     * (BTS7960 only — the ODrive backend below is a separate bus and
+     * runs unconditionally.) */
     if (!s_player.active) {
 #if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_drive(left_out, right_out);
-#elif BIBA_TARGET_HAS_BLDC_2CH
-        biba_odrive_drive(left_out, right_out);
-        biba_odrive_tick_50hz();
 #endif
     }
+
+    /* The ODrive (BLDC) backend is a separate CAN/UART bus that the
+     * melody player never occupies — biba_hal_motor_audio_*() are no-ops
+     * here, so `s_player.active` has no bearing on ODrive traffic.  The
+     * tick must run every control-loop period: it drains RX, polls
+     * telemetry (vbus + Iq) and flushes Set_Input_Vel.  Gating it on the
+     * melody would stall drive and freeze telemetry during the startup
+     * fanfare, failsafe beep, reverse pip, etc. */
+#if BIBA_TARGET_HAS_BLDC_2CH
+    biba_odrive_drive(left_out, right_out);
+    biba_odrive_tick_50hz();
+#endif
 #else
     /* MELODY disabled — always drive motors directly. */
     biba_bts7960_drive(left_out, right_out);

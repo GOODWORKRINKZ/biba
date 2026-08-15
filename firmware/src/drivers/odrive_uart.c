@@ -72,6 +72,7 @@ static float s_bus_voltage;
 /* ---- Driver-internal counters ---------------------------------------- */
 static volatile uint32_t s_tx_count;
 static volatile uint32_t s_rx_count;
+static volatile uint32_t s_rx_raw;       /* raw bytes read (pre-parse) */
 static volatile uint32_t s_decode_errors;
 
 /* ---- High-level state ------------------------------------------------- */
@@ -174,15 +175,18 @@ static void handle_line(uint32_t now_ms)
         break;
     case UART_RX_VBUS:
         s_bus_voltage = val;
+        printf("[odrive] VBUS      = %6.2f V\r\n", val);
         break;
     case UART_RX_AXIS0_IQ:
         if (BIBA_ODRIVE_LEFT_NODE_ID < MAX_ODRIVE_NODES) {
             s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_iq_measured = val;
+            printf("[odrive] Iq LEFT   = %+6.2f A\r\n", val);
         }
         break;
     case UART_RX_AXIS1_IQ:
         if (BIBA_ODRIVE_RIGHT_NODE_ID < MAX_ODRIVE_NODES) {
             s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_iq_measured = val;
+            printf("[odrive] Iq RIGHT  = %+6.2f A\r\n", val);
         }
         break;
     case UART_RX_IDLE:
@@ -197,6 +201,7 @@ static void uart_drain_rx(uint32_t now_ms)
 {
     while (uart_is_readable(BIBA_ODRIVE_UART_INST)) {
         char c = (char)uart_getc(BIBA_ODRIVE_UART_INST);
+        s_rx_raw++;
         if (c == '\n') {
             s_rx_line[s_rx_len] = '\0';
             s_rx_len = 0;
@@ -299,6 +304,19 @@ void biba_odrive_tick_50hz(void)
 
     /* Always drain RX first. */
     uart_drain_rx(now);
+
+    /* Periodic UART1 RX health dump (~2 s). */
+    static uint32_t s_last_uart_diag_ms;
+    if (now - s_last_uart_diag_ms >= 2000u) {
+        s_last_uart_diag_ms = now;
+        uart_hw_t *h = uart_get_hw(BIBA_ODRIVE_UART_INST);
+        printf("[odrive-uart] rx_raw=%lu rx_lines=%lu fr=0x%08lx rsr=0x%08lx expect=%d\r\n",
+               (unsigned long)s_rx_raw,
+               (unsigned long)s_rx_count,
+               (unsigned long)h->fr,
+               (unsigned long)h->rsr,
+               (int)s_rx_expect);
+    }
 
     /* Send Set_Input_Vel, rate-limited per node (50 Hz). */
     send_set_input_vel(BIBA_ODRIVE_LEFT_NODE_ID,
