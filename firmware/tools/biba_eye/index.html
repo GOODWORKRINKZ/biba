@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👁</text></svg>">
+<title>BIBA Eye — FPV</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0b0e13; color: #d7dce3; font-family: system-ui, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; background: #12161d; border-bottom: 1px solid #1f2630;
+    font-size: 14px; flex: 0 0 auto; flex-wrap: wrap;
+  }
+  header .title { font-weight: 600; }
+  select, input, button {
+    background: #1a2029; color: #d7dce3; border: 1px solid #2b3442;
+    border-radius: 6px; padding: 5px 9px; font-size: 13px; font-family: inherit;
+  }
+  select:focus, input:focus { outline: 1px solid #3d7bb8; }
+  #status { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+  #dot.on { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+  #dot.off { background: #e74c3c; }
+  main { flex: 1 1 auto; position: relative; min-height: 0; background: #000; }
+  main img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain;
+  }
+  .controls {
+    position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: grid; grid-template-columns: repeat(3, 56px); gap: 8px; opacity: .92;
+  }
+  .controls button {
+    width: 56px; height: 56px; font-size: 22px; cursor: pointer;
+    background: rgba(18,22,29,.82); color: #d7dce3;
+    border: 1px solid #2b3442; border-radius: 10px;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  .controls button:active { background: #2b5c8a; border-color: #3d7bb8; }
+  .controls .empty { visibility: hidden; }
+  /* ---- first-run overlay ---- */
+  #setup {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: rgba(8,10,14,.94); z-index: 10;
+  }
+  #setup.hidden { display: none; }
+  .card {
+    width: min(420px, 92vw); background: #12161d; border: 1px solid #26303d;
+    border-radius: 12px; padding: 22px;
+  }
+  .card h1 { font-size: 18px; margin-bottom: 4px; }
+  .card p.sub { color: #8b95a3; font-size: 13px; margin-bottom: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: #8b95a3; margin-bottom: 4px; }
+  .field input { width: 100%; padding: 8px 10px; }
+  .row { display: flex; gap: 8px; margin-top: 6px; }
+  .row button { flex: 1; padding: 9px; cursor: pointer; }
+  .primary { background: #2b5c8a; border-color: #3d7bb8; font-weight: 600; }
+  .primary:hover { background: #33699c; }
+  #scanlist { margin-top: 12px; max-height: 140px; overflow-y: auto; }
+  #scanlist button {
+    display: block; width: 100%; text-align: left; margin-bottom: 6px;
+    cursor: pointer; padding: 7px 10px;
+  }
+  #setupmsg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+  #setupmsg.err { color: #e74c3c; }
+  #setupmsg.ok { color: #2ecc71; }
+  footer {
+    flex: 0 0 auto; padding: 6px 14px; font-size: 12px; color: #8b95a3;
+    background: #12161d; border-top: 1px solid #1f2630;
+  }
+  kbd {
+    background: #1c222b; border: 1px solid #303a48; border-radius: 4px;
+    padding: 1px 6px; font-family: inherit; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="title">BIBA Eye</span>
+  <span id="caminfo">—</span>
+  <select id="profile" title="Профиль качества потока"></select>
+  <button id="settingsBtn" title="Настройки камеры">⚙</button>
+  <div id="status"><span id="dot"></span><span id="statxt">подключение…</span></div>
+</header>
+<main>
+  <img id="video" alt="video stream">
+  <div class="controls">
+    <button class="empty"></button>
+    <button data-action="up" title="вверх">▲</button>
+    <button class="empty"></button>
+    <button data-action="left" title="влево">◀</button>
+    <button data-action="stop" title="стоп">■</button>
+    <button data-action="right" title="вправо">▶</button>
+    <button class="empty"></button>
+    <button data-action="down" title="вниз">▼</button>
+    <button class="empty"></button>
+  </div>
+
+  <div id="setup">
+    <div class="card">
+      <h1>BIBA Eye — первый запуск</h1>
+      <p class="sub">Введите IP-адрес камеры V380 или найдите её в сети.</p>
+      <div class="field">
+        <label>IP-адрес камеры</label>
+        <input id="ip" type="text" placeholder="192.168.1.107" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label>Пароль устройства (задан в приложении V380 Pro)</label>
+        <input id="pass" type="password" placeholder="888888">
+      </div>
+      <div class="row">
+        <button id="scanBtn">🔎 Найти камеры в сети</button>
+        <button id="connectBtn" class="primary">Подключить</button>
+      </div>
+      <div id="scanlist"></div>
+      <div id="setupmsg"></div>
+    </div>
+  </div>
+</main>
+<footer>
+  Клавиатура: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> или стрелки — держать
+  для движения. Кнопки работают с мыши и тачскрина.
+</footer>
+<script>
+const keymap = {
+  ArrowUp: 'up', KeyW: 'up',
+  ArrowDown: 'down', KeyS: 'down',
+  ArrowLeft: 'left', KeyA: 'left',
+  ArrowRight: 'right', KeyD: 'right',
+};
+const active = new Set();
+const $ = id => document.getElementById(id);
+
+function send(action) {
+  fetch('/api/ptz', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action}),
+  }).catch(() => {});
+}
+
+document.querySelectorAll('.controls button').forEach(btn => {
+  const action = btn.dataset.action;
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); send(action); });
+  btn.addEventListener('pointerup', () => send('stop'));
+  btn.addEventListener('pointercancel', () => send('stop'));
+});
+
+window.addEventListener('keydown', e => {
+  const action = keymap[e.code];
+  if (!action || $('setup') && !$('setup').classList.contains('hidden')) return;
+  e.preventDefault();
+  if (!active.has(action)) { active.add(action); send(action); }
+});
+window.addEventListener('keyup', e => {
+  const action = keymap[e.code];
+  if (!action) return;
+  active.delete(action);
+  if (active.size === 0) send('stop');
+});
+window.addEventListener('blur', () => { active.clear(); send('stop'); });
+
+/* ---------- setup flow ---------- */
+function msg(text, cls) {
+  const m = $('setupmsg');
+  m.textContent = text;
+  m.className = cls || '';
+}
+
+async function initSetup() {
+  try {
+    const r = await fetch('/api/config');
+    const d = await r.json();
+    if (d.configured) {
+      $('setup').classList.add('hidden');
+      $('ip').value = d.config.camera_ip;
+      $('pass').value = d.config.camera_pass;
+    } else {
+      $('setup').classList.remove('hidden');
+    }
+    fillProfiles(d.profiles);
+    $('profile').value = d.config.profile;
+  } catch (e) {
+    $('setup').classList.remove('hidden');
+    msg('Сервер недоступен', 'err');
+  }
+}
+
+function fillProfiles(profiles) {
+  const sel = $('profile');
+  sel.innerHTML = '';
+  for (const [key, p] of Object.entries(profiles)) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = p.label;
+    opt.title = p.desc;
+    sel.appendChild(opt);
+  }
+}
+
+$('scanBtn').addEventListener('click', async () => {
+  msg('Сканирую сеть…');
+  $('scanlist').innerHTML = '';
+  try {
+    const r = await fetch('/api/discover');
+    const d = await r.json();
+    const cams = d.cameras || [];
+    if (!cams.length) { msg('Камер не найдено', 'err'); return; }
+    msg('Найдено: ' + cams.length);
+    cams.forEach(c => {
+      const b = document.createElement('button');
+      b.textContent = c.ip + (c.onvif ? ' · ONVIF' : ' · порты открыты');
+      b.addEventListener('click', () => { $('ip').value = c.ip; });
+      $('scanlist').appendChild(b);
+    });
+  } catch (e) {
+    msg('Ошибка сканирования', 'err');
+  }
+});
+
+$('connectBtn').addEventListener('click', async () => {
+  const ip = $('ip').value.trim();
+  if (!ip) { msg('Введите IP-адрес', 'err'); return; }
+  msg('Проверяю камеру…');
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({camera_ip: ip, camera_pass: $('pass').value || '888888'}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      msg('Подключено!', 'ok');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      msg('Не удалось: ' + (d.error || ''), 'err');
+    }
+  } catch (e) {
+    msg('Ошибка запроса', 'err');
+  }
+});
+
+$('profile').addEventListener('change', async () => {
+  await fetch('/api/profile', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({profile: $('profile').value}),
+  }).catch(() => {});
+});
+
+$('settingsBtn').addEventListener('click', () => {
+  $('setup').classList.toggle('hidden');
+});
+
+/* ---------- MJPEG player with auto-reconnect ---------- */
+const video = $('video');
+let streamAbort = null;
+let lastBlobUrl = null;
+
+function concatBytes(a, b) {
+  const c = new Uint8Array(a.length + b.length);
+  c.set(a); c.set(b, a.length);
+  return c;
+}
+function findSeq(hay, needle, from) {
+  outer: for (let i = from; i <= hay.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+const TE = new TextEncoder();
+const FRAME_MARK = TE.encode('--frame');
+const HDR_END = TE.encode('\r\n\r\n');
+
+async function streamLoop() {
+  if (streamAbort) streamAbort.abort();
+  const ctrl = new AbortController();
+  streamAbort = ctrl;
+  try {
+    const resp = await fetch('/stream?t=' + Date.now(), {signal: ctrl.signal});
+    if (!resp.ok || !resp.body) throw new Error('stream ' + resp.status);
+    const reader = resp.body.getReader();
+    let buf = new Uint8Array(0);
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf = concatBytes(buf, value);
+      for (;;) {
+        const start = findSeq(buf, FRAME_MARK, 0);
+        if (start < 0) { if (buf.length > 1 << 20) buf = buf.slice(-65536); break; }
+        const hEnd = findSeq(buf, HDR_END, start);
+        if (hEnd < 0) { buf = buf.slice(start); break; }
+        const header = new TextDecoder().decode(buf.slice(start, hEnd));
+        const lm = header.match(/Content-Length:\s*(\d+)/i);
+        const bodyStart = hEnd + 4;
+        const frameLen = lm ? parseInt(lm[1]) : buf.length - bodyStart;
+        if (buf.length < bodyStart + frameLen) { buf = buf.slice(start); break; }
+        const frame = buf.slice(bodyStart, bodyStart + frameLen);
+        buf = buf.slice(bodyStart + frameLen);
+        const url = URL.createObjectURL(new Blob([frame], {type: 'image/jpeg'}));
+        if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+        lastBlobUrl = url;
+        video.src = url;
+      }
+    }
+  } catch (e) {
+    // aborted or network error - reconnect below
+  }
+  streamAbort = null;
+  setTimeout(streamLoop, 1000);
+}
+streamLoop();
+
+/* ---------- status ---------- */
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    const dot = $('dot'), txt = $('statxt');
+    if (!s.configured) {
+      $('caminfo').textContent = 'камера не настроена';
+      dot.className = 'off'; txt.textContent = 'нет камеры';
+      return;
+    }
+    $('caminfo').textContent = 'камера ' + s.camera_ip;
+    if (s.stream.alive) {
+      dot.className = 'on';
+      txt.textContent = s.profile_label + ' · ' + s.stream.fps_target + ' к/с';
+    } else {
+      dot.className = 'off';
+      txt.textContent = 'нет потока (' + s.profile_label + ')';
+    }
+  } catch (e) {
+    $('dot').className = 'off';
+    $('statxt').textContent = 'сервер недоступен';
+  }
+}
+
+initSetup();
+refreshStatus();
+setInterval(refreshStatus, 3000);
+</script>
+</body>
+</html>
