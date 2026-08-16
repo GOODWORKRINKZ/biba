@@ -11,7 +11,11 @@ FPV-инструмент для камеры **V380 Q8** (и аналогичн�
 - 💾 Всё сохраняется в `config.json`, повторный запуск — без ввода
 
 ## Установка одной строкой
-Скопируйте и выполните в PowerShell (из папки проекта или `tools\biba_eye`):
+Скопируйте и выполните в PowerShell (скачает всё с GitHub и настроит ПК):
+```powershell
+irm https://raw.githubusercontent.com/GOODWORKRINKZ/biba/main/firmware/tools/biba_eye/install.ps1 | iex
+```
+Локальный вариант (если папка тулзы уже есть рядом):
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\biba_eye\setup.ps1
 ```
