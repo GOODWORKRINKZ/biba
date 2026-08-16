@@ -17,18 +17,21 @@ Stream quality profiles (selectable in the UI):
   quality   - main stream 720p, 20 fps, high JPEG quality -> best image
 """
 import base64
+import ctypes
 import hashlib
 import json
 import os
+import queue
 import re
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -122,7 +125,7 @@ def soap_envelope(body, user=None, password=None):
     if user is not None and password is not None:
         nonce = os.urandom(16)
         nonce_b64 = base64.b64encode(nonce).decode()
-        created = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        created = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         digest = base64.b64encode(
             hashlib.sha1(nonce + created.encode() + password.encode()).digest()
         ).decode()
@@ -310,6 +313,7 @@ class Streamer:
         vf.append('fps=%d' % prof['fps'])
         return [
             FFMPEG, '-hide_banner', '-loglevel', 'error',
+            '-timeout', '5000000',
             '-rtsp_transport', 'tcp',
             '-fflags', 'nobuffer', '-flags', 'low_delay',
             '-i', rtsp_url(cfg),
@@ -335,12 +339,30 @@ class Streamer:
                 proc = subprocess.Popen(self._ffmpeg_cmd(cfg, prof),
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL)
+                # reader thread: ffmpeg stdout -> queue, so a blocked read
+                # never freezes the control loop (restart/profile changes)
+                q = queue.Queue()
+
+                def pump():
+                    try:
+                        while True:
+                            chunk = proc.stdout.read(65536)
+                            q.put(chunk)
+                            if not chunk:
+                                break
+                    except (OSError, ValueError):
+                        q.put(b'')
+
+                threading.Thread(target=pump, daemon=True).start()
                 buf = b''
                 while self.running and proc.poll() is None:
                     with self.cond:
                         if self.gen != my_gen:
                             break
-                    chunk = proc.stdout.read(65536)
+                    try:
+                        chunk = q.get(timeout=0.5)
+                    except queue.Empty:
+                        continue
                     if not chunk:
                         break
                     buf += chunk
@@ -395,6 +417,23 @@ class App:
 
 app = App()
 
+# ----------------------------------------------------------------- single ----
+_single_instance_handle = None
+
+
+def acquire_single_instance():
+    """Windows named mutex: only one BIBA Eye instance per machine."""
+    global _single_instance_handle
+    if sys.platform == 'win32':
+        try:
+            kernel32 = ctypes.windll.kernel32
+            _single_instance_handle = kernel32.CreateMutexW(
+                None, False, 'BIBAEyeSingleInstance')
+            return kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
+        except Exception:
+            return True
+    return True
+
 # ------------------------------------------------------------------ web -----
 class Handler(BaseHTTPRequestHandler):
     server_version = 'BIBAEye/1.0'
@@ -408,7 +447,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
 
     def _read_json(self):
         try:
@@ -566,6 +608,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    if not acquire_single_instance():
+        web_port = int(app.cfg.get('web_port', 8081))
+        print('BIBA Eye is already running: http://127.0.0.1:%d/' % web_port)
+        if app.cfg.get('auto_open', True):
+            webbrowser.open('http://127.0.0.1:%d/' % web_port)
+        return
     web_port = int(app.cfg.get('web_port', 8081))
     srv = ThreadingHTTPServer(('0.0.0.0', web_port), Handler)
     print('BIBA Eye')
