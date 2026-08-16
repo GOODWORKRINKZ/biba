@@ -1,0 +1,3 @@
+# BIBA Eye dependencies.
+# server.py currently uses only the Python standard library.
+# Add future packages here (one per line); setup.ps1 installs them automatically.
