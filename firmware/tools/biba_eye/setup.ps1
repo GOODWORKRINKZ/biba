@@ -1,4 +1,4 @@
-# BIBA Eye - one-time setup for Windows.
+﻿# BIBA Eye - one-time setup for Windows.
 #   - creates the BIBA virtual environment (biba_venv) and installs packages
 #   - installs Python 3 and ffmpeg automatically when missing (winget)
 #   - writes initial config.json (camera IP can also be entered on the page)
@@ -8,6 +8,35 @@ param([switch]$NoShortcut)
 
 $ErrorActionPreference = 'Stop'
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+function Write-Info { param([string]$m) Write-Host "[INFO] $m" -ForegroundColor DarkCyan }
+function Write-Ok   { param([string]$m) Write-Host "[OK]   $m" -ForegroundColor Green }
+function Write-Warn { param([string]$m) Write-Host "[WARN] $m" -ForegroundColor Yellow }
+function Write-Err  { param([string]$m) Write-Host "[ERR]  $m" -ForegroundColor Red }
+function Write-Step {
+    param([string]$m)
+    $bar = '=' * 58
+    Write-Host ''
+    Write-Host $bar -ForegroundColor Blue
+    Write-Host "  $m" -ForegroundColor Blue
+    Write-Host $bar -ForegroundColor Blue
+}
+function Show-Logo {
+    Write-Host @'
+    ╔═══════════════════════════════════════════════════════╗
+    ║                                                       ║
+    ║  ██████╗  ██╗ ██████╗   █████╗                        ║
+    ║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██╗                       ║
+    ║  ██████╔╝ ██║ ██████╔╝ ███████║                       ║
+    ║  ██╔══██╗ ██║ ██╔══██╗ ██╔══██║                       ║
+    ║  ██████╔╝ ██║ ██████╔╝ ██║  ██║                       ║
+    ║  ╚═════╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝                       ║
+    ║                                                       ║
+    ╚═══════════════════════════════════════════════════════╝
+'@ -ForegroundColor Magenta
+    Write-Host '              BIBA Eye Setup v1.0' -ForegroundColor Cyan
+    Write-Host ''
+}
 
 function Find-Python {
     $cands = @(
@@ -32,63 +61,68 @@ function Find-Python {
     return $null
 }
 
-Write-Host '=== BIBA Eye setup ==='
+Show-Logo
 
 # --- Python (system interpreter, used to create the venv) ---
+Write-Step '1/5  Python'
 $py = Find-Python
 if (-not $py) {
-    Write-Host 'Python 3.8+ not found. Installing Python 3.12 via winget...'
+    Write-Info 'Python 3.8+ not found. Installing Python 3.12 via winget...'
     winget install --id Python.Python.3.12 -e --accept-source-agreements --accept-package-agreements --silent
     $py = Find-Python
 }
 if (-not $py) {
-    Write-Host 'ERROR: Python not found. Install it manually and rerun this script.' -ForegroundColor Red
+    Write-Err 'Python not found. Install it manually and rerun this script.'
     exit 1
 }
-Write-Host "Python: $py"
+Write-Ok "Python: $py"
 
 # --- BIBA virtual environment ---
+Write-Step '2/5  BIBA virtual environment'
 $venvDir = Join-Path $dir 'biba_venv'
 $venvPy = Join-Path $venvDir 'Scripts\python.exe'
 if (-not (Test-Path $venvPy)) {
-    Write-Host 'Creating BIBA virtual environment (biba_venv)...'
+    Write-Info 'Creating BIBA virtual environment (biba_venv)...'
     & $py -m venv $venvDir
     if (-not (Test-Path $venvPy)) {
-        Write-Host 'ERROR: failed to create biba_venv' -ForegroundColor Red
+        Write-Err 'Failed to create biba_venv'
         exit 1
     }
+} else {
+    Write-Ok 'biba_venv already exists'
 }
 & $venvPy -m pip install --upgrade pip --disable-pip-version-check --quiet
 $req = Join-Path $dir 'requirements.txt'
 if (Test-Path $req) {
     $pkgs = Get-Content $req | Where-Object { $_ -match '^\s*[A-Za-z0-9_]' }
     if ($pkgs) {
-        Write-Host 'Installing packages from requirements.txt...'
+        Write-Info 'Installing packages from requirements.txt...'
         & $venvPy -m pip install -r $req --quiet
     } else {
-        Write-Host 'requirements.txt: no external packages (server uses stdlib only).'
+        Write-Ok 'requirements.txt: no external packages (server uses stdlib only)'
     }
 }
-Write-Host "Virtual env: $venvDir"
+Write-Ok "Virtual env: $venvDir"
 
 # --- ffmpeg ---
+Write-Step '3/5  ffmpeg'
 $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 if (-not $ffmpeg) {
-    Write-Host 'ffmpeg not found. Installing via winget...'
+    Write-Info 'ffmpeg not found. Installing via winget...'
     winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements --silent
     $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 }
 if (-not $ffmpeg) {
-    Write-Host 'WARNING: ffmpeg not found - video will not work.' -ForegroundColor Yellow
+    Write-Warn 'ffmpeg not found - video will not work.'
 } else {
-    Write-Host "ffmpeg: $ffmpeg"
+    Write-Ok "ffmpeg: $ffmpeg"
 }
 
 # --- initial config (camera IP is also configurable from the web page) ---
+Write-Step '4/5  Camera config'
 $cfgPath = Join-Path $dir 'config.json'
 if (-not (Test-Path $cfgPath)) {
-    Write-Host ''
-    Write-Host 'Camera settings (can be changed later on the web page):'
+    Write-Info 'Camera settings (can be changed later on the web page):'
     $ip = Read-Host 'Camera IP (press Enter to skip)'
     $pass = '888888'
     if ($ip) {
@@ -97,10 +131,13 @@ if (-not (Test-Path $cfgPath)) {
     }
     @{ camera_ip = $ip; camera_pass = $pass } | ConvertTo-Json |
         Set-Content -Path $cfgPath -Encoding UTF8
-    Write-Host "Config written: $cfgPath"
+    Write-Ok "Config written: $cfgPath"
+} else {
+    Write-Ok 'config.json already exists'
 }
 
 # --- run.cmd (uses the venv python) ---
+Write-Step '5/5  Launchers and shortcuts'
 $run = Join-Path $dir 'run.cmd'
 @"
 @echo off
@@ -108,7 +145,7 @@ cd /d "%~dp0"
 "biba_venv\Scripts\python.exe" server.py
 pause
 "@ | Set-Content -Path $run -Encoding ASCII
-Write-Host "Created: $run"
+Write-Ok "Created: $run"
 
 # --- shortcuts with the BIBA Eye icon ---
 if (-not $NoShortcut) {
@@ -124,7 +161,7 @@ if (-not $NoShortcut) {
     $lnkDesktop.Description = 'BIBA Eye - FPV camera control'
     if (Test-Path $ico) { $lnkDesktop.IconLocation = "$ico,0" }
     $lnkDesktop.Save()
-    Write-Host 'Desktop shortcut created: BIBA Eye'
+    Write-Ok 'Desktop shortcut created: BIBA Eye'
 
     $smDir = Join-Path $startMenu 'BIBA Eye'
     New-Item -ItemType Directory -Force -Path $smDir | Out-Null
@@ -135,9 +172,11 @@ if (-not $NoShortcut) {
     $lnkMenu.Description = 'BIBA Eye - FPV camera control'
     if (Test-Path $ico) { $lnkMenu.IconLocation = "$ico,0" }
     $lnkMenu.Save()
-    Write-Host 'Start menu shortcut created: BIBA Eye'
+    Write-Ok 'Start menu shortcut created: BIBA Eye'
+} else {
+    Write-Warn 'Shortcuts skipped (-NoShortcut)'
 }
 
 Write-Host ''
-Write-Host 'Done. Start BIBA Eye via run.cmd or the BIBA Eye shortcut.' -ForegroundColor Green
-Write-Host 'The page http://127.0.0.1:8081/ opens automatically.'
+Write-Host '  Done. Start BIBA Eye via run.cmd or the BIBA Eye shortcut.' -ForegroundColor Green
+Write-Host '  The page http://127.0.0.1:8081/ opens automatically.' -ForegroundColor Green
