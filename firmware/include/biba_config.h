@@ -491,11 +491,12 @@
  * change, not a code change.
  *
  * Rendering is a pure function of (mode, now_ms) — see
- * src/app/led_panel.c.  Effects:
- *   forward   → solid white          (driving lights)
- *   reverse   → solid red            (reversing lights)
- *   armed idle→ dim white            (DRL)
- *   disarmed  → amber arrow board    (road-service warning)
+ * src/app/led_panel.c.  The three driving states follow car tail-light
+ * convention, so anyone behind the robot reads them without being told:
+ *   forward   → dim red             (running / tail light)
+ *   stopped   → bright red          (brake light)
+ *   reverse   → solid white         (reversing light)
+ *   disarmed  → amber arrow board   (road-service warning)
  *   beacon    → blue/red double-flash lightbar
  *   trim      → yellow perimeter chase
  *   failsafe  → red strobe
@@ -544,13 +545,17 @@
 
 /* Master brightness, 0..255, applied to every effect as the last step.
  * 32 WS2812 at full white would pull ~1.9 A off the 5 V rail; 120 keeps
- * the worst case (solid white forward) near 0.9 A. */
+ * the worst case (solid white while reversing) near 0.9 A.  The red
+ * states cost roughly a third of that. */
 #ifndef BIBA_LED_PANEL_BRIGHTNESS
 #  define BIBA_LED_PANEL_BRIGHTNESS      120u
 #endif
-/* Pre-scale level of the "armed but not moving" daytime-running light. */
-#ifndef BIBA_LED_PANEL_DRL_LEVEL
-#  define BIBA_LED_PANEL_DRL_LEVEL       48u
+/* Pre-scale level of the dim red shown while driving forward. The
+ * stopped state uses full red, so this is what sets the contrast
+ * between "rolling" and "standing" — lower it for a sharper brake
+ * light, raise it if the forward state is hard to see in daylight. */
+#ifndef BIBA_LED_PANEL_FORWARD_LEVEL
+#  define BIBA_LED_PANEL_FORWARD_LEVEL   64u
 #endif
 
 /* Repaint period. 20 ms = 50 Hz; one 32-LED frame takes ~1 ms on the

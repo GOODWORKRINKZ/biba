@@ -4,8 +4,12 @@
 /* Indicator LED panels — pure rendering layer.
  *
  * Two WS2812 matrices are mounted at the front-left and front-right
- * corners of the robot and daisy-chained onto a single data line. This
- * module owns nothing but arithmetic: given the machine state and a
+ * corners of the robot and daisy-chained onto a single data line. The
+ * three driving states follow car tail-light convention — dim red
+ * rolling, bright red standing, white reversing — so an observer reads
+ * them without being told what they mean.
+ *
+ * This module owns nothing but arithmetic: given the machine state and a
  * millisecond timestamp it fills a frame buffer. Pushing that buffer at
  * the wire is `biba_hal_led_strip_write()`; deciding *when* to push is
  * the caller's job (mode_standalone repaints at
@@ -41,9 +45,9 @@ typedef struct {
 typedef enum {
     BIBA_LED_MODE_DISARMED = 0, /* amber road-service arrow board       */
     BIBA_LED_MODE_BEACON,       /* blue/red emergency lightbar          */
-    BIBA_LED_MODE_ARMED_IDLE,   /* dim white daytime running light      */
-    BIBA_LED_MODE_FORWARD,      /* solid white driving lights           */
-    BIBA_LED_MODE_REVERSE,      /* solid red reversing lights           */
+    BIBA_LED_MODE_ARMED_IDLE,   /* bright red — armed, standing still   */
+    BIBA_LED_MODE_FORWARD,      /* dim red — rolling forward            */
+    BIBA_LED_MODE_REVERSE,      /* solid white — reversing              */
     BIBA_LED_MODE_TRIM,         /* yellow perimeter chase               */
     BIBA_LED_MODE_FAILSAFE,     /* red strobe                           */
     BIBA_LED_MODE_COUNT

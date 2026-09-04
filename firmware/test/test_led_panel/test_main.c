@@ -17,6 +17,13 @@
 
 static biba_rgb_t g_frame[BIBA_LED_PANEL_TOTAL];
 
+/* Mirrors the renderer's final brightness step, so the expectations
+ * below stay readable when BIBA_LED_PANEL_BRIGHTNESS is retuned. */
+static uint8_t lit(unsigned intent)
+{
+    return (uint8_t)((intent * BIBA_LED_PANEL_BRIGHTNESS + 127u) / 255u);
+}
+
 static void render(biba_led_mode_t mode, uint32_t now_ms)
 {
     memset(g_frame, 0xAA, sizeof(g_frame));   /* poison: every pixel must be written */
@@ -162,14 +169,13 @@ static void test_mode_direction_ignored_while_disarmed(void)
 /* -----------------------------------------------------------------------
  * Driving lights
  * ----------------------------------------------------------------------- */
-static void test_forward_is_solid_white_on_both_panels(void)
+static void test_forward_is_dim_red_on_both_panels(void)
 {
-    const uint8_t lvl = (uint8_t)BIBA_LED_PANEL_BRIGHTNESS;
     render(BIBA_LED_MODE_FORWARD, 12345u);
     for (unsigned i = 0; i < TOTAL; i++) {
-        TEST_ASSERT_EQUAL_UINT(lvl, g_frame[i].r);
-        TEST_ASSERT_EQUAL_UINT(lvl, g_frame[i].g);
-        TEST_ASSERT_EQUAL_UINT(lvl, g_frame[i].b);
+        TEST_ASSERT_EQUAL_UINT(lit(BIBA_LED_PANEL_FORWARD_LEVEL), g_frame[i].r);
+        TEST_ASSERT_EQUAL_UINT(0u, g_frame[i].g);
+        TEST_ASSERT_EQUAL_UINT(0u, g_frame[i].b);
     }
 }
 
@@ -183,26 +189,29 @@ static void test_forward_does_not_animate(void)
     TEST_ASSERT_EQUAL_UINT(first.b, g_frame[0].b);
 }
 
-static void test_reverse_is_solid_red_on_both_panels(void)
+static void test_reverse_is_solid_white_on_both_panels(void)
 {
     render(BIBA_LED_MODE_REVERSE, 999u);
     for (unsigned i = 0; i < TOTAL; i++) {
-        TEST_ASSERT_EQUAL_UINT((uint8_t)BIBA_LED_PANEL_BRIGHTNESS, g_frame[i].r);
-        TEST_ASSERT_EQUAL_UINT(0u, g_frame[i].g);
-        TEST_ASSERT_EQUAL_UINT(0u, g_frame[i].b);
+        TEST_ASSERT_EQUAL_UINT(lit(255u), g_frame[i].r);
+        TEST_ASSERT_EQUAL_UINT(lit(255u), g_frame[i].g);
+        TEST_ASSERT_EQUAL_UINT(lit(255u), g_frame[i].b);
     }
 }
 
-static void test_armed_idle_is_dimmer_than_forward(void)
+static void test_stopped_is_brighter_red_than_forward(void)
 {
+    /* The brake-light contrast is the whole point of the two red
+     * states: standing must read as brighter than rolling. */
     render(BIBA_LED_MODE_FORWARD, 0u);
-    const uint8_t bright = g_frame[0].r;
+    const uint8_t rolling = g_frame[0].r;
+    TEST_ASSERT_TRUE(rolling > 0u);
+
     render(BIBA_LED_MODE_ARMED_IDLE, 0u);
-    TEST_ASSERT_TRUE(g_frame[0].r < bright);
-    /* Still white, still on. */
-    TEST_ASSERT_TRUE(g_frame[0].r > 0u);
-    TEST_ASSERT_EQUAL_UINT(g_frame[0].r, g_frame[0].g);
-    TEST_ASSERT_EQUAL_UINT(g_frame[0].r, g_frame[0].b);
+    TEST_ASSERT_EQUAL_UINT(lit(255u), g_frame[0].r);
+    TEST_ASSERT_TRUE(g_frame[0].r > rolling);
+    TEST_ASSERT_EQUAL_UINT(0u, g_frame[0].g);
+    TEST_ASSERT_EQUAL_UINT(0u, g_frame[0].b);
 }
 
 /* -----------------------------------------------------------------------
@@ -356,9 +365,9 @@ static void test_render_respects_a_short_buffer(void)
 {
     biba_rgb_t small[4];
     memset(small, 0x11, sizeof(small));
-    biba_led_panel_render(BIBA_LED_MODE_FORWARD, 0u, small, 2u);
-    TEST_ASSERT_EQUAL_UINT((uint8_t)BIBA_LED_PANEL_BRIGHTNESS, small[0].r);
-    TEST_ASSERT_EQUAL_UINT((uint8_t)BIBA_LED_PANEL_BRIGHTNESS, small[1].r);
+    biba_led_panel_render(BIBA_LED_MODE_REVERSE, 0u, small, 2u);
+    TEST_ASSERT_EQUAL_UINT(lit(255u), small[0].r);
+    TEST_ASSERT_EQUAL_UINT(lit(255u), small[1].r);
     TEST_ASSERT_EQUAL_UINT(0x11u, small[2].r);   /* untouched */
     TEST_ASSERT_EQUAL_UINT(0x11u, small[3].r);
 }
@@ -389,10 +398,10 @@ static void run_all(void)
     RUN_TEST(test_mode_armed_idle_and_disarmed);
     RUN_TEST(test_mode_direction_ignored_while_disarmed);
 
-    RUN_TEST(test_forward_is_solid_white_on_both_panels);
+    RUN_TEST(test_forward_is_dim_red_on_both_panels);
     RUN_TEST(test_forward_does_not_animate);
-    RUN_TEST(test_reverse_is_solid_red_on_both_panels);
-    RUN_TEST(test_armed_idle_is_dimmer_than_forward);
+    RUN_TEST(test_reverse_is_solid_white_on_both_panels);
+    RUN_TEST(test_stopped_is_brighter_red_than_forward);
 
     RUN_TEST(test_failsafe_strobes_red);
 

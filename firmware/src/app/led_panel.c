@@ -262,20 +262,21 @@ void biba_led_panel_render(biba_led_mode_t mode, uint32_t now_ms,
     case BIBA_LED_MODE_TRIM:
         render_trim(now_ms);
         break;
+    /* Tail-light convention: dim red rolling, bright red standing,
+     * white reversing. Whoever is behind the robot already knows how to
+     * read those. */
     case BIBA_LED_MODE_REVERSE:
-        frame_fill(255u, 0u, 0u);
+        frame_fill(255u, 255u, 255u);
         break;
     case BIBA_LED_MODE_FORWARD:
-        frame_fill(255u, 255u, 255u);
+        frame_fill((uint8_t)BIBA_LED_PANEL_FORWARD_LEVEL, 0u, 0u);
         break;
     case BIBA_LED_MODE_BEACON:
         render_beacon(now_ms);
         break;
-    case BIBA_LED_MODE_ARMED_IDLE: {
-        const uint8_t d = (uint8_t)BIBA_LED_PANEL_DRL_LEVEL;
-        frame_fill(d, d, d);
+    case BIBA_LED_MODE_ARMED_IDLE:
+        frame_fill(255u, 0u, 0u);
         break;
-    }
     case BIBA_LED_MODE_DISARMED:
     default:
         render_service(now_ms);
