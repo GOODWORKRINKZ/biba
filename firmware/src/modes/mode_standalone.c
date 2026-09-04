@@ -22,7 +22,6 @@
 #include "app/rpm_pi.h"
 #include "app/rpm_dr.h"
 #include "app/telemetry.h"
-#include "drivers/bts7960.h"
 #include "drivers/crsf.h"
 #include "drivers/current_sense.h"
 #include "hal/biba_hal.h"
@@ -30,6 +29,16 @@
 #include "app/melody.h"
 #include "app/blackbox.h"
 #include "drivers/voltage_sense.h"
+
+#if BIBA_HAS_LED_PANEL && BIBA_FEATURE_LED_PANELS
+#  include "app/led_panel.h"
+#endif
+
+#if BIBA_TARGET_HAS_BTS7960_2CH
+#  include "drivers/bts7960.h"
+#elif BIBA_TARGET_HAS_BLDC_2CH
+#  include "drivers/odrive_can.h"
+#endif
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
 #define CRSF_FRAMETYPE_DEVICE_PING  0x28u
@@ -177,6 +186,8 @@ static biba_melody_player_t s_player;
 
 /* Reverse backup pip */
 static bool     s_reversing;
+/* Travel direction, both-wheels-agree. Indicator panels only. */
+static bool     s_forwarding;
 static bool     s_reverse_pip_active;
 static uint32_t s_reverse_pip_next_ms;
 
@@ -285,6 +296,45 @@ static void update_rgb_led(bool failsafe, bool armed, bool trim_mode,
 
     biba_hal_rgb_led_set(r, g, b);
 }
+
+/* --- Front indicator panels -------------------------------------------- *
+ *
+ * Two WS2812 matrices on the front corners (see src/app/led_panel.c for
+ * the effects and biba_config.h for geometry).  Repainted at
+ * BIBA_LED_PANEL_REFRESH_MS rather than every tick: the control loop
+ * runs far faster than any LED needs, and each frame costs a ~1 ms DMA
+ * burst on the wire.
+ */
+#if BIBA_HAS_LED_PANEL && BIBA_FEATURE_LED_PANELS
+
+static uint32_t s_panel_next_ms;
+
+/* biba_rgb_t is handed to the HAL as a flat R,G,B byte stream. */
+_Static_assert(sizeof(biba_rgb_t) == 3u, "biba_rgb_t must pack to 3 bytes");
+
+static void update_led_panels(bool failsafe, bool armed, bool trim_mode,
+                              bool forward, bool reversing, bool beacon,
+                              uint32_t now)
+{
+    if ((int32_t)(now - s_panel_next_ms) < 0) return;
+    s_panel_next_ms = now + BIBA_LED_PANEL_REFRESH_MS;
+
+    const biba_led_inputs_t in = {
+        .failsafe  = failsafe,
+        .armed     = armed,
+        .trim      = trim_mode,
+        .forward   = forward,
+        .reversing = reversing,
+        .beacon    = beacon,
+    };
+
+    static biba_rgb_t frame[BIBA_LED_PANEL_TOTAL];
+    biba_led_panel_render(biba_led_panel_mode(&in), now,
+                          frame, BIBA_LED_PANEL_TOTAL);
+    biba_hal_led_strip_write((const uint8_t *)frame, BIBA_LED_PANEL_TOTAL);
+}
+
+#endif /* BIBA_HAS_LED_PANEL && BIBA_FEATURE_LED_PANELS */
 
 /* Process one line of serial debug input per tick (non-blocking).
  * Commands: DBGON / DBGOFF / ARM / DISARM / SET T=<pct> S=<pct> */
@@ -623,7 +673,14 @@ void biba_mode_standalone_init(void)
     biba_failsafe_init(&s_crsf_failsafe, BIBA_CRSF_TIMEOUT_MS);
     biba_pid_reset(&s_heading_pid);
     s_last_tick_ms = biba_hal_now_ms();
+
+#if BIBA_TARGET_HAS_BTS7960_2CH
     biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+    /* ODrive has no thermal latch; the BLDC backend resets setpoints
+     * and disarms via biba_odrive_thermal_reset(). */
+    biba_odrive_thermal_reset(0u);
+#endif
 
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
     s_last_failsafe = true;
@@ -772,7 +829,14 @@ void biba_mode_standalone_tick(void)
     if (armed && !s_armed) {
         /* Best-effort reset: clears possible BTS7960 thermal latch on arm edge.
          * Recovery is not guaranteed immediately; control loop still applies failsafe. */
+#if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+        /* ODrive has no thermal latch to clear — request
+         * CLOSED_LOOP_CONTROL (8) over CAN so it starts obeying the
+         * Set_Input_Vel commands from the drive loop. */
+        biba_odrive_set_enabled(true);
+#endif
         printf("[biba] ARMED\r\n");
 #if BIBA_FEATURE_MELODY
         biba_melody_player_start(&s_player, &biba_melody_arm);
@@ -791,6 +855,10 @@ void biba_mode_standalone_tick(void)
         }
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
+#if BIBA_TARGET_HAS_BLDC_2CH
+        /* Return ODrive to IDLE (0) over CAN so the wheels coast. */
+        biba_odrive_set_enabled(false);
+#endif
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
 #if BIBA_FEATURE_MELODY
@@ -828,7 +896,9 @@ void biba_mode_standalone_tick(void)
     if (s_latch_reset_pending) {
         s_latch_reset_pending = false;
         if (armed) {
+#if BIBA_TARGET_HAS_BTS7960_2CH
             biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
+#endif
             biba_rpm_pi_reset(&s_rpm_pi_left);
             biba_rpm_pi_reset(&s_rpm_pi_right);
             biba_rpm_dr_reset(&s_dr_left);
@@ -1155,6 +1225,14 @@ void biba_mode_standalone_tick(void)
         (right_out < -BIBA_MOTOR_DEADBAND);
     s_reversing = going_reverse;
 
+    /* Mirror of going_reverse, used by the front indicator panels. A
+     * pivot turn (one wheel each way) sets neither flag, so the panels
+     * fall through to their armed-idle look instead of claiming a
+     * direction the robot is not travelling in. */
+    s_forwarding = armed &&
+        (left_out  > BIBA_MOTOR_DEADBAND) &&
+        (right_out > BIBA_MOTOR_DEADBAND);
+
 #if BIBA_FEATURE_REVERSE_PIP
     /* Detect reverse pip finishing */
     if (s_reverse_pip_active && !s_player.active) {
@@ -1319,9 +1397,19 @@ void biba_mode_standalone_tick(void)
         biba_melody_player_tick(&s_player, now);
     }
 
-    /* Drive motors only when audio is not occupying the PWM hardware. */
+    /* Drive motors only when audio is not occupying the PWM hardware.
+     *
+     * On the BLDC target the ODrive uses CANSimple velocity commands,
+     * which don't fight PWM duty for the audio API surface — but we
+     * still gate on `s_player.active` for compatibility with whatever
+     * Beeper feature may one day share the bus. */
     if (!s_player.active) {
+#if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_drive(left_out, right_out);
+#elif BIBA_TARGET_HAS_BLDC_2CH
+        biba_odrive_drive(left_out, right_out);
+        biba_odrive_can_tick_50hz();
+#endif
     }
 #else
     /* MELODY disabled — always drive motors directly. */
@@ -1332,11 +1420,27 @@ void biba_mode_standalone_tick(void)
     update_rgb_led(failsafe, armed, s_trim_mode_active,
                    s_reversing, beacon, now);
 
+#if BIBA_HAS_LED_PANEL && BIBA_FEATURE_LED_PANELS
+    update_led_panels(failsafe, armed, s_trim_mode_active,
+                      s_forwarding, s_reversing, beacon, now);
+#endif
+
     /* ------------------------------------------------------------------ *
      * Telemetry / DATA_READY / status LED
      * ------------------------------------------------------------------ */
     uint32_t scan_count = biba_hal_adc_scan_count();
-    if (scan_count != s_last_scan_count) {
+#if BIBA_ADC_SCAN_LEN == 0u
+    /* No native ADC on this target (BLDC/CAN): the ADC scan count never
+     * advances, so trigger telemetry on a fixed 10 Hz time base instead. */
+    static uint32_t s_last_telem_ms;
+    bool telem_ready = (now - s_last_telem_ms >= 100u);
+    if (telem_ready) {
+        s_last_telem_ms = now;
+    }
+#else
+    bool telem_ready = (scan_count != s_last_scan_count);
+#endif
+    if (telem_ready) {
         s_last_scan_count = scan_count;
         biba_motor_current_t il = biba_current_sense_left();
         biba_motor_current_t ir = biba_current_sense_right();
@@ -1369,11 +1473,25 @@ void biba_mode_standalone_tick(void)
             s_last_log_ms = now;
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
             int current_limited = (left_limited || right_limited) ? 1 : 0;
-            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d rssi=%d lq=%d\r\n",
+#if BIBA_TARGET_HAS_BLDC_2CH
+            const int alive_l = (int)biba_odrive_node_alive(0u);
+            const int alive_r = (int)biba_odrive_node_alive(1u);
+            const unsigned long can_rx = (unsigned long)biba_odrive_rx_count();
+#else
+            /* No CAN backend on the brushed target. The ODrive health
+             * fields stay zero so the log line keeps one format across
+             * targets and the existing log parsers do not care which
+             * firmware produced it. */
+            const int alive_l = 0;
+            const int alive_r = 0;
+            const unsigned long can_rx = 0uL;
+#endif
+            printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d alL=%d alR=%d rx=%lu rssi=%d lq=%d\r\n",
                    now, (int)failsafe, (int)armed, spd, (int)stabilized,
                    (int)(raw_throttle * 100), (int)(raw_steering * 100),
                    (int)(left_out * 100), (int)(right_out * 100),
                    current_limited,
+                   alive_l, alive_r, can_rx,
                    s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
             /* CRSF/DMA health line every 5 s */

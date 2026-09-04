@@ -37,6 +37,32 @@ void biba_hal_status_led_set(bool on);
 /* RGB NeoPixel LED (WS2812).  No-op on targets without BIBA_HAS_RGB_LED. */
 void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b);
 
+/* --- Addressable LED strip (indicator panels) --------------------------- *
+ *
+ * A single WS2812 chain carrying the front indicator panels (see
+ * src/app/led_panel.c).  Separate from biba_hal_rgb_led_set(), which
+ * drives the board's own status NeoPixel on a different pin.
+ *
+ * No-op on targets without BIBA_HAS_LED_PANEL.
+ */
+
+/* Bring up the strip.  Called from biba_hal_init(); safe to call twice. */
+void biba_hal_led_strip_init(void);
+
+/* Queue one frame.  `rgb` is 3 bytes per LED in R,G,B order and is
+ * consumed (copied into the driver's own buffer) before returning, so
+ * the caller may reuse its frame buffer immediately.
+ *
+ * Non-blocking: the bytes are clocked out by DMA in the background.  A
+ * frame submitted while the previous one is still on the wire is
+ * dropped rather than waited on — at BIBA_LED_PANEL_REFRESH_MS the
+ * previous transfer has always finished, so a drop means something
+ * else stalled and the next repaint fixes it anyway. */
+void biba_hal_led_strip_write(const uint8_t *rgb, size_t led_count);
+
+/* True while a frame is still being clocked out. */
+bool biba_hal_led_strip_busy(void);
+
 /* Raise/lower the DATA_READY line to the SBC. */
 void biba_hal_data_ready_set(bool on);
 void biba_hal_data_ready_pulse(void);

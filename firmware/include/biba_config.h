@@ -478,6 +478,117 @@
 #  define BIBA_FEATURE_MIXER_PROJECTION  1
 #endif
 
+/* --- Feature: Indicator LED Panels -------------------------------------
+ *
+ * Two addressable WS2812 matrices mounted on the front-left and
+ * front-right corners of the robot.  Both panels hang off ONE data
+ * line: the chain starts at the LEFT panel, its DOUT feeds the RIGHT
+ * panel (see BIBA_LED_PANEL_LEFT_IDX / _RIGHT_IDX to swap).
+ *
+ * The hardware pin lives in targets/<TARGET>/target.h as
+ * BIBA_PIN_LED_PANEL_GPIO, gated by BIBA_HAS_LED_PANEL.  Everything
+ * geometric or cosmetic is here so a different panel size is a config
+ * change, not a code change.
+ *
+ * Rendering is a pure function of (mode, now_ms) — see
+ * src/app/led_panel.c.  The three driving states follow car tail-light
+ * convention, so anyone behind the robot reads them without being told:
+ *   forward   → dim red             (running / tail light)
+ *   stopped   → bright red          (brake light)
+ *   reverse   → solid white         (reversing light)
+ *   disarmed  → amber arrow board   (road-service warning)
+ *   beacon    → blue/red double-flash lightbar
+ *   trim      → yellow perimeter chase
+ *   failsafe  → red strobe
+ */
+#ifndef BIBA_FEATURE_LED_PANELS
+#  define BIBA_FEATURE_LED_PANELS        1
+#endif
+
+/* Geometry. COLS is the horizontal axis (x, left→right as seen by an
+ * observer in front of the robot); ROWS is vertical (y, top→bottom). */
+#ifndef BIBA_LED_PANEL_COUNT
+#  define BIBA_LED_PANEL_COUNT           2u
+#endif
+#ifndef BIBA_LED_PANEL_COLS
+#  define BIBA_LED_PANEL_COLS            4u
+#endif
+#ifndef BIBA_LED_PANEL_ROWS
+#  define BIBA_LED_PANEL_ROWS            4u
+#endif
+
+/* Position of each panel inside the daisy chain (0 = first). */
+#ifndef BIBA_LED_PANEL_LEFT_IDX
+#  define BIBA_LED_PANEL_LEFT_IDX        0u
+#endif
+#ifndef BIBA_LED_PANEL_RIGHT_IDX
+#  define BIBA_LED_PANEL_RIGHT_IDX       1u
+#endif
+
+/* Wiring of a single panel.  Stock 4x4 WS2812 boards are serpentine
+ * (boustrophedon) with pixel 0 in a corner; the two flip flags let a
+ * panel be rotated 180 degrees on the chassis without re-soldering. */
+#ifndef BIBA_LED_PANEL_SERPENTINE
+#  define BIBA_LED_PANEL_SERPENTINE      1
+#endif
+#ifndef BIBA_LED_PANEL_FLIP_X
+#  define BIBA_LED_PANEL_FLIP_X          0
+#endif
+#ifndef BIBA_LED_PANEL_FLIP_Y
+#  define BIBA_LED_PANEL_FLIP_Y          0
+#endif
+
+/* Derived sizes — used to size the frame buffer and the DMA word
+ * buffer in the HAL.  Do not override; override COLS/ROWS/COUNT. */
+#define BIBA_LED_PANEL_PIXELS  (BIBA_LED_PANEL_COLS * BIBA_LED_PANEL_ROWS)
+#define BIBA_LED_PANEL_TOTAL   (BIBA_LED_PANEL_PIXELS * BIBA_LED_PANEL_COUNT)
+
+/* Master brightness, 0..255, applied to every effect as the last step.
+ * 32 WS2812 at full white would pull ~1.9 A off the 5 V rail; 120 keeps
+ * the worst case (solid white while reversing) near 0.9 A.  The red
+ * states cost roughly a third of that. */
+#ifndef BIBA_LED_PANEL_BRIGHTNESS
+#  define BIBA_LED_PANEL_BRIGHTNESS      120u
+#endif
+/* Pre-scale level of the dim red shown while driving forward. The
+ * stopped state uses full red, so this is what sets the contrast
+ * between "rolling" and "standing" — lower it for a sharper brake
+ * light, raise it if the forward state is hard to see in daylight. */
+#ifndef BIBA_LED_PANEL_FORWARD_LEVEL
+#  define BIBA_LED_PANEL_FORWARD_LEVEL   64u
+#endif
+
+/* Repaint period. 20 ms = 50 Hz; one 32-LED frame takes ~1 ms on the
+ * wire, which also satisfies the WS2812 >50 us inter-frame reset. */
+#ifndef BIBA_LED_PANEL_REFRESH_MS
+#  define BIBA_LED_PANEL_REFRESH_MS      20u
+#endif
+
+/* Effect timings. */
+#ifndef BIBA_LED_PANEL_SERVICE_STEP_MS
+#  define BIBA_LED_PANEL_SERVICE_STEP_MS 90u   /* arrow-board phase */
+#endif
+#ifndef BIBA_LED_PANEL_BEACON_SLOT_MS
+#  define BIBA_LED_PANEL_BEACON_SLOT_MS  60u   /* lightbar slot (16 per cycle) */
+#endif
+#ifndef BIBA_LED_PANEL_TRIM_STEP_MS
+#  define BIBA_LED_PANEL_TRIM_STEP_MS    80u   /* perimeter chase step */
+#endif
+#ifndef BIBA_LED_PANEL_FAILSAFE_MS
+#  define BIBA_LED_PANEL_FAILSAFE_MS     100u  /* red strobe half-period */
+#endif
+
+/* Amber used by the road-service arrow board (pre-brightness). */
+#ifndef BIBA_LED_PANEL_AMBER_R
+#  define BIBA_LED_PANEL_AMBER_R         255u
+#endif
+#ifndef BIBA_LED_PANEL_AMBER_G
+#  define BIBA_LED_PANEL_AMBER_G         90u
+#endif
+#ifndef BIBA_LED_PANEL_AMBER_B
+#  define BIBA_LED_PANEL_AMBER_B         0u
+#endif
+
 
 /* ========================================================================
  * DEPENDENCY VALIDATION
