@@ -13,3 +13,7 @@ firmware/.piolibdeps/
 # ODrive firmware download artifacts (large binaries)
 artifacts/firmware/
 artifacts/odrive-backup-*.json
+artifacts/openipc-fpv/
+
+# Personal notes (not project code)
+biba-costs.md

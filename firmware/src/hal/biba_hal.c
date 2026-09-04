@@ -140,6 +140,16 @@ void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
     (void)b;
 }
 
+/* No WS2812 chain on the STM32 targets — the indicator panels are an
+ * RP2040 feature (PIO does the 800 kHz bit-banging). */
+void biba_hal_led_strip_init(void) {}
+bool biba_hal_led_strip_busy(void) { return false; }
+void biba_hal_led_strip_write(const uint8_t *rgb, size_t led_count)
+{
+    (void)rgb;
+    (void)led_count;
+}
+
 void biba_hal_data_ready_set(bool on)
 {
     HAL_GPIO_WritePin(BIBA_PIN_DATA_READY_PORT, BIBA_PIN_DATA_READY_PIN,

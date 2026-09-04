@@ -25,7 +25,7 @@
  *   GP11 —          (free)
  *   GP12 UART1_TX   SBC RX  (RP2040 → SBC)
  *   GP13 UART1_RX   SBC TX  (SBC → RP2040)
- *   GP14 —          (free)
+ *   GP14 PIO OUT    LED_PANEL data (WS2812 chain: left panel → right)
  *   GP15 —          (free)
  *
  * Pin assignment — right side (GP16-GP29, bottom to top):
@@ -136,5 +136,24 @@
 
 #define BIBA_PIN_RGB_LED_GPIO        23
 #define BIBA_HAS_RGB_LED             1
+
+/* --- WS2812 indicator panels (GP14) -----------------------------------
+ *
+ * Two front-facing RGB matrices (4x4 by default) daisy-chained on one
+ * data line: MCU -> LEFT panel DIN, LEFT DOUT -> RIGHT panel DIN.
+ * Geometry, brightness and effect timings live in biba_config.h
+ * (BIBA_LED_PANEL_*); only the pin is board-specific.
+ *
+ * GP14 is driven by a PIO state machine, so any free GPIO works — it
+ * was picked because it is free on both RP2040 targets and sits next
+ * to the ground pin on physical pin 18/19 of the Pico header.
+ *
+ * Power: the panels run off the 5 V rail, NOT off the Pico 3V3.  With
+ * BIBA_LED_PANEL_BRIGHTNESS at its default the worst case (solid white
+ * while driving forward) is ~0.9 A for 32 LEDs.
+ */
+
+#define BIBA_PIN_LED_PANEL_GPIO      14
+#define BIBA_HAS_LED_PANEL           1
 
 #endif /* BIBA_TARGET_H */
