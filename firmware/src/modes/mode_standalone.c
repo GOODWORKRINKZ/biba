@@ -928,9 +928,10 @@ void biba_mode_standalone_tick(void)
 #if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
 #elif BIBA_TARGET_HAS_BLDC_2CH
-        /* ODrive has no thermal latch to clear — request
+        /* Clear any latched ODrive errors, then request
          * CLOSED_LOOP_CONTROL (8) over CAN so it starts obeying the
          * Set_Input_Vel commands from the drive loop. */
+        biba_odrive_clear_errors();
         biba_odrive_set_enabled(true);
 #endif
         printf("[biba] ARMED\r\n");
@@ -952,7 +953,9 @@ void biba_mode_standalone_tick(void)
     } else if (!armed && s_armed) {
         printf("[biba] DISARMED\r\n");
 #if BIBA_TARGET_HAS_BLDC_2CH
-        /* Return ODrive to IDLE (0) over CAN so the wheels coast. */
+        /* Clear any latched ODrive errors and return to IDLE (1) so the
+         * wheels coast. */
+        biba_odrive_clear_errors();
         biba_odrive_set_enabled(false);
 #endif
         biba_pid_reset(&s_heading_pid);

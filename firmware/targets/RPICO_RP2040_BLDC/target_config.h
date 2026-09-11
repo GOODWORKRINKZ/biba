@@ -54,10 +54,10 @@
  * Each axis is polled ~every 200 ms; 500 ms gives 2.5× margin. */
 #define BIBA_ODRIVE_UART_TIMEOUT_MS    500
 
-#define BIBA_ODRIVE_LEFT_MAX_VEL_REV_S    15.0f   /* ≈ 900 rpm @ motor */
-#define BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S   15.0f
-#define BIBA_ODRIVE_LEFT_TORQUE_FF_NM      0.0f   /* feed-forward torque */
-#define BIBA_ODRIVE_RIGHT_TORQUE_FF_NM     0.0f
+#define BIBA_ODRIVE_LEFT_MAX_VEL_REV_S    10.0f   /* ≈ 600 rpm @ motor */
+#define BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S   10.0f
+#define BIBA_ODRIVE_LEFT_TORQUE_FF_NM      0.2f   /* feed-forward torque (stiction kick) */
+#define BIBA_ODRIVE_RIGHT_TORQUE_FF_NM     0.2f
 
 /* Wheel gearbox reduction ratio (motor turns : wheel turns).
  *
@@ -68,8 +68,8 @@
  *   wheel_rev_s = motor_rev_s / BIBA_ODRIVE_GEAR_RATIO
  *
  * 1:6 → the motor spins 6× faster than the wheel.  With
- * BIBA_ODRIVE_*_MAX_VEL_REV_S = 15 rev/s (motor) the wheel tops out at
- * 15 / 6 = 2.5 rev/s (≈ 150 rpm). */
+ * BIBA_ODRIVE_*_MAX_VEL_REV_S = 10 rev/s (motor) the wheel tops out at
+ * 10 / 6 ≈ 1.67 rev/s (≈ 100 rpm). */
 #define BIBA_ODRIVE_GEAR_RATIO            6.0f
 
 /* Polarities: matches the biBa BTS7960 convention — positive duty =
@@ -81,7 +81,7 @@
 
 /* Current / torque limits sent to ODrive at boot via Set_Limits. */
 #define BIBA_ODRIVE_MAX_CURRENT_A        30.0f   /* per axis; ODrive enforces */
-#define BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S  15.0f   /* hard ceiling; 15 rev/s ≈ 94 rad/s */
+#define BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S  10.0f   /* hard ceiling; 10 rev/s ≈ 63 rad/s */
 
 /* --- CAN bus timing -------------------------------------------------- */
 

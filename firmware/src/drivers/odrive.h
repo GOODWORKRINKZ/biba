@@ -37,6 +37,7 @@ void biba_odrive_init(void);
 void biba_odrive_set_enabled(bool enabled);
 void biba_odrive_drive(float left_duty, float right_duty);
 void biba_odrive_thermal_reset(uint32_t pulse_us);
+void biba_odrive_clear_errors(void);
 
 /* Periodic tick at the control-loop rate (50 Hz default).  Rate
  * limiting happens inside, so it is safe to call faster or slower. */

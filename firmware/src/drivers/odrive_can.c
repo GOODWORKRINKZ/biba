@@ -197,6 +197,13 @@ void biba_odrive_thermal_reset(uint32_t pulse_us)
     biba_odrive_drive(0.0f, 0.0f);
 }
 
+void biba_odrive_clear_errors(void)
+{
+    /* ODrive CANSimple Clear_Errors (0x018), no payload. */
+    send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_CLEAR_ERRORS, NULL, 0u);
+    send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_CLEAR_ERRORS, NULL, 0u);
+}
+
 /* ---- Rate-limited forwarder -----------------------------------------
  *
  * Returns true if any frame was actually submitted (i.e. the queue

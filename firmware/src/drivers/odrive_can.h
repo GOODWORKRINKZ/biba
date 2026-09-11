@@ -33,6 +33,7 @@ extern "C" {
 #define OD_CMD_GET_IQ                  0x14u
 #define OD_CMD_RESET_ODRIVE            0x16u   /* NVIC_SystemReset() */
 #define OD_CMD_GET_BUS_VOLTAGE_CURRENT 0x17u
+#define OD_CMD_CLEAR_ERRORS            0x18u   /* ODrive CANSimple Clear_Errors */
 #define OD_CMD_GET_TEMPERATURE         0x18u
 #define OD_CMD_ADDRESS                 0x06u
 #define OD_CMD_HEARTBEAT               0x01u

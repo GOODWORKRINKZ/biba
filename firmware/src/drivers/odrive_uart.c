@@ -226,9 +226,19 @@ static void send_set_input_vel(uint8_t node_id, float vel_rev_s,
     }
     *last_ms = now_ms;
 
-    const char axis = (node_id == BIBA_ODRIVE_LEFT_NODE_ID) ? '0' : '1';
-    uart_tx_fmt("w axis%c.controller.input_vel %f", axis,
-                (double)vel_rev_s);
+    const char motor = (node_id == BIBA_ODRIVE_LEFT_NODE_ID) ? '0' : '1';
+    const float ff_nm = (node_id == BIBA_ODRIVE_LEFT_NODE_ID)
+                          ? BIBA_ODRIVE_LEFT_TORQUE_FF_NM
+                          : BIBA_ODRIVE_RIGHT_TORQUE_FF_NM;
+
+    /* Stiction feed-forward: a constant torque kick in the direction of
+     * motion (zero at standstill).  Directly counters static friction so
+     * the wheel breaks free without waiting for integrator wind-up. */
+    float ff = 0.0f;
+    if (vel_rev_s >  0.0005f)      ff =  ff_nm;
+    else if (vel_rev_s < -0.0005f) ff = -ff_nm;
+
+    uart_tx_fmt("v %c %.4f %.4f", motor, (double)vel_rev_s, (double)ff);
 }
 
 /* ---- Public API -------------------------------------------------------- */
@@ -291,6 +301,12 @@ void biba_odrive_thermal_reset(uint32_t pulse_us)
     (void)pulse_us;
     biba_odrive_set_enabled(false);
     biba_odrive_drive(0.0f, 0.0f);
+}
+
+void biba_odrive_clear_errors(void)
+{
+    /* ASCII `sc` clears the ODrive's latched axis/motor errors. */
+    uart_tx_raw("sc");
 }
 
 void biba_odrive_drain_rx(void)
