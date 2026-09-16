@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,9 @@ def _field_label(field_name: str) -> str:
 def _require_float(mapping: Mapping[str, Any], field_name: str, default: float) -> float:
     value = mapping.get(field_name, default)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"Значение поля «{_field_label(field_name)}» должно быть числом")
+        # ValueError, not TypeError: callers catch ValueError to report
+        # this as an invalid tuning value, not a programming error.
+        raise ValueError(f"Значение поля «{_field_label(field_name)}» должно быть числом")  # noqa: TRY004
     return float(value)
 
 
@@ -119,7 +122,7 @@ def load_pid_tuning(settings_path: str | Path, *, defaults: PidTuningSnapshot) -
         if not isinstance(values, dict):
             return defaults
         return snapshot_from_mapping(values, defaults=defaults)
-    except Exception:
+    except Exception:  # noqa: BLE001 -- corrupt/missing tuning file must fall back to defaults
         return defaults
 
 

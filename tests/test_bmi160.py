@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from imu.bmi160 import BMI160Reader
 
 

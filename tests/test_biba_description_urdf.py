@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-
 PKG_DIR = Path(__file__).resolve().parents[1] / "ros2_ws" / "src" / "biba_description"
 URDF_XACRO = PKG_DIR / "urdf" / "biba.urdf.xacro"
 LAUNCH_FILE = PKG_DIR / "launch" / "robot_state_publisher.launch.py"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from imu.lsm6ds3 import LSM6DS3Reader
 
 

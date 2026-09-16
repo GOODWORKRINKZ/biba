@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import pytest
-
 from imu.bmi160 import BMI160Reader
-from imu.lsm6ds3 import LSM6DS3Reader
 from imu.factory import detect_imu_kind, open_imu_reader
+from imu.lsm6ds3 import LSM6DS3Reader
 
 
 class FakeBus:
@@ -69,7 +68,7 @@ def test_detect_imu_kind_rejects_unknown_imu() -> None:
 
 def test_open_imu_reader_returns_lsm6ds3_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_bus = FakeBus(bmi_chip_id=0x00, who_am_i=0x69)
-    import imu.factory as factory
+    from imu import factory
 
     monkeypatch.setattr(factory, "SMBus", lambda bus_index: fake_bus)
 
@@ -87,7 +86,7 @@ def test_open_imu_reader_returns_lsm6ds3_reader(monkeypatch: pytest.MonkeyPatch)
 
 def test_open_imu_reader_returns_bmi160_reader(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_bus = FakeBus(bmi_chip_id=0xD1, who_am_i=0x00)
-    import imu.factory as factory
+    from imu import factory
 
     monkeypatch.setattr(factory, "SMBus", lambda bus_index: fake_bus)
 
@@ -105,7 +104,7 @@ def test_open_imu_reader_returns_bmi160_reader(monkeypatch: pytest.MonkeyPatch) 
 
 def test_open_imu_reader_closes_bus_when_reader_initialization_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_bus = FailingWriteBus(bmi_chip_id=0x00, who_am_i=0x69)
-    import imu.factory as factory
+    from imu import factory
 
     monkeypatch.setattr(factory, "SMBus", lambda bus_index: fake_bus)
 

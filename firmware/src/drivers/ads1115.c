@@ -3,7 +3,8 @@
 #ifndef BIBA_NATIVE_TEST
 
 #include "hal/biba_hal.h"
-#include "pico/stdlib.h"   /* sleep_ms() */
+#include "hardware/i2c.h"
+#include "pico/time.h"           /* sleep_ms() */
 
 /* ADS1115 register pointers. */
 #define REG_CONVERSION  0x00u

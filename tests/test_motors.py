@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 
 

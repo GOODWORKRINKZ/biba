@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -12,7 +11,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def build_spectral_cache(voice_dir: str | Path, out_dir: str | Path) -> list[Path]:
-    from buzzer.wav_player import mirror_peak_frames_to_both_sides, wav_to_peak_frames, write_peak_frame_cache
+    from buzzer.wav_player import (
+        mirror_peak_frames_to_both_sides,
+        wav_to_peak_frames,
+        write_peak_frame_cache,
+    )
 
     source_dir = Path(voice_dir)
     if not source_dir.is_dir():

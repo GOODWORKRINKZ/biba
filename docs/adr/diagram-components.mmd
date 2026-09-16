@@ -1,0 +1,101 @@
+flowchart TB
+    %% --- Modes -----------------------------------------------------------
+    subgraph MODES["firmware/src/modes/"]
+        MD["mode_dispatcher.c"]
+        MS["mode_standalone.c"]
+        MC["mode_companion.c"]
+        MD --> MS
+        MD --> MC
+    end
+
+    %% --- Application code ------------------------------------------------
+    subgraph APP["firmware/src/app/"]
+        CTRL["control_loop.c / ramp.c / failsafe.c"]
+        CTRL --> MS
+        CTRL --> MC
+    end
+
+    %% --- Motor backend ---------------------------------------------------
+    subgraph BACKEND["Motor backend"]
+        BTS["drivers/bts7960.c"]
+        ODRV["drivers/odrive_can.c"]
+    end
+
+    MS -.-> BTS
+    MS -.-> ODRV
+    MC -.-> BTS
+    MC -.-> ODRV
+
+    %% --- HAL -------------------------------------------------------------
+    subgraph HAL["firmware/src/hal/"]
+        HAL_F103["biba_hal.c / biba_hal_motor.c"]
+        HAL_RP["biba_hal_rp2040.c"]
+        HAL_BLDC["biba_hal_motor_bldc.c"]
+    end
+
+    BTS --> HAL_F103
+    BTS --> HAL_RP
+    ODRV --> HAL_BLDC
+
+    %% --- Drivers ---------------------------------------------------------
+    subgraph DRV["firmware/src/drivers/"]
+        CANQ["can_queue.c"]
+        MCP["mcp2515.c"]
+        ODC["odrive_can.c"]
+    end
+
+    HAL_BLDC --> MCP
+    HAL_BLDC --> CANQ
+    ODRV --> ODC
+    ODC --> CANQ
+    ODC --> MCP
+    CANQ --> MCP
+
+    %% --- Targets ---------------------------------------------------------
+    subgraph TGT["targets/"]
+        T1["RPICO_RP2040"]
+        T2["RPICO_RP2040_BLDC"]
+    end
+
+    HAL_RP --> T1
+    HAL_BLDC --> T2
+    HAL_F103 --> T1
+
+    %% --- External --------------------------------------------------------
+    subgraph EXT["External"]
+        CRSF["ELRS receiver"]
+        IMU_EXT["IMU"]
+        MCPEXT["MCP2515+TJA1050"]
+        CANBUS(("CAN bus"))
+        OD_L["ODrive LEFT"]
+        OD_R["ODrive RIGHT"]
+    end
+
+    CRSF --> MD
+    IMU_EXT --> CTRL
+    MCP <-->|SPI| MCPEXT
+    MCPEXT <-->|CAN| CANBUS
+    CANBUS --> OD_L
+    CANBUS --> OD_R
+    OD_L -->|Heartbeat| CANQ
+    OD_R -->|Heartbeat| CANQ
+
+    %% --- CPUs ------------------------------------------------------------
+    subgraph CPUS["RP2040 cores"]
+        C0["core0: mode dispatcher + control loop 500 Hz"]
+        C1["core1: SPI DMA for MCP2515"]
+    end
+
+    CPUS --> MODES
+    CPUS --> HAL
+
+    %% --- Styles ----------------------------------------------------------
+    classDef targetBox fill:#264653,stroke:#1d3540,color:#fff
+    classDef newDriver fill:#2a9d8f,stroke:#1d7a6f,color:#fff
+    classDef external fill:#e76f51,stroke:#a8503b,color:#fff
+    classDef modeCode fill:#8ab17d,stroke:#6a8b60,color:#000
+
+    class T1,T2 targetBox
+    class MCP,ODC,CANQ,HAL_BLDC newDriver
+    class CRSF,IMU_EXT,MCPEXT,CANBUS,OD_L,OD_R external
+    class MD,MS,MC,CTRL modeCode

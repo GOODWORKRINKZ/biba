@@ -6,7 +6,6 @@ import types
 from collections import deque
 
 import pytest
-
 from bms.daly import BatteryState, DalyBMSBle, _build_ble_client
 
 

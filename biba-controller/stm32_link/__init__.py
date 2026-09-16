@@ -12,30 +12,30 @@ two implementations locked together.
 """
 
 from .protocol import (
-    PROTOCOL_VERSION,
     FRAME_SIZE,
     PAYLOAD_MAX,
+    PROTOCOL_VERSION,
     Command,
-    TelemetryFrame,
-    Telemetry,
     Flag,
+    Telemetry,
+    TelemetryFrame,
     build_frame,
-    parse_frame,
     crc16_ccitt,
+    parse_frame,
 )
 
 __all__ = [
-    "PROTOCOL_VERSION",
     "FRAME_SIZE",
     "PAYLOAD_MAX",
+    "PROTOCOL_VERSION",
     "Command",
-    "TelemetryFrame",
-    "Telemetry",
     "Flag",
-    "build_frame",
-    "parse_frame",
-    "crc16_ccitt",
     "STM32Link",
+    "Telemetry",
+    "TelemetryFrame",
+    "build_frame",
+    "crc16_ccitt",
+    "parse_frame",
 ]
 
 

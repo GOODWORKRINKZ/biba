@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import ClassVar
 
 from imu import IMUReader, IMUSample
 
@@ -19,7 +20,7 @@ class LSM6DS3Reader(IMUReader):
     _CTRL_GYRO_245_DPS = 0x00
     _ACCEL_G_PER_LSB = 0.000061
     _GYRO_DPS_PER_LSB = 0.00875
-    _ODR_BY_RATE = {
+    _ODR_BY_RATE: ClassVar[dict[float, int]] = {
         12.5: 0x10,
         26.0: 0x20,
         52.0: 0x30,

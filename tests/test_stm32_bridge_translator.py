@@ -14,9 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ros2_ws" / "src" / "biba_stm32_bridge"))
 sys.path.insert(0, str(ROOT / "biba-controller"))
 
-from biba_stm32_bridge import translator  # noqa: E402
-from stm32_link.protocol import Telemetry  # noqa: E402
-
+from biba_stm32_bridge import translator
+from stm32_link.protocol import Telemetry
 
 # ---------------------------------------------------------------------------
 # cmd_vel_to_setpoints

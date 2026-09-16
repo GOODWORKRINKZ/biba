@@ -15,7 +15,6 @@
 #include "biba_proto.h"
 #include "drivers/aht30.h"
 
-#include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
 #include "hardware/spi.h"
@@ -53,9 +52,10 @@ static void crsf_uart_isr(void)
 
 static volatile uint32_t s_adc_scan_count;
 
-#if BIBA_TARGET_HAS_SPI_SLAVE
-/* --- SPI slave (DMA-driven, non-blocking) ------------------------------- */
+/* --- SPI slave (DMA-driven, non-blocking) ------------------------------- *
+ * SPI1 frequency ignored in slave mode; set to 1 MHz as a placeholder. */
 
+#if BIBA_TARGET_HAS_SPI_SLAVE
 static int  s_spi_dma_tx = -1;
 static int  s_spi_dma_rx = -1;
 static bool s_spi_init_done;
@@ -90,15 +90,16 @@ static void spi_slave_init(void)
 
     s_spi_init_done = true;
 }
+#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
 /* --- Mode-select latch -------------------------------------------------- */
 
 static bool s_mode_sel_latched_companion;
-#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
-/* --- WS2812 forward declaration ---------------------------------------- */
+/* --- WS2812 forward declarations ---------------------------------------- */
 
 static void ws2812_init(void);
+static uint ws2812_claim_sm(uint gpio);
 
 /* --- Public API --------------------------------------------------------- */
 
@@ -109,6 +110,7 @@ void biba_hal_init(void)
     gpio_set_dir(BIBA_PIN_STATUS_LED_GPIO, GPIO_OUT);
     biba_hal_status_led_set(false);
 
+#if BIBA_TARGET_HAS_BTS7960_2CH
     /* BTS7960 enables: output, start disabled. */
     const uint en_pins[] = {
         BIBA_PIN_LEFT_REN_GPIO, BIBA_PIN_LEFT_LEN_GPIO,
@@ -119,9 +121,11 @@ void biba_hal_init(void)
         gpio_set_dir(en_pins[i], GPIO_OUT);
         gpio_put(en_pins[i], 0);
     }
+#endif
 
 #if BIBA_TARGET_HAS_SPI_SLAVE
     /* DATA_READY output, start low. */
+#if !BIBA_TARGET_HAS_BLDC_2CH
     gpio_init(BIBA_PIN_DATA_READY_GPIO);
     gpio_set_dir(BIBA_PIN_DATA_READY_GPIO, GPIO_OUT);
     gpio_put(BIBA_PIN_DATA_READY_GPIO, 0);
@@ -131,22 +135,32 @@ void biba_hal_init(void)
     gpio_set_dir(BIBA_PIN_MODE_SEL_GPIO, GPIO_IN);
     gpio_pull_up(BIBA_PIN_MODE_SEL_GPIO);
     s_mode_sel_latched_companion = !gpio_get(BIBA_PIN_MODE_SEL_GPIO);
+#endif /* !BLDC */
 #endif /* BIBA_TARGET_HAS_SPI_SLAVE */
 
     /* IMU interrupt input, no pull (external pull on board). */
     gpio_init(BIBA_PIN_IMU_INT1_GPIO);
     gpio_set_dir(BIBA_PIN_IMU_INT1_GPIO, GPIO_IN);
 
-    /* Motor PWM (topology: two slices, each pair shares a carrier). */
+    /* Motor PWM (topology: two slices, each pair shares a carrier).
+     * On the BLDC target this brings up MCP2515 + ODrive CAN. */
     biba_hal_motor_pwm_init();
     biba_hal_ssr_init();   /* D-13: SSR LOW before any mode code runs */
 
+#if BIBA_TARGET_HAS_BLDC_2CH
+    /* No native ADC channels are wired on the BLDC target — the
+     * ODrive unit reports Bus_Voltage / Bus_Current via CAN.  We keep
+     * ADC init active only so unrelated code that calls
+     * `biba_hal_adc_sample(...)` behaves correctly (returns 0 and
+     * doesn't touch GPIOs that are wired as SPI0 / CAN). */
+    (void)0;
+#else
     /* ADC --------------------------------------------------------------- */
     adc_init();
-    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_RIGHT */
-    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_LEFT  */
-    adc_gpio_init(28u);   /* GP28 = ADC2 = BIBA_ADC_CHAN_VBAT     */
-    adc_gpio_init(29u);   /* GP29 = ADC3 = BIBA_ADC_CHAN_IBAT     */
+    /* Phase 06: GP26 = ADC0 = IS_LEFT (RC-filtered), GP27 = ADC1 = IS_RIGHT (RC-filtered). */
+    adc_gpio_init(26u);   /* GP26 = ADC0 = BIBA_ADC_CHAN_IS_LEFT  */
+    adc_gpio_init(27u);   /* GP27 = ADC1 = BIBA_ADC_CHAN_IS_RIGHT */
+#endif
 
     /* I2C0 for IMU and AHT30 (0x38) ------------------------------------ */
     i2c_init(BIBA_I2C_INST, 400000u);
@@ -164,6 +178,9 @@ void biba_hal_init(void)
     ws2812_init();
     biba_hal_rgb_led_set(0, 0, 0); /* start off */
 #endif
+
+    /* Front indicator panels (second WS2812 chain, own pin + DMA). */
+    biba_hal_led_strip_init();
 }
 
 uint32_t biba_hal_now_ms(void)
@@ -205,18 +222,26 @@ static const struct pio_program s_ws2812_prog = {
     .instructions = s_ws2812_insn, .length = 4, .origin = -1,
 };
 static PIO  s_ws2812_pio;
-static uint s_ws2812_sm;
+static int  s_ws2812_offset = -1;   /* program is loaded once, shared by all SMs */
+static uint s_ws2812_sm;            /* status NeoPixel (BIBA_PIN_RGB_LED_GPIO)   */
 
-static void ws2812_init(void)
+/* Claim one PIO state machine running the WS2812 program on `gpio`.
+ * The program itself is added to pio0 on first use and reused after
+ * that, so the status NeoPixel and the indicator-panel chain cost two
+ * state machines but only one instruction-memory slot. */
+static uint ws2812_claim_sm(uint gpio)
 {
     s_ws2812_pio = pio0;
-    uint offset  = pio_add_program(s_ws2812_pio, &s_ws2812_prog);
-    s_ws2812_sm  = pio_claim_unused_sm(s_ws2812_pio, true);
+    if (s_ws2812_offset < 0) {
+        s_ws2812_offset = (int)pio_add_program(s_ws2812_pio, &s_ws2812_prog);
+    }
+    const uint offset = (uint)s_ws2812_offset;
+    const uint sm     = pio_claim_unused_sm(s_ws2812_pio, true);
 
     pio_sm_config c = pio_get_default_sm_config();
     sm_config_set_wrap(&c, offset, offset + 3u);
     sm_config_set_sideset(&c, 1u, false, false);
-    sm_config_set_sideset_pins(&c, BIBA_PIN_RGB_LED_GPIO);
+    sm_config_set_sideset_pins(&c, gpio);
     /* Shift left (MSB first), autopull at 24 bits. */
     sm_config_set_out_shift(&c, false, true, 24u);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
@@ -224,11 +249,16 @@ static void ws2812_init(void)
     float div = (float)clock_get_hz(clk_sys) / (800000.0f * 10.0f);
     sm_config_set_clkdiv(&c, div);
 
-    pio_gpio_init(s_ws2812_pio, BIBA_PIN_RGB_LED_GPIO);
-    pio_sm_set_consecutive_pindirs(s_ws2812_pio, s_ws2812_sm,
-                                   BIBA_PIN_RGB_LED_GPIO, 1u, true);
-    pio_sm_init(s_ws2812_pio, s_ws2812_sm, offset, &c);
-    pio_sm_set_enabled(s_ws2812_pio, s_ws2812_sm, true);
+    pio_gpio_init(s_ws2812_pio, gpio);
+    pio_sm_set_consecutive_pindirs(s_ws2812_pio, sm, gpio, 1u, true);
+    pio_sm_init(s_ws2812_pio, sm, offset, &c);
+    pio_sm_set_enabled(s_ws2812_pio, sm, true);
+    return sm;
+}
+
+static void ws2812_init(void)
+{
+    s_ws2812_sm = ws2812_claim_sm(BIBA_PIN_RGB_LED_GPIO);
 }
 
 void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
@@ -242,6 +272,85 @@ void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b)
 #endif
 }
 
+/* --- Indicator LED panels (WS2812 chain, PIO + DMA) --------------------- *
+ *
+ * Same PIO program as the status NeoPixel above, on its own state
+ * machine and its own pin, fed by DMA so a 32-LED frame (~1 ms on the
+ * wire at 800 kHz) never blocks the control loop.
+ */
+
+#if BIBA_HAS_LED_PANEL
+
+static uint     s_strip_sm;
+static int      s_strip_dma = -1;
+/* Pre-shifted GRB words: the PIO autopulls 24 bits MSB-first, so the
+ * colour lives in the top 24 bits and the low byte is padding. */
+static uint32_t s_strip_words[BIBA_LED_PANEL_TOTAL];
+
+void biba_hal_led_strip_init(void)
+{
+    if (s_strip_dma >= 0) return;   /* already up */
+
+    s_strip_sm  = ws2812_claim_sm(BIBA_PIN_LED_PANEL_GPIO);
+    s_strip_dma = (int)dma_claim_unused_channel(true);
+
+    dma_channel_config c = dma_channel_get_default_config((uint)s_strip_dma);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+    channel_config_set_read_increment(&c, true);
+    channel_config_set_write_increment(&c, false);
+    channel_config_set_dreq(&c, pio_get_dreq(s_ws2812_pio, s_strip_sm, true));
+    dma_channel_configure((uint)s_strip_dma, &c,
+                          &s_ws2812_pio->txf[s_strip_sm],
+                          s_strip_words, BIBA_LED_PANEL_TOTAL, false);
+
+    /* Push one blank frame so the panels are dark from boot rather than
+     * showing whatever the LEDs powered up with. */
+    memset(s_strip_words, 0, sizeof(s_strip_words));
+    dma_channel_set_read_addr((uint)s_strip_dma, s_strip_words, true);
+}
+
+bool biba_hal_led_strip_busy(void)
+{
+    return (s_strip_dma >= 0) && dma_channel_is_busy((uint)s_strip_dma);
+}
+
+void biba_hal_led_strip_write(const uint8_t *rgb, size_t led_count)
+{
+    if (rgb == NULL || s_strip_dma < 0) return;
+    /* Previous frame still on the wire — drop this one (see biba_hal.h). */
+    if (dma_channel_is_busy((uint)s_strip_dma)) return;
+
+    const size_t n = (led_count > (size_t)BIBA_LED_PANEL_TOTAL)
+                     ? (size_t)BIBA_LED_PANEL_TOTAL : led_count;
+    for (size_t i = 0; i < n; i++) {
+        const uint32_t r = rgb[(3u * i) + 0u];
+        const uint32_t g = rgb[(3u * i) + 1u];
+        const uint32_t b = rgb[(3u * i) + 2u];
+        s_strip_words[i] = (g << 24u) | (r << 16u) | (b << 8u);
+    }
+    /* Short frames blank the tail rather than leaving stale pixels lit. */
+    for (size_t i = n; i < (size_t)BIBA_LED_PANEL_TOTAL; i++) {
+        s_strip_words[i] = 0u;
+    }
+
+    /* RP2040 does not reload TRANS_COUNT on its own, so restate it
+     * before every re-trigger. */
+    dma_channel_set_trans_count((uint)s_strip_dma, BIBA_LED_PANEL_TOTAL, false);
+    dma_channel_set_read_addr((uint)s_strip_dma, s_strip_words, true);
+}
+
+#else  /* !BIBA_HAS_LED_PANEL */
+
+void biba_hal_led_strip_init(void) {}
+bool biba_hal_led_strip_busy(void) { return false; }
+void biba_hal_led_strip_write(const uint8_t *rgb, size_t led_count)
+{
+    (void)rgb; (void)led_count;
+}
+
+#endif /* BIBA_HAS_LED_PANEL */
+
+#if !BIBA_TARGET_HAS_BLDC_2CH
 void biba_hal_data_ready_set(bool on)
 {
 #if BIBA_TARGET_HAS_SPI_SLAVE
@@ -250,23 +359,34 @@ void biba_hal_data_ready_set(bool on)
     (void)on;
 #endif
 }
+#endif /* !BLDC */
 
+#if !BIBA_TARGET_HAS_BLDC_2CH
 void biba_hal_data_ready_pulse(void)
 {
     biba_hal_data_ready_set(true);
     sleep_us(1u);
     biba_hal_data_ready_set(false);
 }
+#else
+/* No SBC link on the BLDC target — DATA_READY has no consumer. */
+void biba_hal_data_ready_pulse(void) { (void)0; }
+#endif
 
 bool biba_hal_mode_sel_is_companion(void)
 {
-#if BIBA_TARGET_HAS_SPI_SLAVE
-    return s_mode_sel_latched_companion;
+#if BIBA_TARGET_HAS_BLDC_2CH
+    /* BLDC targets are always built in standalone mode (BIBA_MODE_*
+     * compile-time flag selects).  Returning false here keeps the
+     * mode dispatcher on the standalone path even for envs that try
+     * to use MODE_SEL for runtime selection. */
+    return false;
 #else
-    return false;  /* no SPI slave — always standalone */
+    return s_mode_sel_latched_companion;
 #endif
 }
 
+#if BIBA_TARGET_HAS_BTS7960_2CH
 void biba_hal_left_enable(bool enabled)
 {
     gpio_put(BIBA_PIN_LEFT_REN_GPIO, enabled ? 1u : 0u);
@@ -278,6 +398,7 @@ void biba_hal_right_enable(bool enabled)
     gpio_put(BIBA_PIN_RIGHT_REN_GPIO, enabled ? 1u : 0u);
     gpio_put(BIBA_PIN_RIGHT_LEN_GPIO, enabled ? 1u : 0u);
 }
+#endif
 
 void biba_hal_ssr_init(void)  {}
 
@@ -396,10 +517,13 @@ bool biba_hal_spi_slave_poll(void)
 {
     return !s_spi_busy;
 }
-#else
-void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx) { (void)tx; (void)rx; }
+#else /* !BIBA_TARGET_HAS_SPI_SLAVE */
+void biba_hal_spi_slave_arm(const uint8_t *tx, uint8_t *rx)
+{
+    (void)tx; (void)rx;
+}
 bool biba_hal_spi_slave_poll(void) { return true; }
-#endif /* BIBA_TARGET_HAS_SPI_SLAVE */
+#endif
 
 /* --- I2C0 (IMU) --------------------------------------------------------- */
 

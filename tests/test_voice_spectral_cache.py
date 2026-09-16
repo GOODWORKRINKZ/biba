@@ -7,7 +7,6 @@ import wave
 from pathlib import Path
 
 import pytest
-
 from buzzer.wav_player import load_peak_frame_cache
 
 

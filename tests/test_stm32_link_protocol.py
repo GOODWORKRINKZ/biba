@@ -10,15 +10,14 @@ from __future__ import annotations
 import struct
 
 import pytest
-
 from stm32_link import (
-    Command,
-    Flag,
-    PROTOCOL_VERSION,
     FRAME_SIZE,
     PAYLOAD_MAX,
-    TelemetryFrame,
+    PROTOCOL_VERSION,
+    Command,
+    Flag,
     Telemetry,
+    TelemetryFrame,
     build_frame,
     crc16_ccitt,
     parse_frame,
@@ -26,9 +25,9 @@ from stm32_link import (
 from stm32_link.protocol import (
     ProtocolError,
     TelemetryId,
+    build_arm,
     build_ping,
     build_setpoint,
-    build_arm,
 )
 
 
@@ -91,8 +90,8 @@ def test_build_setpoint_encodes_two_little_endian_q15():
     parsed = parse_frame(raw)
     assert parsed.cmd == int(Command.SET_SETPOINT)
     left, right = struct.unpack("<hh", parsed.payload[:4])
-    assert left == pytest.approx(int(round(0.5 * 32767)))
-    assert right == pytest.approx(int(round(-0.25 * 32767)))
+    assert left == pytest.approx(round(0.5 * 32767))
+    assert right == pytest.approx(round(-0.25 * 32767))
 
 
 def test_build_ping_and_arm_helpers():
@@ -171,9 +170,9 @@ def test_build_motor_audio_matches_firmware_layout():
         uint8_t  flags;
     """
     from stm32_link.protocol import (
-        build_motor_audio,
         MOTOR_AUDIO_FLAG_AUDIO_MODE,
         MOTOR_AUDIO_FLAG_OUTPUTS_ENABLE,
+        build_motor_audio,
     )
 
     raw = build_motor_audio(
@@ -209,11 +208,11 @@ def test_build_motor_audio_silences_channel_with_zero_freq():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        dict(seq=0, freq_hz=(0, 0, 0), duty_q8=(0, 0, 0, 0)),   # wrong length
-        dict(seq=0, freq_hz=(0, 0, 0, 0), duty_q8=(0, 0, 0)),   # wrong length
-        dict(seq=0, freq_hz=(0x10000, 0, 0, 0), duty_q8=(0, 0, 0, 0)),  # OOR freq
-        dict(seq=0, freq_hz=(0, 0, 0, 0), duty_q8=(256, 0, 0, 0)),      # OOR duty
-        dict(seq=0, freq_hz=(0, 0, 0, 0), duty_q8=(0, 0, 0, 0), flags=256),
+        {"seq": 0, "freq_hz": (0, 0, 0), "duty_q8": (0, 0, 0, 0)},   # wrong length
+        {"seq": 0, "freq_hz": (0, 0, 0, 0), "duty_q8": (0, 0, 0)},   # wrong length
+        {"seq": 0, "freq_hz": (0x10000, 0, 0, 0), "duty_q8": (0, 0, 0, 0)},  # OOR freq
+        {"seq": 0, "freq_hz": (0, 0, 0, 0), "duty_q8": (256, 0, 0, 0)},      # OOR duty
+        {"seq": 0, "freq_hz": (0, 0, 0, 0), "duty_q8": (0, 0, 0, 0), "flags": 256},
     ],
 )
 def test_build_motor_audio_rejects_invalid_args(kwargs):
@@ -282,7 +281,8 @@ def test_telemetry_existing_fields_unaffected_by_new_fields() -> None:
 def test_telemetry_struct_is_still_48_bytes() -> None:
     """Total packed struct size must remain 48 bytes (backward-compatible)."""
     import struct as _struct
-    from stm32_link.protocol import TELEMETRY_STRUCT, TELEMETRY_SIZE
+
+    from stm32_link.protocol import TELEMETRY_SIZE, TELEMETRY_STRUCT
     assert TELEMETRY_SIZE == 48
     assert _struct.calcsize(TELEMETRY_STRUCT) == 48
 

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import pytest
-
-from crsf.protocol import CRSF_MAX_FRAME_SIZE, FRAME_TYPE_RC_CHANNELS_PACKED, build_frame, parse_frame, pop_frame_from_buffer
+from crsf.protocol import (
+    CRSF_MAX_FRAME_SIZE,
+    FRAME_TYPE_RC_CHANNELS_PACKED,
+    build_frame,
+    parse_frame,
+    pop_frame_from_buffer,
+)
 from crsf.receiver import CRSFReceiver
 
 

@@ -6,38 +6,35 @@ import io
 import struct
 import threading
 import wave
-
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-
 from buzzer.wav_player import (
-    DEFAULT_CARRIER_HZ,
-    _fft,
-    _next_pow2,
     _SPECTRAL_DUTY_MAX,
     _SPECTRAL_FRAME_MS,
     _SPECTRAL_HOP_MS,
     _SPECTRAL_N_PEAKS,
     _SPEECH_MAX_FREQ,
     _SPEECH_MIN_FREQ,
+    DEFAULT_CARRIER_HZ,
     _default_split_peak_frame_cache_paths,
+    _fft,
+    _next_pow2,
     _stabilize_peak_frames,
-    load_or_build_split_peak_frames,
     load_or_build_peak_frames,
+    load_or_build_split_peak_frames,
     load_peak_frame_cache,
+    load_wav,
     play_bipolar_samples,
     play_bipolar_split_peak_frames,
-    load_wav,
     play_peak_frames,
     play_samples,
     play_tone_sequence,
     split_peak_frames_by_side,
-    write_peak_frame_cache,
     wav_to_peak_frames,
     wav_to_tones,
+    write_peak_frame_cache,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -120,7 +117,7 @@ class TestLoadWav:
             n_channels=2,
         ))
 
-        samples, rate = load_wav(str(wav_path))
+        samples, _rate = load_wav(str(wav_path))
 
         # Stereo is mixed to mono — we have 3 frames
         assert len(samples) == 3
@@ -200,7 +197,7 @@ class TestPlaySamples:
     def test_empty_samples_just_cleans_up(self):
         pi = MagicMock()
         pins = [18, 13]
-        samples = bytes()
+        samples = b""
         stop = threading.Event()
 
         play_samples(pi, pins, samples, sample_rate=8000,
@@ -238,7 +235,7 @@ class TestPlaySamples:
         pi = MagicMock()
         pins = [18]
         comp_pins = [13]
-        samples = bytes()
+        samples = b""
         stop = threading.Event()
 
         play_samples(pi, pins, samples, sample_rate=8000,
@@ -310,7 +307,7 @@ class TestMotorSynthPlayWav:
         pi.hardware_PWM.assert_not_called()
 
     def test_play_wav_missing_file_logs_not_crashes(self, tmp_path):
-        synth, pi = self._make_synth()
+        synth, _pi = self._make_synth()
 
         # Should not raise
         synth.play_wav("/nonexistent/startup.wav")

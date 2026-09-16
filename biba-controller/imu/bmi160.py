@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import ClassVar
 
 from imu import IMUReader, IMUSample
 
@@ -21,7 +22,7 @@ class BMI160Reader(IMUReader):
     _GYR_RANGE_250_DPS = 0x03
     _ACC_LSB_PER_G = 16384.0
     _GYR_LSB_PER_DPS = 131.2
-    _ODR_BY_RATE = {
+    _ODR_BY_RATE: ClassVar[dict[float, int]] = {
         25.0: 0x06,
         50.0: 0x07,
         100.0: 0x08,

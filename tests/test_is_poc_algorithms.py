@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from is_poc_analyse import freq_autocorr, freq_fft, freq_zero_crossing  # noqa: E402
+from is_poc_analyse import freq_autocorr, freq_fft, freq_zero_crossing
 
 
 def make_signal(
