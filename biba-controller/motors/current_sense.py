@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from typing import ClassVar
 
 from motors.current_control import MotorCurrentSample
-
 
 LOGGER = logging.getLogger("biba-controller")
 
@@ -46,13 +46,13 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
     _REG_CONVERSION = 0x00
     _REG_CONFIG = 0x01
     _OS_SINGLE = 0x8000
-    _MUX_BY_CHANNEL = {
+    _MUX_BY_CHANNEL: ClassVar[dict[int, int]] = {
         0: 0x4000,
         1: 0x5000,
         2: 0x6000,
         3: 0x7000,
     }
-    _PGA_BY_GAIN = {
+    _PGA_BY_GAIN: ClassVar[dict[str, tuple[int, float]]] = {
         "2/3": (0x0000, 6.144),
         "1": (0x0200, 4.096),
         "2": (0x0400, 2.048),
@@ -60,7 +60,7 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         "8": (0x0800, 0.512),
         "16": (0x0A00, 0.256),
     }
-    _DR_BY_SPS = {
+    _DR_BY_SPS: ClassVar[dict[int, int]] = {
         8: 0x0000,
         16: 0x0020,
         32: 0x0040,
@@ -160,7 +160,7 @@ class ADS1115MotorCurrentReader(MotorCurrentReader):
         try:
             left_raw_adc, left_voltage_v = self._read_channel_sample(left_channel)
             right_raw_adc, right_voltage_v = self._read_channel_sample(right_channel)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- one bad I2C read must not crash the control loop
             LOGGER.warning("Failed to read ADS1115 motor currents: %s", exc)
             invalid = MotorCurrentSample(current_a=None, valid=False)
             return invalid, invalid

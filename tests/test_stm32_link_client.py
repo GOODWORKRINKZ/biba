@@ -8,19 +8,16 @@ surfaces structured telemetry back to the caller.
 
 from __future__ import annotations
 
-from typing import List
-
 import pytest
-
 from stm32_link import Command, Flag, Telemetry, TelemetryFrame
 from stm32_link.client import STM32Link, STM32LinkConfig
 from stm32_link.protocol import FRAME_SIZE, parse_frame
 
 
 class FakeSpi:
-    def __init__(self, telemetry_frames: List[bytes]) -> None:
+    def __init__(self, telemetry_frames: list[bytes]) -> None:
         self._queue = list(telemetry_frames)
-        self.sent: List[bytes] = []
+        self.sent: list[bytes] = []
         self.closed = False
 
     def xfer2(self, data):
@@ -68,8 +65,8 @@ def test_set_setpoint_packs_values():
     import struct
 
     left, right = struct.unpack("<hh", sent.payload[:4])
-    assert left == int(round(0.5 * 32767))
-    assert right == int(round(-0.5 * 32767))
+    assert left == round(0.5 * 32767)
+    assert right == round(-0.5 * 32767)
 
 
 def test_arm_and_disarm_emit_the_right_command_codes():

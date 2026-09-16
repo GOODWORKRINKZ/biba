@@ -12,8 +12,6 @@ from __future__ import annotations
 import enum
 import struct
 from dataclasses import dataclass, field
-from typing import Tuple
-
 
 PROTOCOL_VERSION = 0x01
 
@@ -181,7 +179,7 @@ class Telemetry:
 
 
 def _to_q15(value: float) -> int:
-    return max(-32768, min(32767, int(round(value * 32767.0))))
+    return max(-32768, min(32767, round(value * 32767.0)))
 
 
 @dataclass
@@ -191,7 +189,7 @@ class TelemetryFrame:
     telemetry: Telemetry = field(default_factory=Telemetry)
 
     @classmethod
-    def from_bytes(cls, buffer: bytes) -> "TelemetryFrame":
+    def from_bytes(cls, buffer: bytes) -> TelemetryFrame:
         frame = parse_frame(buffer)
         if frame.cmd not in (TelemetryId.SNAPSHOT, TelemetryId.PONG, TelemetryId.ERROR):
             raise ProtocolError(f"unexpected telemetry cmd {frame.cmd:#x}")
@@ -200,7 +198,7 @@ class TelemetryFrame:
                 f"telemetry payload too short: {len(frame.payload)} < {TELEMETRY_SIZE}"
             )
         payload = frame.payload[:TELEMETRY_SIZE]
-        fields: Tuple = struct.unpack(TELEMETRY_STRUCT, payload)
+        fields: tuple = struct.unpack(TELEMETRY_STRUCT, payload)
         tlm = Telemetry(
             setpoint_left=fields[0] / 32767.0,
             setpoint_right=fields[1] / 32767.0,
@@ -233,26 +231,26 @@ class TelemetryFrame:
             TELEMETRY_STRUCT,
             _to_q15(t.setpoint_left),
             _to_q15(t.setpoint_right),
-            max(-32768, min(32767, int(round(t.current_left_a * 1000)))),
-            max(-32768, min(32767, int(round(t.current_right_a * 1000)))),
-            max(0, min(0xFFFF, int(round(t.vbat_v * 1000)))),
-            max(0, min(0xFFFF, int(round(t.rail_12v_v * 1000)))),
-            max(-32768, min(32767, int(round(t.gyro_x_dps * 100)))),
-            max(-32768, min(32767, int(round(t.gyro_y_dps * 100)))),
-            max(-32768, min(32767, int(round(t.gyro_z_dps * 100)))),
-            max(-32768, min(32767, int(round(t.accel_x_g * 1000)))),
-            max(-32768, min(32767, int(round(t.accel_y_g * 1000)))),
-            max(-32768, min(32767, int(round(t.accel_z_g * 1000)))),
+            max(-32768, min(32767, round(t.current_left_a * 1000))),
+            max(-32768, min(32767, round(t.current_right_a * 1000))),
+            max(0, min(0xFFFF, round(t.vbat_v * 1000))),
+            max(0, min(0xFFFF, round(t.rail_12v_v * 1000))),
+            max(-32768, min(32767, round(t.gyro_x_dps * 100))),
+            max(-32768, min(32767, round(t.gyro_y_dps * 100))),
+            max(-32768, min(32767, round(t.gyro_z_dps * 100))),
+            max(-32768, min(32767, round(t.accel_x_g * 1000))),
+            max(-32768, min(32767, round(t.accel_y_g * 1000))),
+            max(-32768, min(32767, round(t.accel_z_g * 1000))),
             t.crsf_rssi & 0xFF,
             t.crsf_link_quality & 0xFF,
             max(-128, min(127, t.crsf_snr_db)),
             t.error_flags & 0xFF,
             t.uptime_ms & 0xFFFFFFFF,
-            max(-32768, min(32767, int(round(t.ibat_a * 1000)))),
-            max(-32768, min(32767, int(round(t.temperature_c * 100)))),
-            max(0, min(100, int(round(t.humidity_pct)))),
-            max(0, min(0xFFFF, int(round(t.wheel_rpm_left_hz  * 10)))),
-            max(0, min(0xFFFF, int(round(t.wheel_rpm_right_hz * 10)))),
+            max(-32768, min(32767, round(t.ibat_a * 1000))),
+            max(-32768, min(32767, round(t.temperature_c * 100))),
+            max(0, min(100, round(t.humidity_pct))),
+            max(0, min(0xFFFF, round(t.wheel_rpm_left_hz  * 10))),
+            max(0, min(0xFFFF, round(t.wheel_rpm_right_hz * 10))),
             b"\x00" * 7,
         )
         return build_frame(TelemetryId.SNAPSHOT, self.seq, self.flags, payload)
@@ -290,8 +288,8 @@ MOTOR_AUDIO_FLAG_OUTPUTS_ENABLE = 1 << 1
 
 def build_motor_audio(
     seq: int,
-    freq_hz: Tuple[int, int, int, int],
-    duty_q8: Tuple[int, int, int, int],
+    freq_hz: tuple[int, int, int, int],
+    duty_q8: tuple[int, int, int, int],
     flags: int = 0,
 ) -> bytes:
     """Build a BIBA_CMD_SET_MOTOR_AUDIO frame.

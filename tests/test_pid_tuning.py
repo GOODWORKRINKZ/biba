@@ -4,8 +4,12 @@ import json
 from dataclasses import replace
 
 import pytest
-
-from pid_tuning import PidTuningSnapshot, PidTuningStore, load_pid_tuning, snapshot_from_mapping
+from pid_tuning import (
+    PidTuningSnapshot,
+    PidTuningStore,
+    load_pid_tuning,
+    snapshot_from_mapping,
+)
 
 
 def _defaults() -> PidTuningSnapshot:
@@ -37,7 +41,7 @@ def test_snapshot_from_mapping_merges_with_defaults() -> None:
 
 
 def test_snapshot_from_mapping_rejects_invalid_ranges() -> None:
-    with pytest.raises(ValueError, match="Макс\. газ стабилизации"):
+    with pytest.raises(ValueError, match=r"Макс\. газ стабилизации"):
         snapshot_from_mapping(
             {
                 "stabilization_min_throttle": 0.2,

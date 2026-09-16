@@ -10,9 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 import yaml
-
 
 PKG = Path("ros2_ws/src/biba_bringup")
 CONFIG = PKG / "config" / "twist_mux.yaml"

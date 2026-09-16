@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import pytest
-
 from imu import IMUSample
-from motors.assisted_drive import AssistedDriveConfig, AssistedDriveController, DriveMode
+from motors.assisted_drive import (
+    AssistedDriveConfig,
+    AssistedDriveController,
+    DriveMode,
+)
 
 
 def _sample(

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import inspect
+import json
 import logging
 import math
 import os
@@ -13,12 +13,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from types import FrameType
-from typing import Optional
-
-import pigpio
-import yaml
 
 import config
+import pigpio
+import yaml
 from bms.daly import BatteryState, DalyBMS, DalyBMSBle
 from bms.poller import BMSPoller
 from buzzer.beacon import BeaconManager
@@ -29,12 +27,26 @@ from crsf.receiver import CRSFReceiver
 from crsf.telemetry import CRSFTelemetry, build_biba_system_metrics
 from imu import IMUSample, NullIMUReader
 from imu.factory import open_imu_reader
-from motors.assisted_drive import AssistedDriveConfig, AssistedDriveController, AssistedDriveResult, DriveMode
-from motors.current_control import MotorCurrentSample, MotorLimitConfig, MotorLimitResult, apply_motor_limits
-from motors.current_sense import MotorCurrentCalibration, NullMotorCurrentReader, open_ads1115_current_reader
+from motor_test_api import MotorTestExecutor, create_motor_test_server
+from motors.assisted_drive import (
+    AssistedDriveConfig,
+    AssistedDriveController,
+    AssistedDriveResult,
+    DriveMode,
+)
+from motors.current_control import (
+    MotorCurrentSample,
+    MotorLimitConfig,
+    MotorLimitResult,
+    apply_motor_limits,
+)
+from motors.current_sense import (
+    MotorCurrentCalibration,
+    NullMotorCurrentReader,
+    open_ads1115_current_reader,
+)
 from motors.driver import BTS7960MotorDriver, DifferentialDrive, MotorDriver
 from motors.ramping import ScalarKalmanFilter
-from motor_test_api import MotorTestExecutor, create_motor_test_server
 from pid_tuning import PidTuningSnapshot, PidTuningStore, load_pid_tuning
 from settings_store import MotorTrimStore
 from system_stats import SystemStats
@@ -540,7 +552,7 @@ def _setup_logging() -> None:
     )
 
 
-def _signal_handler(signum: int, frame: Optional[FrameType]) -> None:
+def _signal_handler(signum: int, frame: FrameType | None) -> None:
     del signum, frame
     global RUNNING
     RUNNING = False
@@ -612,7 +624,7 @@ def _battery_is_low(state: BatteryState) -> bool:
     return state.voltage <= config.LOW_PACK_VOLTAGE
 
 
-def _create_throttle_filter() -> Optional[ScalarKalmanFilter]:
+def _create_throttle_filter() -> ScalarKalmanFilter | None:
     if config.THROTTLE_FILTER_MODE != "KALMAN":
         return None
     return ScalarKalmanFilter(
@@ -735,7 +747,7 @@ def _load_saved_motor_trim() -> float:
     try:
         payload = json.loads(settings_path.read_text(encoding="utf-8"))
         trim = float(payload.get("trim", 0.0))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- corrupt/missing settings file must not crash startup
         LOGGER.warning("Failed to load motor trim settings from %s: %s", settings_path, exc)
         return 0.0
 
@@ -809,7 +821,7 @@ def _apply_pending_pid_tuning_update(
             updated_controller = _create_assisted_drive_controller(snapshot)
         else:
             updated_controller = _create_assisted_drive_controller()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- a bad tuning revision must be reported, not crash the loop
         message = f"failed to apply pid tuning revision {revision}: {exc}"
         pid_tuning_store.record_apply_error(message)
         LOGGER.warning("Failed to apply PID tuning revision %s: %s", revision, exc)
@@ -869,7 +881,7 @@ def _encode_battery_status_bits(
 
 
 def _encode_crsf_current_da(current_a: float) -> int:
-    return max(0, int(round(current_a * 10)))
+    return max(0, round(current_a * 10))
 
 
 def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) -> float:
@@ -888,12 +900,12 @@ def _log_battery_telemetry(state: BatteryState, now: float, last_log_at: float) 
         _encode_crsf_current_da(telemetry_current_a),
         telemetry_direction,
         state.voltage,
-        int(round(state.soc)),
+        round(state.soc),
     )
     return now
 
 
-def _trace_battery_telemetry(stage: str, state: Optional[BatteryState], timestamp_s: float) -> None:
+def _trace_battery_telemetry(stage: str, state: BatteryState | None, timestamp_s: float) -> None:
     if not config.BMS_TELEMETRY_TRACE_ENABLED:
         return
 
@@ -911,13 +923,13 @@ def _trace_battery_telemetry(stage: str, state: Optional[BatteryState], timestam
         state.current,
         _battery_telemetry_current_a(state.current),
         state.voltage,
-        int(round(state.soc)),
+        round(state.soc),
     )
 
 
 def _send_battery_telemetry(
     telemetry: CRSFTelemetry,
-    state: Optional[BatteryState],
+    state: BatteryState | None,
     *,
     consumed_at_s: float | None = None,
     armed: bool = False,
@@ -950,12 +962,12 @@ def _send_battery_telemetry(
         voltage_v=state.voltage,
         current_a=_battery_telemetry_current_a(state.current),
         capacity_mah=status_bits,
-        remaining_pct=int(round(state.soc)),
+        remaining_pct=round(state.soc),
     )
     _trace_battery_telemetry("send", state, time.monotonic())
 
 
-def _get_motor_supply_voltage(state: Optional[BatteryState]) -> float:
+def _get_motor_supply_voltage(state: BatteryState | None) -> float:
     if state is not None and state.voltage > 0.0:
         return state.voltage
     return config.MOTOR_LIMIT_FALLBACK_VOLTAGE
@@ -966,7 +978,7 @@ def _limit_drive_outputs(
     requested_right: float,
     left_sample: MotorCurrentSample,
     right_sample: MotorCurrentSample,
-    battery_state: Optional[BatteryState],
+    battery_state: BatteryState | None,
 ) -> MotorLimitResult:
     if not config.MOTOR_CURRENT_LIMITING_ENABLED:
         return MotorLimitResult(
@@ -1014,9 +1026,7 @@ def _motor_current_trace_has_activity(
         return True
     if abs(left_duty) > 1e-6 or abs(right_duty) > 1e-6:
         return True
-    if _telemetry_motor_current_a(left_sample) > 0.0 or _telemetry_motor_current_a(right_sample) > 0.0:
-        return True
-    return False
+    return bool(_telemetry_motor_current_a(left_sample) > 0.0 or _telemetry_motor_current_a(right_sample) > 0.0)
 
 
 def _update_motor_current_trace_window(
@@ -1075,7 +1085,7 @@ def _build_motor_current_trace_record(
     right_duty: float,
     left_sample: MotorCurrentSample,
     right_sample: MotorCurrentSample,
-    battery_state: Optional[BatteryState],
+    battery_state: BatteryState | None,
     bms_sample_monotonic_s: float | None,
     mute_active: bool,
     beacon_active: bool,
@@ -1142,7 +1152,7 @@ def _create_motor_current_reader():
     if not config.MOTOR_CURRENT_SENSE_ENABLED:
         return NullMotorCurrentReader()
 
-    sample_rate_sps = int(round(config.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ))
+    sample_rate_sps = round(config.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ)
     try:
         return open_ads1115_current_reader(
             address=config.MOTOR_CURRENT_SENSE_I2C_ADDRESS,
@@ -1161,7 +1171,7 @@ def _create_motor_current_reader():
                 amps_per_volt=config.RIGHT_MOTOR_CURRENT_SENSE_AMPS_PER_VOLT,
             ),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- missing/broken sensor must degrade, not crash startup
         LOGGER.warning("Motor current sensing disabled: failed to initialize ADS1115 reader: %s", exc)
         return NullMotorCurrentReader()
 
@@ -1187,7 +1197,7 @@ def _create_imu_reader():
             config.IMU_GYRO_Z_SIGN,
         )
         return reader
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- missing/broken sensor must degrade, not crash startup
         LOGGER.warning("IMU disabled: failed to initialize IMU reader: %s", exc)
         return NullIMUReader()
 
@@ -1320,7 +1330,7 @@ def main() -> int:
     receiver = CRSFReceiver(config.CRSF_PORT, config.CRSF_BAUD, config.SERIAL_TIMEOUT_S)
     telemetry = CRSFTelemetry(None)
     bms = _create_bms()
-    bms_poller: Optional[BMSPoller] = None
+    bms_poller: BMSPoller | None = None
     current_reader = _create_motor_current_reader()
     imu_reader = _create_imu_reader()
     pid_tuning_snapshot, pid_tuning_store = _load_pid_tuning_state()
@@ -1355,8 +1365,8 @@ def main() -> int:
     try:
         receiver.open()
         telemetry.attach(receiver.serial_port)
-    except Exception as exc:
-        LOGGER.exception("Hardware initialization failed: %s", exc)
+    except Exception:
+        LOGGER.exception("Hardware initialization failed")
         drive.stop()
         buzzer.off()
         if pi.connected:
@@ -1367,7 +1377,7 @@ def main() -> int:
         bms.open()
         bms_poller = BMSPoller(bms, interval_s=config.BMS_POLL_INTERVAL_S)
         bms_poller.start()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- missing/broken BMS must degrade, not crash startup
         if config.BMS_TRANSPORT == "BLE":
             LOGGER.warning("Daly BMS unavailable via BLE %s: %s", config.BMS_BLE_ADDRESS or "<unset>", exc)
         else:
@@ -1441,7 +1451,7 @@ def main() -> int:
 
             try:
                 channels = receiver.get_channels()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- one bad CRSF frame must not stop the control loop
                 LOGGER.warning("Failed to read CRSF channels: %s", exc)
                 channels = None
 
@@ -1584,7 +1594,7 @@ def main() -> int:
                         armed=armed,
                         now_monotonic_s=loop_started_at,
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 -- assist failure must fall back to pass-through, not crash
                     if (
                         last_imu_assist_error_at is None
                         or loop_started_at - last_imu_assist_error_at >= _IMU_ASSIST_ERROR_LOG_INTERVAL_S
@@ -1734,7 +1744,7 @@ def main() -> int:
                         left_sample=left_current_sample,
                         right_sample=right_current_sample,
                     )
-                    if trace_should_log:
+                    if trace_should_log:  # noqa: SIM102 -- merging would push the body past the line-length limit
                         if (
                             trace_last_log_at_s is None
                             or config.MOTOR_CURRENT_TRACE_MIN_INTERVAL_S <= 0.0
@@ -1882,7 +1892,7 @@ def main() -> int:
                             now=loop_started_at,
                             last_log_at=last_battery_telemetry_log,
                         )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 -- one bad telemetry send must not stop the control loop
                     LOGGER.warning("Failed to send CRSF battery telemetry: %s", exc)
 
                 try:
@@ -1892,7 +1902,7 @@ def main() -> int:
                         left_current_a=_telemetry_motor_current_a(left_current_sample),
                         right_current_a=_telemetry_motor_current_a(right_current_sample),
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 -- one bad telemetry send must not stop the control loop
                     LOGGER.warning("Failed to send CRSF system telemetry: %s", exc)
 
                 if battery_state is not None:

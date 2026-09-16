@@ -5,11 +5,10 @@ from __future__ import annotations
 import logging
 import time
 
+import config
 import pigpio
 
-import config
 from motors.ramping import SpeedRamp
-
 
 LOGGER = logging.getLogger("biba-controller")
 
@@ -344,6 +343,4 @@ class DifferentialDrive:
 
     def check_failsafe(self, last_frame_time: float) -> bool:
         """Flag failsafe when no fresh CRSF frame arrives in time."""
-        if time.monotonic() - last_frame_time > config.FAILSAFE_TIMEOUT_S:
-            return True
-        return False
+        return time.monotonic() - last_frame_time > config.FAILSAFE_TIMEOUT_S

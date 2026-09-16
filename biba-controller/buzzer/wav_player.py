@@ -215,9 +215,12 @@ def play_samples(
     i = 0
 
     while i < n_samples:
-        if interrupt_event and i % _INTERRUPT_CHECK_INTERVAL == 0:
-            if interrupt_event.is_set():
-                break
+        if (
+            interrupt_event
+            and i % _INTERRUPT_CHECK_INTERVAL == 0
+            and interrupt_event.is_set()
+        ):
+            break
 
         duty = samples[i] * _DUTY_MAX // 255
         for pin in pins:

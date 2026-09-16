@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import serial
 
-from crsf.protocol import FRAME_TYPE_RC_CHANNELS_PACKED, parse_frame, pop_frame_from_buffer
+from crsf.protocol import (
+    FRAME_TYPE_RC_CHANNELS_PACKED,
+    parse_frame,
+    pop_frame_from_buffer,
+)
 
 
 class CRSFReceiver:
@@ -16,7 +18,7 @@ class CRSFReceiver:
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self.serial_port: Optional[serial.Serial] = None
+        self.serial_port: serial.Serial | None = None
         self._buffer = bytearray()
 
     def open(self) -> None:
@@ -29,7 +31,7 @@ class CRSFReceiver:
             self.serial_port.close()
         self.serial_port = None
 
-    def read_frame(self) -> Optional[tuple[int, bytes]]:
+    def read_frame(self) -> tuple[int, bytes] | None:
         """Return the next valid CRSF frame if available."""
         if self.serial_port is None:
             raise RuntimeError("CRSFReceiver serial port is not open")
@@ -63,7 +65,7 @@ class CRSFReceiver:
         normalized = (raw_value - center) / half_range
         return max(-1.0, min(1.0, normalized))
 
-    def get_channels(self) -> Optional[list[float]]:
+    def get_channels(self) -> list[float] | None:
         """Return normalized RC channels from the latest available frame.
 
         Drains all pending frames from the serial buffer so that stale data
@@ -80,7 +82,7 @@ class CRSFReceiver:
             self._buffer.extend(self.serial_port.read(pending))
 
         # Drain all complete frames from the buffer, keeping latest channels
-        latest_payload: Optional[bytes] = None
+        latest_payload: bytes | None = None
         while True:
             raw_frame = pop_frame_from_buffer(self._buffer)
             if raw_frame is None:

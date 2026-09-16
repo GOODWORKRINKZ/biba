@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Optional, Protocol
+from typing import Protocol
 
 from bms.daly import BatteryState
 
@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class BMSReader(Protocol):
-    def read_state(self) -> Optional[BatteryState]: ...
+    def read_state(self) -> BatteryState | None: ...
 
 
 class BMSPoller:
@@ -22,19 +22,19 @@ class BMSPoller:
     def __init__(self, bms: BMSReader, interval_s: float = 1.0) -> None:
         self._bms = bms
         self._interval = interval_s
-        self._state: Optional[BatteryState] = None
-        self._state_timestamp_s: Optional[float] = None
+        self._state: BatteryState | None = None
+        self._state_timestamp_s: float | None = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     @property
-    def latest_state(self) -> Optional[BatteryState]:
+    def latest_state(self) -> BatteryState | None:
         with self._lock:
             return self._state
 
     @property
-    def latest_state_timestamp_s(self) -> Optional[float]:
+    def latest_state_timestamp_s(self) -> float | None:
         with self._lock:
             return self._state_timestamp_s
 
@@ -57,7 +57,7 @@ class BMSPoller:
                 with self._lock:
                     self._state = state
                     self._state_timestamp_s = polled_at_s
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- polling loop must survive any driver error
                 with self._lock:
                     self._state = None
                     self._state_timestamp_s = None

@@ -11,7 +11,8 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Optional
+
+from typing_extensions import Self
 
 from . import protocol
 
@@ -31,9 +32,9 @@ class STM32Link:
 
     def __init__(
         self,
-        config: Optional[STM32LinkConfig] = None,
+        config: STM32LinkConfig | None = None,
         *,
-        spi: Optional[object] = None,
+        spi: object | None = None,
     ) -> None:
         self._config = config or STM32LinkConfig()
         self._lock = threading.Lock()
@@ -59,7 +60,7 @@ class STM32Link:
         if spi is not None and hasattr(spi, "close"):
             spi.close()
 
-    def __enter__(self) -> "STM32Link":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

@@ -14,7 +14,6 @@ from typing import Any
 from pid_tuning import PidTuningSnapshot, snapshot_from_mapping
 from settings_store import MotorTrimStatus
 
-
 _MIN_FREQUENCY_HZ = 100
 _MAX_FREQUENCY_HZ = 8_000
 _MIN_DUTY_PERCENT = 0.0
@@ -67,21 +66,23 @@ def _field_label(name: str) -> str:
 def _require_int(payload: dict[str, Any], name: str) -> int:
     value = payload.get(name)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть целым числом")
+        # ValueError, not TypeError: callers catch ValueError to turn this
+        # into an HTTP 400 response (see except ValueError below).
+        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть целым числом")  # noqa: TRY004
     return value
 
 
 def _require_number(payload: dict[str, Any], name: str) -> float:
     value = payload.get(name)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть числом")
+        raise ValueError(f"Значение поля «{_field_label(name)}» должно быть числом")  # noqa: TRY004
     return float(value)
 
 
 def _require_pwm_mode(payload: dict[str, Any]) -> str:
     value = payload.get("pwm_mode", _DEFAULT_PWM_MODE)
     if not isinstance(value, str):
-        raise ValueError("Значение поля «Режим PWM» должно быть SOFTWARE или HARDWARE")
+        raise ValueError("Значение поля «Режим PWM» должно быть SOFTWARE или HARDWARE")  # noqa: TRY004
     normalized = value.strip().upper()
     if normalized not in _PWM_MODE_CHOICES:
         raise ValueError("Значение поля «Режим PWM» должно быть SOFTWARE или HARDWARE")

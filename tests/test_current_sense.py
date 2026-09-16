@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import importlib
 
-from motors.current_sense import ADS1115MotorCurrentReader, MotorCurrentCalibration, NullMotorCurrentReader
+from motors.current_sense import (
+    ADS1115MotorCurrentReader,
+    MotorCurrentCalibration,
+    NullMotorCurrentReader,
+)
 
 
 class FakeSMBus:
@@ -171,7 +175,7 @@ def test_default_configured_ads1115_sample_rate_is_supported(monkeypatch) -> Non
     config = importlib.import_module("config")
     config = importlib.reload(config)
 
-    assert int(round(config.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ)) in ADS1115MotorCurrentReader._DR_BY_SPS
+    assert round(config.MOTOR_CURRENT_SENSE_SAMPLE_RATE_HZ) in ADS1115MotorCurrentReader._DR_BY_SPS
 
 
 # ---------------------------------------------------------------------------
@@ -185,16 +189,16 @@ def test_default_configured_ads1115_sample_rate_is_supported(monkeypatch) -> Non
 # The Pi-side reader must be configured with the same mapping.
 # These tests guard against channel inversion regressions.
 
-FIRMWARE_CHANNELS = dict(
-    left_forward=0,
-    left_reverse=1,
-    right_forward=2,
-    right_reverse=3,
-)
+FIRMWARE_CHANNELS = {
+    "left_forward": 0,
+    "left_reverse": 1,
+    "right_forward": 2,
+    "right_reverse": 3,
+}
 
 
 def _make_reader_with_firmware_channels(
-    bus: "FakeSMBus",
+    bus: FakeSMBus,
     left_calibration: MotorCurrentCalibration | None = None,
     right_calibration: MotorCurrentCalibration | None = None,
 ) -> ADS1115MotorCurrentReader:
@@ -258,7 +262,7 @@ def test_firmware_calibration_8p5_amps_per_volt_fwd_2p5v() -> None:
     """IS_L_fwd=2.5 V, IS_L_rev=0 V → left current ≈ 2.5 × 8.5 = 21.25 A."""
     # 2.5 V at FSR ±4.096 V → raw = 2.5 / (4.096/32768) ≈ 20000
     lsb = 4.096 / 32768.0
-    raw_fwd = int(round(2.5 / lsb))
+    raw_fwd = round(2.5 / lsb)
     raw_bytes_fwd = [(raw_fwd >> 8) & 0xFF, raw_fwd & 0xFF]
     raw_bytes_zero = [0x00, 0x00]
     bus = FakeSMBus(conversion_responses=[raw_bytes_fwd, raw_bytes_zero])
@@ -274,7 +278,7 @@ def test_firmware_calibration_8p5_amps_per_volt_fwd_2p5v() -> None:
 def test_firmware_calibration_8p5_amps_per_volt_rev_2p0v() -> None:
     """IS_L_rev=2.0 V, IS_L_fwd=0 V → left current ≈ 2.0 × 8.5 = 17.0 A (reverse)."""
     lsb = 4.096 / 32768.0
-    raw_rev = int(round(2.0 / lsb))
+    raw_rev = round(2.0 / lsb)
     raw_bytes_rev = [(raw_rev >> 8) & 0xFF, raw_rev & 0xFF]
     raw_bytes_zero = [0x00, 0x00]
     bus = FakeSMBus(conversion_responses=[raw_bytes_rev, raw_bytes_zero])

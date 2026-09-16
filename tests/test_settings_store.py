@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from settings_store import MotorTrimStore, load_motor_trim
 
 
