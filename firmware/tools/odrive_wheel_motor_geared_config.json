@@ -1,22 +1,6 @@
 {
   "axis0": {
     "config": {
-      "can_heartbeat_rate_ms": 100,
-      "can_node_id_extended": false,
-      "can_node_id": 0,
-      "dir_gpio_pin": 2,
-      "enable_step_dir": false,
-      "enable_watchdog": false,
-      "startup_closed_loop_control": true,
-      "startup_encoder_index_search": false,
-      "startup_encoder_offset_calibration": false,
-      "startup_homing": false,
-      "startup_motor_calibration": false,
-      "startup_sensorless_control": false,
-      "step_dir_always_on": false,
-      "step_gpio_pin": 1,
-      "turns_per_step": 0.0009765625,
-      "watchdog_timeout": 1.0,
       "calibration_lockin": {
         "accel": 20.0,
         "current": 10.0,
@@ -24,6 +8,12 @@
         "ramp_time": 0.4000000059604645,
         "vel": 40.0
       },
+      "can_heartbeat_rate_ms": 100,
+      "can_node_id": 0,
+      "can_node_id_extended": false,
+      "dir_gpio_pin": 2,
+      "enable_step_dir": false,
+      "enable_watchdog": false,
       "general_lockin": {
         "accel": 20.0,
         "current": 10.0,
@@ -45,10 +35,29 @@
         "ramp_distance": 3.1415927410125732,
         "ramp_time": 0.4000000059604645,
         "vel": 400.0
-      }
+      },
+      "startup_closed_loop_control": true,
+      "startup_encoder_index_search": false,
+      "startup_encoder_offset_calibration": false,
+      "startup_homing": false,
+      "startup_motor_calibration": false,
+      "startup_sensorless_control": false,
+      "step_dir_always_on": false,
+      "step_gpio_pin": 1,
+      "turns_per_step": 0.0009765625,
+      "watchdog_timeout": 1.0
     },
     "controller": {
       "config": {
+        "anticogging": {
+          "anticogging_enabled": true,
+          "calib_anticogging": false,
+          "calib_pos_threshold": 1.0,
+          "calib_vel_threshold": 1.0,
+          "cogging_ratio": 1.0,
+          "index": 0,
+          "pre_calibrated": false
+        },
         "axis_to_mirror": 255,
         "circular_setpoint_range": 1.0,
         "circular_setpoints": false,
@@ -70,23 +79,14 @@
         "vel_integrator_gain": 0.10000000149011612,
         "vel_limit": 100.0,
         "vel_limit_tolerance": 1.2000000476837158,
-        "vel_ramp_rate": 1.0,
-        "anticogging": {
-          "anticogging_enabled": true,
-          "calib_anticogging": false,
-          "calib_pos_threshold": 1.0,
-          "calib_vel_threshold": 1.0,
-          "cogging_ratio": 1.0,
-          "index": 0,
-          "pre_calibrated": false
-        }
+        "vel_ramp_rate": 1.0
       }
     },
     "encoder": {
       "config": {
         "abs_spi_cs_gpio_pin": 1,
         "bandwidth": 1000.0,
-        "calib_range": 0.5,
+        "calib_range": 0.05000000074505806,
         "calib_scan_distance": 50.26548385620117,
         "calib_scan_omega": 12.566370964050293,
         "cpr": 90,
@@ -95,8 +95,8 @@
         "idx_search_unidirectional": false,
         "ignore_illegal_hall_state": false,
         "mode": 1,
-        "offset_float": 0.494422,
-        "offset": -80,
+        "offset": 87,
+        "offset_float": 0.5671562552452087,
         "pre_calibrated": true,
         "sincos_gpio_pin_cos": 4,
         "sincos_gpio_pin_sin": 3,
@@ -141,14 +141,14 @@
         "acim_slip_velocity": 14.706000328063965,
         "calibration_current": 10.0,
         "current_control_bandwidth": 1000.0,
-        "current_lim_margin": 8.0,
         "current_lim": 100.0,
+        "current_lim_margin": 8.0,
         "direction": 1,
         "inverter_temp_limit_lower": 100.0,
         "inverter_temp_limit_upper": 120.0,
         "motor_type": 0,
-        "phase_inductance": 0.00019960274221375585,
-        "phase_resistance": 0.10521838814020157,
+        "phase_inductance": 0.00014879071386530995,
+        "phase_resistance": 0.08390914648771286,
         "pole_pairs": 15,
         "pre_calibrated": true,
         "requested_current_range": 30.0,
@@ -186,22 +186,6 @@
   },
   "axis1": {
     "config": {
-      "can_heartbeat_rate_ms": 100,
-      "can_node_id_extended": false,
-      "can_node_id": 1,
-      "dir_gpio_pin": 8,
-      "enable_step_dir": false,
-      "enable_watchdog": false,
-      "startup_closed_loop_control": true,
-      "startup_encoder_index_search": false,
-      "startup_encoder_offset_calibration": false,
-      "startup_homing": false,
-      "startup_motor_calibration": false,
-      "startup_sensorless_control": false,
-      "step_dir_always_on": false,
-      "step_gpio_pin": 7,
-      "turns_per_step": 0.0009765625,
-      "watchdog_timeout": 1.0,
       "calibration_lockin": {
         "accel": 20.0,
         "current": 10.0,
@@ -209,6 +193,12 @@
         "ramp_time": 0.4000000059604645,
         "vel": 40.0
       },
+      "can_heartbeat_rate_ms": 100,
+      "can_node_id": 1,
+      "can_node_id_extended": false,
+      "dir_gpio_pin": 8,
+      "enable_step_dir": false,
+      "enable_watchdog": false,
       "general_lockin": {
         "accel": 20.0,
         "current": 10.0,
@@ -230,10 +220,29 @@
         "ramp_distance": 3.1415927410125732,
         "ramp_time": 0.4000000059604645,
         "vel": 400.0
-      }
+      },
+      "startup_closed_loop_control": true,
+      "startup_encoder_index_search": false,
+      "startup_encoder_offset_calibration": false,
+      "startup_homing": false,
+      "startup_motor_calibration": false,
+      "startup_sensorless_control": false,
+      "step_dir_always_on": false,
+      "step_gpio_pin": 7,
+      "turns_per_step": 0.0009765625,
+      "watchdog_timeout": 1.0
     },
     "controller": {
       "config": {
+        "anticogging": {
+          "anticogging_enabled": true,
+          "calib_anticogging": false,
+          "calib_pos_threshold": 1.0,
+          "calib_vel_threshold": 1.0,
+          "cogging_ratio": 1.0,
+          "index": 0,
+          "pre_calibrated": false
+        },
         "axis_to_mirror": 255,
         "circular_setpoint_range": 1.0,
         "circular_setpoints": false,
@@ -255,23 +264,14 @@
         "vel_integrator_gain": 0.10000000149011612,
         "vel_limit": 100.0,
         "vel_limit_tolerance": 1.2000000476837158,
-        "vel_ramp_rate": 1.0,
-        "anticogging": {
-          "anticogging_enabled": true,
-          "calib_anticogging": false,
-          "calib_pos_threshold": 1.0,
-          "calib_vel_threshold": 1.0,
-          "cogging_ratio": 1.0,
-          "index": 0,
-          "pre_calibrated": false
-        }
+        "vel_ramp_rate": 1.0
       }
     },
     "encoder": {
       "config": {
         "abs_spi_cs_gpio_pin": 1,
         "bandwidth": 1000.0,
-        "calib_range": 0.5,
+        "calib_range": 0.05000000074505806,
         "calib_scan_distance": 50.26548385620117,
         "calib_scan_omega": 12.566370964050293,
         "cpr": 90,
@@ -280,8 +280,8 @@
         "idx_search_unidirectional": false,
         "ignore_illegal_hall_state": false,
         "mode": 1,
-        "offset_float": 1.478297,
-        "offset": -138,
+        "offset": 104,
+        "offset_float": 1.4873125553131104,
         "pre_calibrated": true,
         "sincos_gpio_pin_cos": 4,
         "sincos_gpio_pin_sin": 3,
@@ -326,14 +326,14 @@
         "acim_slip_velocity": 14.706000328063965,
         "calibration_current": 10.0,
         "current_control_bandwidth": 1000.0,
-        "current_lim_margin": 8.0,
         "current_lim": 100.0,
+        "current_lim_margin": 8.0,
         "direction": 1,
         "inverter_temp_limit_lower": 100.0,
         "inverter_temp_limit_upper": 120.0,
         "motor_type": 0,
-        "phase_inductance": 0.00018927118799183518,
-        "phase_resistance": 0.10455791652202606,
+        "phase_inductance": 0.00014408757851924747,
+        "phase_resistance": 0.08579373359680176,
         "pole_pairs": 15,
         "pre_calibrated": true,
         "requested_current_range": 30.0,
@@ -372,7 +372,7 @@
   "can": {
     "config": {
       "baud_rate": 250000,
-      "protocol": 1
+      "protocol": 0
     }
   },
   "config": {
@@ -387,8 +387,6 @@
     "enable_dc_bus_overvoltage_ramp": false,
     "enable_i2c_instead_of_can": false,
     "enable_uart": true,
-    "max_regen_current": 0.0,
-    "uart_baudrate": 115200,
     "gpio1_pwm_mapping": {
       "endpoint": null,
       "max": 0.0,
@@ -418,6 +416,8 @@
       "endpoint": null,
       "max": 0.0,
       "min": 0.0
-    }
+    },
+    "max_regen_current": 0.0,
+    "uart_baudrate": 115200
   }
 }

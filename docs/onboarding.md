@@ -9,7 +9,7 @@
 
 - `biba-controller/` — Python-runtime для Raspberry Pi: CRSF, управление
   моторами, BMS, телеметрия, settings UI и звук.
-- `firmware/` — единый PlatformIO-проект для STM32F103 и RP2040.
+- `firmware/` — единый PlatformIO-проект для RP2040 (STM32F103-таргеты удалены).
 - `firmware/targets/` — распиновка, возможности и калибровки конкретных плат.
 - `firmware/test/` — host-side Unity-тесты переносимого C-кода.
 - `tests/` — pytest-тесты Python-runtime, скриптов, протокола и ROS2-файлов.
@@ -46,8 +46,8 @@ main.c / main_rp2040.cpp
   failsafe, ramp, RPM PI, спектральную и zero-crossing оценку RPM, телеметрию.
 - `drivers/` содержит CRSF, BTS7960, current/voltage sense, IMU, ADS1115 и
   AHT30. Драйвер обращается к железу через фасад `hal/biba_hal.h`.
-- `hal/` реализует этот фасад отдельно для STM32 и RP2040; код приложения не
-  должен напрямую включать STM32Cube или Pico SDK.
+- `hal/` реализует этот фасад для RP2040; код приложения не должен напрямую
+  включать Pico SDK.
 - `proto/` задаёт фиксированный 64-байтный SBC/MCU wire format. Его версия и
   раскладка должны оставаться согласованы с
   `biba-controller/stm32_link/protocol.py`.
@@ -68,12 +68,13 @@ main.c / main_rp2040.cpp
 
 | Target | Назначение и отличия | Env |
 | --- | --- | --- |
-| `BLUEPILL_F103C8` | Настоящий STM32F103C8, CRSF через USART3, SPI2 companion, четыре PWM на общем TIM1; независимый motor-audio недоступен | `bluepill_f103c8_{standalone,companion,combined}` |
-| `BLUEPILL_F103C8_CLONE` | Клон с 8 КБ RAM и отдельным linker script; CRSF перенесён на USART2 из-за отсутствующего USART3, поэтому правые current-sense каналы недоступны и алиасованы на левые | `bluepill_f103c8_clone_{standalone,companion,combined}` |
-| `BIBA_F103_REV_A` | Нераспаянный прототип custom PCB; четыре независимых PWM-таймера, другие калибровки тока/VBAT, поддержка motor-audio | `biba_f103_rev_a_{standalone,companion,combined}` |
 | `RPICO_RP2040` | Текущий default: Arduino-Pico, CRSF UART0, SBC UART1, BTS7960, I2C и четыре ADC-канала; current/power limits временно выключены до аппаратной доработки | `rpico_rp2040_standalone`, `rpico_rp2040_companion`, `rpico_rp2040_is_poc` |
 | `RPICO_RP2040_BLDC` | Альтернативный RP2040-таргет: пара BLDC через ODrive по CAN (MCP2515 на SPI0 GP16–19, INT=GP15); BTS7960 и native ADC-сheck отключены. Архитектура и обоснование — `docs/adr/0001-pico-bldc-target.md`. | `rpico_rp2040_bldc_{standalone,companion,combined}` |
 | без target | Переносимые host-тесты | `native_test` |
+
+STM32F103-таргеты (`BLUEPILL_F103C8`, `BLUEPILL_F103C8_CLONE`,
+`BIBA_F103_REV_A`) удалены из проекта — прошивка под STM32 больше не
+собирается и не поддерживается.
 
 `rpico_rp2040_standalone` указан как `default_envs`. RP2040 platform сейчас
 задан локальным URI `file:///home/ros2/.platformio/platforms/rp2040`, поэтому
@@ -99,27 +100,27 @@ shellcheck scripts/*.sh scripts/setup/*.sh
 
 cd firmware
 pio test -e native_test
-pio run -e bluepill_f103c8_standalone
-pio run -e biba_f103_rev_a_standalone
 pio run -e rpico_rp2040_standalone
 pio run -e rpico_rp2040_bldc_standalone    # BLDC/CAN variant
 ```
 
-STM32 загружается через ST-Link (`pio run -e <env> -t upload`), RP2040 — через
-`picotool`/BOOTSEL. Не прошивайте и не запускайте моторный тест без отдельного
-hardware safety check; unit/build success не заменяет field validation.
+RP2040 прошивается через `picotool`/BOOTSEL (`pio run -e <env> -t upload`). Не
+прошивайте и не запускайте моторный тест без отдельного hardware safety
+check; unit/build success не заменяет field validation.
 
 CI делает следующее:
 
 - `G-Build-Controller-Image.yml`: Ruff, ShellCheck, pytest и arm64 Docker build;
-- `G-Build-STM32F103.yml`: `native_test` и матрица
-  `{bluepill_f103c8,biba_f103_rev_a} x {standalone,companion,combined}`;
-- `G-Build-All.yml`: на `main` сводит controller, STM32 и ROS2 image builds.
+- `G-Build-Firmware-Native-Tests.yml`: только `native_test` (портируемый код,
+  без сборки под конкретный таргет);
+- `G-Build-All.yml`: на `main` сводит controller, firmware native tests и
+  ROS2 image builds.
 
-Clone и RP2040 env сейчас не входят в firmware CI-матрицу, поэтому их нужно
-собирать явно перед PR. Для embedded-изменения минимальный набор —
-`native_test` плюс каждый затронутый hardware env; для изменения wire protocol
-добавляются соответствующие C и Python тесты.
+RP2040 env'ы сейчас не входят в firmware CI-матрицу (сборка под конкретный
+таргет в CI не производится), поэтому их нужно собирать явно перед PR. Для
+embedded-изменения минимальный набор — `native_test` плюс каждый затронутый
+hardware env; для изменения wire protocol добавляются соответствующие C и
+Python тесты.
 
 ## Конвенции кода и targets
 

@@ -75,7 +75,7 @@ void biba_hal_left_enable(bool enabled);
 void biba_hal_right_enable(bool enabled);
 
 /* SSR (Solid-State Relay) — BTS7960 power-rail control.
- * Implemented in biba_hal_rp2040.c; no-op stubs in biba_hal.c (STM32/debug).
+ * Implemented in biba_hal_rp2040.c.
  * D-13: init drives pin LOW at boot; set follows arm state in mode_standalone. */
 void biba_hal_ssr_init(void);
 void biba_hal_ssr_set(bool enabled);
@@ -83,9 +83,9 @@ void biba_hal_ssr_set(bool enabled);
 /* --- Motor PWM ---------------------------------------------------------- */
 
 /* Initialise the four BTS7960 motor-PWM lines. The exact topology is
- * per-target: BLUEPILL_F103C8 uses a single shared timer (TIM1), while
- * BIBA_F103_REV_A binds each line to its own hardware timer so the
- * motor-audio API below can run four independent carriers at once. */
+ * per-target: some targets use a single shared timer, while others bind
+ * each line to its own hardware timer so the motor-audio API below can
+ * run four independent carriers at once (BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM). */
 void biba_hal_motor_pwm_init(void);
 
 /* Traction-mode drive. `duty` is [-1.0, 1.0]. Negative drives LPWM,
