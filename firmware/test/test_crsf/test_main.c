@@ -156,6 +156,56 @@ static void test_parse_link_stats_reads_all_fields(void)
     TEST_ASSERT_EQUAL_INT(-4, stats.downlink_snr);
 }
 
+static void test_pack_channels_matches_reference_packer(void)
+{
+    uint16_t channels[CRSF_RC_CHANNEL_COUNT] = {
+        172, 300, 600, 900, 992, 1200, 1400, 1600,
+        1811, 500, 700, 800, 1000, 1100, 1300, 2047
+    };
+    uint8_t expected[22];
+    uint8_t got[22];
+    pack_channels(channels, expected);
+    biba_crsf_pack_channels(channels, got);
+    TEST_ASSERT_EQUAL_MEMORY(expected, got, sizeof(expected));
+
+    uint16_t back[CRSF_RC_CHANNEL_COUNT];
+    TEST_ASSERT_TRUE(biba_crsf_unpack_channels(got, sizeof(got), back));
+    TEST_ASSERT_EQUAL_UINT16_ARRAY(channels, back, CRSF_RC_CHANNEL_COUNT);
+}
+
+static void test_build_frame_matches_reference_and_parses(void)
+{
+    const uint8_t payload[] = {0xAA, 0x55, 0x01};
+    uint8_t expected[8];
+    uint8_t got[8];
+    size_t exp_len = make_frame(CRSF_FRAMETYPE_LINK_STATS, payload, sizeof(payload), expected);
+    size_t len = biba_crsf_build_frame(CRSF_FRAMETYPE_LINK_STATS, payload, sizeof(payload),
+                                       got, sizeof(got));
+    TEST_ASSERT_EQUAL_INT((int)exp_len, (int)len);
+    TEST_ASSERT_EQUAL_MEMORY(expected, got, len);
+    TEST_ASSERT_EQUAL_UINT8(CRSF_FRAMETYPE_LINK_STATS,
+                            biba_crsf_parse_frame(got, len, NULL, NULL));
+}
+
+static void test_build_frame_rejects_small_buffer(void)
+{
+    const uint8_t payload[4] = {0};
+    uint8_t out[7];
+    TEST_ASSERT_EQUAL_INT(0, (int)biba_crsf_build_frame(CRSF_FRAMETYPE_RC_CHANNELS,
+                                                        payload, sizeof(payload),
+                                                        out, sizeof(out)));
+}
+
+static void test_link_stats_pack_parse_roundtrip(void)
+{
+    biba_crsf_link_stats_t in = {120, 130, 95, -8, 1, 2, 3, 100, 80, -4};
+    uint8_t payload[CRSF_LINK_STATS_PAYLOAD_SIZE];
+    biba_crsf_pack_link_stats(&in, payload);
+    biba_crsf_link_stats_t out;
+    TEST_ASSERT_TRUE(biba_crsf_parse_link_stats(payload, sizeof(payload), &out));
+    TEST_ASSERT_EQUAL_MEMORY(&in, &out, sizeof(in));
+}
+
 static void run_all(void)
 {
     RUN_TEST(test_crc8_known_vector_matches_python);
@@ -166,6 +216,10 @@ static void run_all(void)
     RUN_TEST(test_pop_frame_skips_noise_and_oversized);
     RUN_TEST(test_pop_frame_leaves_trailing_partial_in_buffer);
     RUN_TEST(test_parse_link_stats_reads_all_fields);
+    RUN_TEST(test_pack_channels_matches_reference_packer);
+    RUN_TEST(test_build_frame_matches_reference_and_parses);
+    RUN_TEST(test_build_frame_rejects_small_buffer);
+    RUN_TEST(test_link_stats_pack_parse_roundtrip);
 }
 
 #if defined(BIBA_TEST_STANDALONE)

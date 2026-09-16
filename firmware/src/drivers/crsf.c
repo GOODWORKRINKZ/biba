@@ -135,3 +135,59 @@ bool biba_crsf_parse_link_stats(const uint8_t *payload,
     stats->downlink_snr         = (int8_t)payload[9];
     return true;
 }
+
+void biba_crsf_pack_channels(const uint16_t channels[CRSF_RC_CHANNEL_COUNT],
+                             uint8_t out[CRSF_RC_PAYLOAD_SIZE])
+{
+    if (channels == NULL || out == NULL) return;
+
+    /* 16 channels, 11 bits each, little-endian bit packing. */
+    uint32_t accumulator = 0;
+    unsigned bits_in_accumulator = 0;
+    size_t byte_index = 0;
+    for (unsigned ch = 0; ch < CRSF_RC_CHANNEL_COUNT; ++ch) {
+        accumulator |= ((uint32_t)(channels[ch] & 0x07FFu)) << bits_in_accumulator;
+        bits_in_accumulator += 11;
+        while (bits_in_accumulator >= 8) {
+            out[byte_index++] = (uint8_t)(accumulator & 0xFFu);
+            accumulator >>= 8;
+            bits_in_accumulator -= 8;
+        }
+    }
+    /* 176 bits divide evenly into 22 bytes, nothing is left over. */
+}
+
+void biba_crsf_pack_link_stats(const biba_crsf_link_stats_t *stats,
+                               uint8_t out[CRSF_LINK_STATS_PAYLOAD_SIZE])
+{
+    if (stats == NULL || out == NULL) return;
+    out[0] = stats->uplink_rssi_1;
+    out[1] = stats->uplink_rssi_2;
+    out[2] = stats->uplink_link_quality;
+    out[3] = (uint8_t)stats->uplink_snr;
+    out[4] = stats->active_antenna;
+    out[5] = stats->rf_mode;
+    out[6] = stats->uplink_tx_power;
+    out[7] = stats->downlink_rssi;
+    out[8] = stats->downlink_link_quality;
+    out[9] = (uint8_t)stats->downlink_snr;
+}
+
+size_t biba_crsf_build_frame(uint8_t type,
+                             const uint8_t *payload,
+                             size_t payload_len,
+                             uint8_t *out,
+                             size_t out_cap)
+{
+    if (out == NULL) return 0;
+    if (payload == NULL && payload_len != 0) return 0;
+    size_t frame_len = payload_len + 4;
+    if (frame_len > CRSF_MAX_FRAME_SIZE || frame_len > out_cap) return 0;
+
+    out[0] = CRSF_SYNC_BYTE;
+    out[1] = (uint8_t)(payload_len + 2);   /* type + payload + crc */
+    out[2] = type;
+    if (payload_len > 0) memcpy(&out[3], payload, payload_len);
+    out[frame_len - 1] = biba_crsf_crc8_dvb_s2(&out[2], payload_len + 1);
+    return frame_len;
+}

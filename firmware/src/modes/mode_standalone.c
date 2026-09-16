@@ -1585,16 +1585,23 @@ void biba_mode_standalone_tick(void)
             s_last_log_ms = now;
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
             int current_limited = (left_limited || right_limited) ? 1 : 0;
+#if BIBA_TARGET_HAS_BLDC_2CH
+            int alive_l = (int)biba_odrive_node_alive(0u);
+            int alive_r = (int)biba_odrive_node_alive(1u);
+            unsigned long odrv_tx = (unsigned long)biba_odrive_tx_count();
+            unsigned long odrv_rx = (unsigned long)biba_odrive_rx_count();
+            unsigned long odrv_rc = (unsigned long)biba_odrive_recovery_count();
+            unsigned long odrv_or = (unsigned long)biba_odrive_reset_count();
+#else
+            int alive_l = 0, alive_r = 0;
+            unsigned long odrv_tx = 0, odrv_rx = 0, odrv_rc = 0, odrv_or = 0;
+#endif
             printf("[biba] t=%lu fs=%d arm=%d spd=%d stab=%d thr=%d str=%d L=%d R=%d cl=%d alL=%d alR=%d tx=%lu rx=%lu rc=%lu or=%lu rssi=%d lq=%d\r\n",
                    now, (int)failsafe, (int)armed, spd, (int)stabilized,
                    (int)(raw_throttle * 100), (int)(raw_steering * 100),
                    (int)(left_out * 100), (int)(right_out * 100),
                    current_limited,
-                   (int)biba_odrive_node_alive(0u), (int)biba_odrive_node_alive(1u),
-                   (unsigned long)biba_odrive_tx_count(),
-                   (unsigned long)biba_odrive_rx_count(),
-                   (unsigned long)biba_odrive_recovery_count(),
-                   (unsigned long)biba_odrive_reset_count(),
+                   alive_l, alive_r, odrv_tx, odrv_rx, odrv_rc, odrv_or,
                    s_link.uplink_rssi_1, s_link.uplink_link_quality);
 
             /* CRSF/DMA health line every 5 s */

@@ -26,6 +26,7 @@ PlatformIO в каждом env. Никаких лесенок `#ifdef TARGET == 
 | ----------------------- | ----------------------------------------------------------- |
 | `RPICO_RP2040`          | Pico с BTS7960 и SBC по UART1 (default `env`); см. его `target.md` |
 | `RPICO_RP2040_BLDC`     | Альтернативный таргет на той же board: пара BLDC через ODrive по CAN (MCP2515 на SPI0 GP16–19, INT=GP15). BTS7960 и native ADC отключены. Архитектура — `docs/adr/0001-pico-bldc-target.md`. |
+| `PWM2CRSF_RP2040`       | Не контроллер бибы: отдельная Pico-мост, 6×PWM с приёмника HotRC → CRSF, ставится вместо ELRS-приёмника. Один env `pwm2crsf_rp2040`, без режимов. См. его `target.md`. |
 
 STM32-таргеты (`BLUEPILL_F103C8`, `BLUEPILL_F103C8_CLONE`,
 `BIBA_F103_REV_A`) удалены — проект не собирает прошивку под STM32.
@@ -45,6 +46,9 @@ pio run -e rpico_rp2040_companion
 pio run -e rpico_rp2040_bldc_standalone
 pio run -e rpico_rp2040_bldc_companion
 pio run -e rpico_rp2040_bldc_combined
+
+# мост HotRC PWM → CRSF (отдельная плата, режимов нет)
+pio run -e pwm2crsf_rp2040
 
 # переносимые хостовые тесты (без таргета)
 pio test -e native_test

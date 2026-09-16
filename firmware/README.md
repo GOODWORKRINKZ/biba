@@ -43,6 +43,9 @@ pio run -e rpico_rp2040_bldc_standalone
 pio run -e rpico_rp2040_bldc_companion
 pio run -e rpico_rp2040_bldc_combined
 
+# мост HotRC PWM → CRSF (отдельная Pico вместо ELRS-приёмника)
+pio run -e pwm2crsf_rp2040
+
 # прошивка через picotool
 pio run -e rpico_rp2040_standalone -t upload
 
@@ -70,7 +73,8 @@ firmware/
 ├── targets/
 │   ├── README.md              # как добавить новый таргет
 │   ├── RPICO_RP2040/          # {target.h, target_config.h, target.md}
-│   └── RPICO_RP2040_BLDC/     # {target.h, target_config.h, target.md}
+│   ├── RPICO_RP2040_BLDC/     # {target.h, target_config.h, target.md}
+│   └── PWM2CRSF_RP2040/       # мост HotRC 6×PWM → CRSF (src/pwm2crsf/)
 └── test/                      # хостовые тесты на Unity для переносимых модулей
 ```
 
