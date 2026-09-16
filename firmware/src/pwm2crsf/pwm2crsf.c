@@ -8,21 +8,31 @@ void pwm2crsf_init(pwm2crsf_state_t *state)
     memset(state, 0, sizeof(*state));
 }
 
-void pwm2crsf_reset_cycle(pwm2crsf_state_t *state)
+void pwm2crsf_reset_on_link_loss(pwm2crsf_state_t *state)
 {
     if (state == NULL) return;
-    state->cycle_primed       = false;
-    state->cycle_btn_high     = false;
-    state->cycle_step         = 0;
-    state->cycle_last_edge_us = 0;
+    memset(state->buttons, 0, sizeof(state->buttons));
+    state->arm_ready = false;
 }
 
-static bool cycle_enabled(const pwm2crsf_config_t *cfg)
+uint8_t pwm2crsf_button_step(const pwm2crsf_state_t *state, uint8_t slot)
 {
-    return cfg->cycle_input >= 0
-        && (uint8_t)cfg->cycle_input < cfg->input_count
-        && cfg->cycle_steps >= 2
-        && cfg->cycle_crsf_ch < CRSF_RC_CHANNEL_COUNT;
+    if (state == NULL || slot >= PWM2CRSF_MAX_BUTTONS) return 0;
+    return state->buttons[slot].step;
+}
+
+static bool input_valid(const pwm2crsf_config_t *cfg, int8_t input)
+{
+    return input >= 0
+        && (uint8_t)input < cfg->input_count
+        && (uint8_t)input < PWM2CRSF_MAX_INPUTS;
+}
+
+static bool button_enabled(const pwm2crsf_config_t *cfg, const pwm2crsf_button_t *b)
+{
+    return input_valid(cfg, b->input)
+        && b->steps >= 2
+        && b->crsf_ch < CRSF_RC_CHANNEL_COUNT;
 }
 
 /* Pulse width after the per-input invert. */
@@ -35,36 +45,37 @@ static uint32_t effective_width(const pwm2crsf_config_t *cfg, uint8_t input, uin
     return width;
 }
 
-static void cycle_on_pulse(pwm2crsf_state_t *state,
-                           const pwm2crsf_config_t *cfg,
-                           uint32_t width_us,
-                           uint64_t now_us)
+static void button_on_pulse(pwm2crsf_button_state_t *bs,
+                            const pwm2crsf_button_t *b,
+                            const pwm2crsf_config_t *cfg,
+                            uint32_t width_us,
+                            uint64_t now_us)
 {
     bool high;
-    if (width_us >= cfg->cycle_high_us) {
+    if (width_us >= cfg->button_high_us) {
         high = true;
-    } else if (width_us <= cfg->cycle_low_us) {
+    } else if (width_us <= cfg->button_low_us) {
         high = false;
     } else {
         return;   /* inside the hysteresis band: keep the old level */
     }
 
-    if (!state->cycle_primed) {
+    if (!bs->primed) {
         /* First reading after boot / link loss is the baseline, not a press. */
-        state->cycle_primed   = true;
-        state->cycle_btn_high = high;
+        bs->primed = true;
+        bs->high   = high;
         return;
     }
-    if (high == state->cycle_btn_high) return;
-    state->cycle_btn_high = high;
+    if (high == bs->high) return;
+    bs->high = high;
 
-    if (!high && !cfg->cycle_count_both_edges) return;
-    if (state->cycle_last_edge_us != 0
-            && now_us - state->cycle_last_edge_us < cfg->cycle_min_interval_us) {
+    if (!high && !b->count_both_edges) return;
+    if (bs->last_edge_us != 0
+            && now_us - bs->last_edge_us < cfg->button_min_interval_us) {
         return;
     }
-    state->cycle_last_edge_us = now_us;
-    state->cycle_step = (uint8_t)((state->cycle_step + 1u) % cfg->cycle_steps);
+    bs->last_edge_us = now_us;
+    bs->step = (uint8_t)((bs->step + 1u) % b->steps);
 }
 
 bool pwm2crsf_on_pulse(pwm2crsf_state_t *state,
@@ -82,8 +93,17 @@ bool pwm2crsf_on_pulse(pwm2crsf_state_t *state,
     state->width_us[input]      = (uint16_t)width_us;
     state->last_valid_us[input] = now_us;
     state->seen[input]          = true;
-    if (cycle_enabled(cfg) && input == (uint8_t)cfg->cycle_input) {
-        cycle_on_pulse(state, cfg, effective_width(cfg, input, width_us), now_us);
+
+    uint32_t eff = effective_width(cfg, input, width_us);
+    for (unsigned i = 0; i < PWM2CRSF_MAX_BUTTONS; ++i) {
+        const pwm2crsf_button_t *b = &cfg->buttons[i];
+        if (button_enabled(cfg, b) && (uint8_t)b->input == input) {
+            button_on_pulse(&state->buttons[i], b, cfg, eff, now_us);
+        }
+    }
+    if (input_valid(cfg, cfg->arm_input) && (uint8_t)cfg->arm_input == input
+            && eff <= cfg->button_low_us) {
+        state->arm_ready = true;
     }
     return true;
 }
@@ -105,16 +125,21 @@ bool pwm2crsf_link_ok(const pwm2crsf_state_t *state,
                       uint64_t now_us)
 {
     if (state == NULL || cfg == NULL) return false;
-    bool any_mapped = false;
-    for (unsigned ch = 0; ch < CRSF_RC_CHANNEL_COUNT; ++ch) {
-        int8_t input = cfg->map[ch];
-        if (input == PWM2CRSF_UNMAPPED) continue;
-        any_mapped = true;
-        if (input < 0 || !pwm2crsf_input_fresh(state, cfg, (uint8_t)input, now_us)) {
+
+    uint8_t required = cfg->required_mask;
+    if (required == 0) {
+        for (unsigned ch = 0; ch < CRSF_RC_CHANNEL_COUNT; ++ch) {
+            if (input_valid(cfg, cfg->map[ch])) required |= (uint8_t)(1u << cfg->map[ch]);
+        }
+    }
+    if (required == 0) return false;
+
+    for (uint8_t i = 0; i < PWM2CRSF_MAX_INPUTS; ++i) {
+        if ((required & (1u << i)) && !pwm2crsf_input_fresh(state, cfg, i, now_us)) {
             return false;
         }
     }
-    return any_mapped;
+    return true;
 }
 
 uint16_t pwm2crsf_us_to_crsf(const pwm2crsf_config_t *cfg, uint32_t width_us)
@@ -130,26 +155,43 @@ uint16_t pwm2crsf_us_to_crsf(const pwm2crsf_config_t *cfg, uint32_t width_us)
     return (uint16_t)(PWM2CRSF_CRSF_MIN + (offset * span_out + span_in / 2u) / span_in);
 }
 
+static uint16_t step_to_crsf(uint8_t step, uint8_t steps)
+{
+    uint32_t span = PWM2CRSF_CRSF_MAX - PWM2CRSF_CRSF_MIN;
+    uint32_t last = (uint32_t)steps - 1u;
+    if (step > last) step = 0;
+    return (uint16_t)(PWM2CRSF_CRSF_MIN + (step * span + last / 2u) / last);
+}
+
 void pwm2crsf_channels(const pwm2crsf_state_t *state,
                        const pwm2crsf_config_t *cfg,
+                       uint64_t now_us,
                        uint16_t out[CRSF_RC_CHANNEL_COUNT])
 {
     if (state == NULL || cfg == NULL || out == NULL) return;
+
     for (unsigned ch = 0; ch < CRSF_RC_CHANNEL_COUNT; ++ch) {
         int8_t input = cfg->map[ch];
-        if (cycle_enabled(cfg) && ch == cfg->cycle_crsf_ch) {
-            uint32_t span = PWM2CRSF_CRSF_MAX - PWM2CRSF_CRSF_MIN;
-            uint32_t last = cfg->cycle_steps - 1u;
-            uint8_t  step = state->cycle_step < cfg->cycle_steps ? state->cycle_step : 0u;
-            out[ch] = (uint16_t)(PWM2CRSF_CRSF_MIN + (step * span + last / 2u) / last);
-        } else if (input >= 0 && (uint8_t)input < cfg->input_count
-                && (uint8_t)input < PWM2CRSF_MAX_INPUTS) {
+        if (input_valid(cfg, input)
+                && pwm2crsf_input_fresh(state, cfg, (uint8_t)input, now_us)) {
             uint32_t width = effective_width(cfg, (uint8_t)input,
                                              state->width_us[(uint8_t)input]);
             out[ch] = pwm2crsf_us_to_crsf(cfg, width);
         } else {
             out[ch] = cfg->idle[ch];
         }
+    }
+
+    /* Step buttons own their channel; the counter survives a stale input. */
+    for (unsigned i = 0; i < PWM2CRSF_MAX_BUTTONS; ++i) {
+        const pwm2crsf_button_t *b = &cfg->buttons[i];
+        if (!button_enabled(cfg, b)) continue;
+        out[b->crsf_ch] = step_to_crsf(state->buttons[i].step, b->steps);
+    }
+
+    if (input_valid(cfg, cfg->arm_input) && cfg->arm_crsf_ch < CRSF_RC_CHANNEL_COUNT
+            && !state->arm_ready) {
+        out[cfg->arm_crsf_ch] = PWM2CRSF_CRSF_MIN;
     }
 }
 
@@ -163,7 +205,7 @@ size_t pwm2crsf_build_rc_frame(const pwm2crsf_state_t *state,
 
     uint16_t channels[CRSF_RC_CHANNEL_COUNT];
     uint8_t payload[CRSF_RC_PAYLOAD_SIZE];
-    pwm2crsf_channels(state, cfg, channels);
+    pwm2crsf_channels(state, cfg, now_us, channels);
     biba_crsf_pack_channels(channels, payload);
     return biba_crsf_build_frame(CRSF_FRAMETYPE_RC_CHANNELS,
                                  payload, sizeof(payload), out, out_cap);

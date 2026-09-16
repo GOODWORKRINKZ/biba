@@ -22,6 +22,7 @@ extern "C" {
 #endif
 
 #define PWM2CRSF_MAX_INPUTS      8u
+#define PWM2CRSF_MAX_BUTTONS     4u
 #define PWM2CRSF_UNMAPPED        (-1)
 
 /* Standard CRSF channel range (what ELRS emits for 988..2012 µs and
@@ -29,6 +30,19 @@ extern "C" {
 #define PWM2CRSF_CRSF_MIN        172u
 #define PWM2CRSF_CRSF_MID        992u
 #define PWM2CRSF_CRSF_MAX        1811u
+
+/* Step button: every press on `input` advances a counter
+ * 0 → 1 → … → steps-1 → 0, and `crsf_ch` carries it as evenly spaced
+ * values CRSF_MIN..CRSF_MAX (2 steps = 172/1811 toggle, 3 steps =
+ * 172/992/1811). input = PWM2CRSF_UNMAPPED marks an unused slot. */
+typedef struct {
+    int8_t   input;
+    uint8_t  crsf_ch;
+    uint8_t  steps;
+    /* Latching button (each press flips the level) → count both edges.
+     * Momentary button (high only while held) → count rising edges. */
+    bool     count_both_edges;
+} pwm2crsf_button_t;
 
 typedef struct {
     uint8_t  input_count;
@@ -40,35 +54,42 @@ typedef struct {
      * dropped without refreshing the input. */
     uint16_t valid_min_us;
     uint16_t valid_max_us;
-    /* A mapped input with no valid pulse for this long puts the bridge
-     * into failsafe (RC frames stop, BiBa times out on its own). */
+    /* An input with no valid pulse for this long is stale. */
     uint32_t input_timeout_us;
+    /* Inputs that must all be fresh for the link to be up (bit i = input
+     * i). A stale input outside the mask only falls back to idle[] on
+     * its channel. 0 = every input referenced by map[]. */
+    uint8_t  required_mask;
     /* For every CRSF channel: which PWM input feeds it (0-based) or
      * PWM2CRSF_UNMAPPED. */
     int8_t   map[CRSF_RC_CHANNEL_COUNT];
-    /* Constant value sent on unmapped CRSF channels. */
+    /* Value sent on unmapped channels and on channels whose input is
+     * stale. */
     uint16_t idle[CRSF_RC_CHANNEL_COUNT];
     /* Bit i set → PWM input i is mirrored around the centre of
      * min_us..max_us before conversion (reverse an axis or a button). */
     uint8_t  invert_mask;
 
-    /* Cycle button: every press on `cycle_input` advances a counter
-     * 0 → 1 → … → cycle_steps-1 → 0, and `cycle_crsf_ch` carries it as
-     * evenly spaced values CRSF_MIN..CRSF_MAX (3 steps = 172/992/1811).
-     * Lets a single HotRC button drive BiBa's 3-position speed switch.
-     * cycle_input = PWM2CRSF_UNMAPPED disables it. */
-    int8_t   cycle_input;
-    uint8_t  cycle_crsf_ch;
-    uint8_t  cycle_steps;
-    /* Latching button (each press flips the level) → count both edges.
-     * Momentary button (high only while held) → count rising edges. */
-    bool     cycle_count_both_edges;
     /* Button level hysteresis, µs (after invert_mask is applied). */
-    uint16_t cycle_high_us;
-    uint16_t cycle_low_us;
+    uint16_t button_high_us;
+    uint16_t button_low_us;
     /* Edges closer than this to the previous counted one are ignored. */
-    uint32_t cycle_min_interval_us;
+    uint32_t button_min_interval_us;
+    pwm2crsf_button_t buttons[PWM2CRSF_MAX_BUTTONS];
+
+    /* Arm interlock: `arm_crsf_ch` is forced to CRSF_MIN until the arm
+     * input has been seen in its low (disarmed) position since boot or
+     * the last link loss. PWM2CRSF_UNMAPPED disables it. */
+    int8_t   arm_input;
+    uint8_t  arm_crsf_ch;
 } pwm2crsf_config_t;
+
+typedef struct {
+    bool     primed;           /* button level known */
+    bool     high;
+    uint8_t  step;
+    uint64_t last_edge_us;
+} pwm2crsf_button_state_t;
 
 typedef struct {
     uint16_t width_us[PWM2CRSF_MAX_INPUTS];
@@ -76,10 +97,8 @@ typedef struct {
     bool     seen[PWM2CRSF_MAX_INPUTS];
     uint32_t glitches;
 
-    bool     cycle_primed;     /* button level known */
-    bool     cycle_btn_high;
-    uint8_t  cycle_step;
-    uint64_t cycle_last_edge_us;
+    pwm2crsf_button_state_t buttons[PWM2CRSF_MAX_BUTTONS];
+    bool     arm_ready;        /* arm input seen low since last reset */
 } pwm2crsf_state_t;
 
 void pwm2crsf_init(pwm2crsf_state_t *state);
@@ -98,14 +117,17 @@ bool pwm2crsf_input_fresh(const pwm2crsf_state_t *state,
                           uint8_t input,
                           uint64_t now_us);
 
-/* True when every input referenced by cfg->map is fresh. */
+/* True when every required input is fresh. */
 bool pwm2crsf_link_ok(const pwm2crsf_state_t *state,
                       const pwm2crsf_config_t *cfg,
                       uint64_t now_us);
 
-/* Back to the first cycle step and forget the button level. Call when
- * the link drops so BiBa always comes back in the slowest mode. */
-void pwm2crsf_reset_cycle(pwm2crsf_state_t *state);
+/* Call when the link drops: buttons go back to their first step and the
+ * arm interlock re-engages, so BiBa comes back disarmed, slow, MANUAL. */
+void pwm2crsf_reset_on_link_loss(pwm2crsf_state_t *state);
+
+/* Current step of button slot `slot` (0 if the slot is unused). */
+uint8_t pwm2crsf_button_step(const pwm2crsf_state_t *state, uint8_t slot);
 
 /* Linear min_us..max_us → CRSF_MIN..CRSF_MAX, clamped. */
 uint16_t pwm2crsf_us_to_crsf(const pwm2crsf_config_t *cfg, uint32_t width_us);
@@ -113,6 +135,7 @@ uint16_t pwm2crsf_us_to_crsf(const pwm2crsf_config_t *cfg, uint32_t width_us);
 /* Fill all 16 CRSF channels from the current state. */
 void pwm2crsf_channels(const pwm2crsf_state_t *state,
                        const pwm2crsf_config_t *cfg,
+                       uint64_t now_us,
                        uint16_t out[CRSF_RC_CHANNEL_COUNT]);
 
 /* Build the RC-channels frame to send now. Returns the frame length, or

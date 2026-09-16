@@ -27,17 +27,26 @@ static const pwm2crsf_config_t kConfig = {
     .valid_min_us     = PWM2CRSF_VALID_MIN_US,
     .valid_max_us     = PWM2CRSF_VALID_MAX_US,
     .input_timeout_us = PWM2CRSF_INPUT_TIMEOUT_MS * 1000u,
+    .required_mask    = PWM2CRSF_REQUIRED_MASK,
     .map              = PWM2CRSF_CHANNEL_MAP,
     .idle             = PWM2CRSF_IDLE_VALUES,
     .invert_mask      = PWM2CRSF_INPUT_INVERT_MASK,
-    .cycle_input      = PWM2CRSF_SPEED_BUTTON_INPUT,
-    .cycle_crsf_ch    = PWM2CRSF_SPEED_CRSF_CH,
-    .cycle_steps      = PWM2CRSF_SPEED_STEPS,
-    .cycle_count_both_edges = PWM2CRSF_SPEED_BUTTON_LATCHING != 0,
-    .cycle_high_us    = PWM2CRSF_BUTTON_HIGH_US,
-    .cycle_low_us     = PWM2CRSF_BUTTON_LOW_US,
-    .cycle_min_interval_us = PWM2CRSF_BUTTON_MIN_INTERVAL_MS * 1000u,
+    .button_high_us   = PWM2CRSF_BUTTON_HIGH_US,
+    .button_low_us    = PWM2CRSF_BUTTON_LOW_US,
+    .button_min_interval_us = PWM2CRSF_BUTTON_MIN_INTERVAL_MS * 1000u,
+    .buttons = {
+        { PWM2CRSF_SPEED_BUTTON_INPUT, PWM2CRSF_SPEED_CRSF_CH,
+          PWM2CRSF_SPEED_STEPS, PWM2CRSF_SPEED_BUTTON_LATCHING != 0 },
+        { PWM2CRSF_DRIVE_BUTTON_INPUT, PWM2CRSF_DRIVE_CRSF_CH,
+          2, PWM2CRSF_DRIVE_BUTTON_LATCHING != 0 },
+        { PWM2CRSF_UNMAPPED, 0, 0, false },
+        { PWM2CRSF_UNMAPPED, 0, 0, false },
+    },
+    .arm_input        = PWM2CRSF_ARM_INPUT,
+    .arm_crsf_ch      = PWM2CRSF_ARM_CRSF_CH,
 };
+
+enum { kSlotSpeed = 0, kSlotDrive = 1 };
 
 /* --- Pulse capture (ISR side) ------------------------------------------ */
 
@@ -81,6 +90,8 @@ static uint64_t         s_next_debug_us;
 static uint32_t         s_rc_frames_sent;
 static bool             s_last_link_ok;
 static uint8_t          s_last_speed_step;
+static uint8_t          s_last_drive_step;
+static uint32_t         s_rx_bytes;      /* bytes from BiBa: proves the RX wire */
 
 static void ingest_pulses(uint64_t now_us)
 {
@@ -107,6 +118,7 @@ static void drain_crsf_rx(void)
     /* BiBa pings the "receiver" at 5 Hz; nothing here needs answering. */
     while (uart_is_readable(PWM2CRSF_CRSF_UART_INST)) {
         (void)uart_getc(PWM2CRSF_CRSF_UART_INST);
+        s_rx_bytes++;
     }
 }
 
@@ -119,17 +131,26 @@ static void update_led(bool link_ok, uint64_t now_us)
 #if PWM2CRSF_DEBUG_PRINT
 static void debug_print(bool link_ok, uint64_t now_us)
 {
-    Serial.printf("[pwm2crsf] %s spd=%u rc=%lu glitch=%lu |",
-                  link_ok ? "LINK" : "FAILSAFE",
-                  (unsigned)s_state.cycle_step + 1u,
+    uint16_t ch[CRSF_RC_CHANNEL_COUNT];
+    pwm2crsf_channels(&s_state, &kConfig, now_us, ch);
+
+    /* What BiBa will do with the channels we send (biba_config.h). */
+    const char *arm = !s_state.arm_ready ? "LOCK"
+                    : (ch[PWM2CRSF_ARM_CRSF_CH] > 1238u ? "ARM" : "disarm");   /* > +0.3 */
+    Serial.printf("[pwm2crsf] %s %s spd=%u %s tx=%lu rx_from_biba=%lu glitch=%lu |",
+                  link_ok ? "LINK" : "FAILSAFE", arm,
+                  (unsigned)pwm2crsf_button_step(&s_state, kSlotSpeed) + 1u,
+                  pwm2crsf_button_step(&s_state, kSlotDrive) ? "HOLD" : "MANUAL",
                   (unsigned long)s_rc_frames_sent,
+                  (unsigned long)s_rx_bytes,
                   (unsigned long)s_state.glitches);
     for (unsigned i = 0; i < PWM2CRSF_INPUT_COUNT; ++i) {
         bool fresh = pwm2crsf_input_fresh(&s_state, &kConfig, (uint8_t)i, now_us);
         Serial.printf(" in%u=%4u%s", i + 1, (unsigned)s_state.width_us[i],
                       fresh ? " " : "!");
     }
-    Serial.printf("\r\n");
+    Serial.printf(" | ch2=%u ch4=%u ch5=%u ch6=%u ch8=%u ch10=%u\r\n",
+                  ch[1], ch[3], ch[4], ch[5], ch[7], ch[9]);
 }
 #endif
 
@@ -179,15 +200,21 @@ void loop()
 
     if (link_ok != s_last_link_ok) {
         Serial.printf("[pwm2crsf] %s\r\n", link_ok ? "link up" : "link lost -> failsafe");
-        /* Come back from a dropout in the slowest speed, never faster. */
-        if (!link_ok) pwm2crsf_reset_cycle(&s_state);
+        /* Come back from a dropout disarmed, slow and MANUAL. */
+        if (!link_ok) pwm2crsf_reset_on_link_loss(&s_state);
         s_last_link_ok = link_ok;
     }
 
-    if (s_state.cycle_step != s_last_speed_step) {
-        s_last_speed_step = s_state.cycle_step;
+    uint8_t speed = pwm2crsf_button_step(&s_state, kSlotSpeed);
+    if (speed != s_last_speed_step) {
+        s_last_speed_step = speed;
         Serial.printf("[pwm2crsf] speed %u/%u\r\n",
-                      (unsigned)s_state.cycle_step + 1u, (unsigned)PWM2CRSF_SPEED_STEPS);
+                      (unsigned)speed + 1u, (unsigned)PWM2CRSF_SPEED_STEPS);
+    }
+    uint8_t drive = pwm2crsf_button_step(&s_state, kSlotDrive);
+    if (drive != s_last_drive_step) {
+        s_last_drive_step = drive;
+        Serial.printf("[pwm2crsf] drive mode %s\r\n", drive ? "HOLD" : "MANUAL");
     }
 
     uint8_t frame[CRSF_MAX_FRAME_SIZE];
