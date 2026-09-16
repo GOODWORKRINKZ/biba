@@ -69,6 +69,14 @@ typedef struct {
     /* Bit i set → PWM input i is mirrored around the centre of
      * min_us..max_us before conversion (reverse an axis or a button). */
     uint8_t  invert_mask;
+    /* Bit i set → input i gets a centre deadband: within
+     * ±center_deadband_us of the middle of min_us..max_us it reads as
+     * exactly centre (992); outside, travel is rescaled so the endpoints
+     * still reach CRSF_MIN / CRSF_MAX. Meant for the axes: a HotRC
+     * trigger rests a few µs off centre, and BiBa's open-loop throttle
+     * has no deadband of its own. */
+    uint8_t  center_deadband_mask;
+    uint16_t center_deadband_us;
 
     /* Button level hysteresis, µs (after invert_mask is applied). */
     uint16_t button_high_us;

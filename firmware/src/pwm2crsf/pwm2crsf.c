@@ -45,6 +45,25 @@ static uint32_t effective_width(const pwm2crsf_config_t *cfg, uint8_t input, uin
     return width;
 }
 
+static uint32_t apply_center_deadband(const pwm2crsf_config_t *cfg, uint8_t input, uint32_t width)
+{
+    if (!(cfg->center_deadband_mask & (1u << input)) || cfg->center_deadband_us == 0
+            || cfg->max_us <= cfg->min_us) {
+        return width;
+    }
+    int32_t centre = ((int32_t)cfg->min_us + cfg->max_us) / 2;
+    int32_t half   = ((int32_t)cfg->max_us - cfg->min_us) / 2;
+    int32_t db     = cfg->center_deadband_us;
+    int32_t d      = (int32_t)width - centre;
+    int32_t mag    = d < 0 ? -d : d;
+    if (mag <= db || db >= half) return (uint32_t)centre;
+
+    /* Stretch the remaining travel back over the full half-range. */
+    int32_t span = half - db;
+    int32_t out  = ((mag - db) * half + span / 2) / span;
+    return (uint32_t)(d < 0 ? centre - out : centre + out);
+}
+
 static void button_on_pulse(pwm2crsf_button_state_t *bs,
                             const pwm2crsf_button_t *b,
                             const pwm2crsf_config_t *cfg,
@@ -176,6 +195,7 @@ void pwm2crsf_channels(const pwm2crsf_state_t *state,
                 && pwm2crsf_input_fresh(state, cfg, (uint8_t)input, now_us)) {
             uint32_t width = effective_width(cfg, (uint8_t)input,
                                              state->width_us[(uint8_t)input]);
+            width = apply_center_deadband(cfg, (uint8_t)input, width);
             out[ch] = pwm2crsf_us_to_crsf(cfg, width);
         } else {
             out[ch] = cfg->idle[ch];

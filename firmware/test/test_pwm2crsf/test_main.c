@@ -231,6 +231,44 @@ static void test_cycle_reset_returns_to_first_step(void)
     TEST_ASSERT_EQUAL_UINT16(172, speed_ch(&st, &cfg));
 }
 
+static uint16_t ch_for_width(pwm2crsf_state_t *st, const pwm2crsf_config_t *cfg,
+                             uint8_t input, uint32_t width)
+{
+    uint16_t ch[CRSF_RC_CHANNEL_COUNT];
+    pwm2crsf_on_pulse(st, cfg, input, width, 0);
+    pwm2crsf_channels(st, cfg, 0, ch);
+    return ch[input];   /* identity map */
+}
+
+static void test_center_deadband_snaps_axes_to_centre(void)
+{
+    pwm2crsf_config_t cfg = make_config();
+    cfg.center_deadband_mask = (uint8_t)((1u << 0) | (1u << 1));
+    cfg.center_deadband_us   = 20;
+    pwm2crsf_state_t st;
+    pwm2crsf_init(&st);
+    feed_all(&st, &cfg, 1500, 0);
+
+    /* Bench: trigger idling at 1500/1501 and resting at 1509..1519. */
+    TEST_ASSERT_EQUAL_UINT16(992, ch_for_width(&st, &cfg, 1, 1501));
+    TEST_ASSERT_EQUAL_UINT16(992, ch_for_width(&st, &cfg, 1, 1519));
+    TEST_ASSERT_EQUAL_UINT16(992, ch_for_width(&st, &cfg, 1, 1480));
+    TEST_ASSERT_EQUAL_UINT16(992, ch_for_width(&st, &cfg, 0, 1520));
+
+    /* Just outside the band: small, continuous, correct sign. */
+    uint16_t up = ch_for_width(&st, &cfg, 1, 1530);
+    uint16_t dn = ch_for_width(&st, &cfg, 1, 1470);
+    TEST_ASSERT_TRUE(up > 992 && up < 1020);
+    TEST_ASSERT_TRUE(dn < 992 && dn > 964);
+
+    /* Endpoints still reach full scale. */
+    TEST_ASSERT_EQUAL_UINT16(1811, ch_for_width(&st, &cfg, 1, 2000));
+    TEST_ASSERT_EQUAL_UINT16(172,  ch_for_width(&st, &cfg, 1, 1000));
+
+    /* Inputs outside the mask are untouched. */
+    TEST_ASSERT_TRUE(ch_for_width(&st, &cfg, 2, 1510) > 992);
+}
+
 static void test_dead_aux_input_keeps_link_and_idles_its_channel(void)
 {
     pwm2crsf_config_t cfg = make_config();
@@ -409,6 +447,7 @@ static void run_all(void)
     RUN_TEST(test_cycle_baseline_high_is_not_a_press);
     RUN_TEST(test_cycle_ignores_hysteresis_band_and_bounce);
     RUN_TEST(test_cycle_reset_returns_to_first_step);
+    RUN_TEST(test_center_deadband_snaps_axes_to_centre);
     RUN_TEST(test_dead_aux_input_keeps_link_and_idles_its_channel);
     RUN_TEST(test_arm_interlock_needs_off_position_first);
     RUN_TEST(test_momentary_toggle_button_flips_on_press);

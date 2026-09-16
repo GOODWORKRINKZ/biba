@@ -101,6 +101,20 @@
 #  define PWM2CRSF_INPUT_INVERT_MASK   0u
 #endif
 
+/* Centre deadband for the axes (bit i = PWM input i+1): within
+ * ±PWM2CRSF_CENTER_DEADBAND_US of 1500 the channel is exactly 992.
+ * BiBa's open-loop throttle goes straight to motor duty with no
+ * deadband, and the HotRC trigger idles at 1500±1 and sometimes rests
+ * 10-40 µs off centre, which makes the wheels twitch. Outside the band
+ * travel is rescaled, so full trigger / wheel still gives ±1.
+ * Raise the value if the wheels still creep with the trigger released. */
+#ifndef PWM2CRSF_CENTER_DEADBAND_MASK
+#  define PWM2CRSF_CENTER_DEADBAND_MASK ((1u << 0) | (1u << 1))
+#endif
+#ifndef PWM2CRSF_CENTER_DEADBAND_US
+#  define PWM2CRSF_CENTER_DEADBAND_US   20u
+#endif
+
 /* Arm interlock: CH5 is held at "disarmed" after power-up and after
  * every failsafe until the ARM button (PWM3) has been seen in its off
  * position. A latched-on ARM button therefore never arms BiBa by itself:
