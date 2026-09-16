@@ -153,7 +153,12 @@ typedef struct {
     int8_t   crsf_snr_db;           /* signal-to-noise, dB */
     uint8_t  error_flags;           /* BIBA_PROTO_FLAG_* snapshot */
     uint32_t uptime_ms;
-    uint8_t  reserved[16];          /* pad to 48 bytes */
+    int16_t  ibat_ma;               /* battery current, signed milliamps (3DR PM) */
+    int16_t  temperature_cdeg;      /* ambient temperature, centi-degrees °C (AHT30) */
+    uint8_t  humidity_q8;           /* relative humidity 0-100 % (AHT30) */
+    uint16_t wheel_rpm_left_hz10;   /* IS_LEFT ZC freq x10 (0.1 Hz res); 0=invalid/stopped */
+    uint16_t wheel_rpm_right_hz10;  /* IS_RIGHT ZC freq x10; 0=invalid/stopped */
+    uint8_t  reserved[7];           /* pad to 48 bytes */
 } biba_proto_telemetry_t;
 #pragma pack(pop)
 
