@@ -56,6 +56,11 @@ def snap(v, g=GRID):
     return round(v / g) * g
 
 
+def snap_pt(x, y, tol=1.5):
+    """Привязка к сетке точек, которые в EasyEDA «съехали» на 1–2 ед."""
+    return tuple(snap(v) if abs(v - snap(v)) <= tol else v for v in (x, y))
+
+
 def esc(s):
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
@@ -485,12 +490,12 @@ def main() -> int:
                 comps.append(c)
         elif g == "W":
             n = [float(v) for v in s.split("~")[1].split()]
-            wires.append([(n[i], n[i + 1]) for i in range(0, len(n) - 1, 2)])
+            wires.append([snap_pt(n[i], n[i + 1]) for i in range(0, len(n) - 1, 2)])
         elif g == "F":
             flags.append(parse_flag(s))
         elif g == "J":
             t = s.split("~")
-            junctions.append((float(t[1]), float(t[2])))
+            junctions.append(snap_pt(float(t[1]), float(t[2])))
         elif g == "O":
             t = s.split("~")
             ncs.append((float(t[1]), float(t[2])))
@@ -531,7 +536,7 @@ def main() -> int:
     root = U()
     L = []
     L.append("(kicad_sch\n  (version 20231120)\n  (generator \"easyeda2kicad\")\n  (generator_version \"2.0\")\n")
-    L.append(f"  (uuid \"{U()}\")\n  (paper \"A3\")\n")
+    L.append(f"  (uuid \"{root}\")\n  (paper \"A3\")\n")
     L.append(
         "  (title_block\n    (title \"BiBa — RP2040, 4× BTN7970 (brushed)\")\n"
         "    (date \"2026-05-08\")\n    (rev \"1.0\")\n"
@@ -615,6 +620,16 @@ def main() -> int:
     L.append("  (sheet_instances\n    (path \"/\" (page \"1\"))\n  )\n)\n")
 
     (variant / f"{PROJ}.kicad_sch").write_text("".join(L), encoding="utf-8")
+
+    pro = variant / f"{PROJ}.kicad_pro"
+    try:
+        json.loads(pro.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # .kicad_pro — это JSON; KiCad дополнит недостающие настройки сам
+        pro.write_text(
+            json.dumps({"meta": {"filename": pro.name, "version": 3}, "sheets": [[root, "Root"]]}, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     sym_dir = variant.parent.parent / "common" / "symbols"
     sym_dir.mkdir(parents=True, exist_ok=True)

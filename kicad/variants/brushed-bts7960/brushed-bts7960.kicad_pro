@@ -1,9 +1,12 @@
-(kicad_project
-  (version 20231120)
-  (generator "easyeda2kicad")
-  (paper "A3")
-  (schematic
-    (legacy_lib_dir "")
-    (legacy_lib_list "")
-  )
-)
+{
+  "meta": {
+    "filename": "brushed-bts7960.kicad_pro",
+    "version": 3
+  },
+  "sheets": [
+    [
+      "75f455f2-6dd2-4838-865f-ea6829a13b6a",
+      "Root"
+    ]
+  ]
+}
