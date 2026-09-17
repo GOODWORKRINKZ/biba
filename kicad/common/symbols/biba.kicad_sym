@@ -696,7 +696,7 @@
       (rectangle (start 11.43 -10.16) (end -8.89 10.16)
         (stroke (width 0.1524) (type default)) (fill (type none)))
       (text "BTN7970" (at -1.5824 -10.8915 0)
-        (effects (font (size 1.633 1.633)) (justify left bottom)))
+        (effects (font (size 1.633 1.633)) (justify right bottom)))
     )
     (symbol "BTN7970_1_1_1"
       (pin passive line (at 1.27 -15.24 90) (length 5.08)
@@ -745,7 +745,7 @@
       (rectangle (start 11.43 -10.16) (end -8.89 10.16)
         (stroke (width 0.1524) (type default)) (fill (type none)))
       (text "BTN7970" (at -1.585 -10.7569 0)
-        (effects (font (size 1.633 1.633)) (justify left bottom)))
+        (effects (font (size 1.633 1.633)) (justify right bottom)))
     )
     (symbol "BTN7970_2_1_1"
       (pin passive line (at 1.27 -15.24 90) (length 5.08)

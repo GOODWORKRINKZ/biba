@@ -35,8 +35,14 @@ PROJ = "brushed-bts7960"
 ELEC = "passive"
 
 
+_uuid_n = 0
+
+
 def U():
-    return str(uuid.uuid4())
+    """Детерминированные UUID: повторная генерация даёт минимальный diff."""
+    global _uuid_n
+    _uuid_n += 1
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"biba/{PROJ}/{_uuid_n}"))
 
 
 def f(v):
@@ -340,9 +346,14 @@ def gfx_sexpr(g, ind):
         )
     if k == "text":
         _, text, x, y, ang, size, anchor = g
-        ang = int(round(ang)) % 180  # KiCad всё равно рисует текст читаемым
+        ang = int(round(ang)) % 360
+        flip = ang in (180, 270)  # KiCad рисует текст читаемым и отражает выравнивание
+        ang %= 180
+        if flip:
+            anchor = {"start": "end", "end": "start"}.get(anchor, anchor)
         just = {"start": "left", "end": "right"}.get(anchor, "")
-        j = f" (justify {just} bottom)" if just else " (justify bottom)"
+        vj = "bottom"
+        j = f" (justify {just} {vj})" if just else f" (justify {vj})"
         return f"{ind}(text \"{esc(text)}\" (at {f(x)} {f(y)} {ang * 10})\n{ind}  (effects (font (size {size} {size})){j}))\n"
     raise ValueError(k)
 
