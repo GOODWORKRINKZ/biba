@@ -1,0 +1,710 @@
+{
+  "uuid": "b2a3afe8cbc56bb5d2f0fbb19437a8c2",
+  "path": "Offline/RP2040",
+  "name": "RP2040",
+  "content": "",
+  "created_at": "2026-05-08 11:27:47",
+  "updated_at": "2026-09-03 10:17:22",
+  "stick": "",
+  "documents": [
+    {
+      "uuid": "d86f78a935a751a4277eb0b75d7584dd",
+      "title": "Sheet_1",
+      "description": "",
+      "docType": "1",
+      "master": "",
+      "thumb": "/images/thumb-default.png",
+      "components": {
+        "15f59a65a93644bd9910955a74facb3b": 1,
+        "ca792b8e47924edba8fe42c5e57e41b1": 1,
+        "466d97263a714f7fab892e8c215446b9": 1,
+        "4b599b09464b463098127baf9c3055a8": 4,
+        "ed9eb2faffb34286820a54a14e9e9e24": 22,
+        "89026c0e23ca49dcb85d26a1d0805b33": 6,
+        "420424f02e774d41abdef8f538d7634c": 1,
+        "bb009484ef804a24ac5d18c54b249586": 4,
+        "3e4538223fb54f70bd25a61f3c7f981c": 1,
+        "fd11c9e744c44aeab6011e8bd4c3ea86": 2,
+        "a68dc5e6a9944c46b7604648a43dcd65": 1,
+        "f5b1d9403e49471cab43bc5a1bec336f": 3,
+        "a7291ceaee5442a999df26c55c7e675d": 9,
+        "4fca00fa6206430c91eca956736a644a": 1
+      },
+      "BOM": [
+        [
+          "Value",
+          "Quantity",
+          "Package",
+          "Components",
+          "CustomPara"
+        ],
+        [
+          "0.1u",
+          6,
+          "C0805",
+          "C1,C2,C3,C4,C5,C6",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1uF",
+          1,
+          "C0603",
+          "C7",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "2.2uF",
+          1,
+          "C0603",
+          "C8",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1000uF",
+          1,
+          "CAP-TH_BD16.0-P7.50-D0.8-FD-H25.0",
+          "C9",
+          {
+            "Manufacturer Part": "ERB50V1000M16X25",
+            "Manufacturer": "JIERR(捷而瑞)",
+            "Supplier": "LCSC",
+            "Supplier Part": "C51904448"
+          }
+        ],
+        [
+          "HDR-F-2.54_1x3",
+          9,
+          "HDR-F-2.54_1X3",
+          "H1,H2,H3,H4,H5,H6,H7,H8,H10",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C146690"
+          }
+        ],
+        [
+          "rp2040_RP2040_breakout_swd",
+          1,
+          "RP2040:RP2040-BREAKOUT_SWD",
+          "IC1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "HDR-M-2.54_1x3",
+          1,
+          "HDR-M-2.54_1X3",
+          "J1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C180248"
+          }
+        ],
+        [
+          "HDR-M-2.54_1x4",
+          3,
+          "HDR-M-2.54_1X4",
+          "J2,J3,J4",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C124378"
+          }
+        ],
+        [
+          "SKMW30f-05",
+          1,
+          "SKMW30G-05",
+          "PM1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "30k",
+          8,
+          "R0805",
+          "R1,R2,R3,R4,R5,R6,R7,R8",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "10k",
+          12,
+          "R0805",
+          "R9,R10,R11,R12,R13,R14,R15,R16,R21,R22,R23,R24",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1k",
+          6,
+          "R0805",
+          "R17,R18,R19,R20,R25,R26",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "SN74AHC244DW",
+          1,
+          "SOIC-20_L12.8-W7.5-P1.27-LS10.3-BL",
+          "U1",
+          {
+            "Manufacturer Part": "SN74AHC244DW",
+            "Manufacturer": "null",
+            "Supplier": "LCSC",
+            "Supplier Part": "C1548445"
+          }
+        ],
+        [
+          "BTN7970",
+          4,
+          "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+          "U2,U3,U4,U5",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "BMI160",
+          1,
+          "LGA-14_L3.0-W2.5-P0.50-BL",
+          "U6",
+          {
+            "Manufacturer Part": "BMI160",
+            "Manufacturer": "Bosch(博世)",
+            "Supplier": "LCSC",
+            "Supplier Part": "C94021"
+          }
+        ],
+        [
+          "SPX3819M5-L-3-3/TR",
+          1,
+          "SOT-23-5_L3.0-W1.7-P0.95-LS2.8-BR",
+          "U7",
+          {
+            "Manufacturer Part": "SPX3819M5-L-3-3/TR",
+            "Manufacturer": "MaxLinear",
+            "Supplier": "LCSC",
+            "Supplier Part": "C9055"
+          }
+        ]
+      ],
+      "updateTime": 1779719412,
+      "createTime": 1778228868,
+      "histories": [],
+      "created_at": "2026-05-08 11:27:48",
+      "updated_at": "2026-05-25 17:30:12"
+    },
+    {
+      "uuid": "7e1d826ea1109a94b12d3f2d87d1f372",
+      "puuid": "b2a3afe8cbc56bb5d2f0fbb19437a8c2",
+      "title": "PCB_RP2040",
+      "filename": "PCB_RP2040.json",
+      "description": "",
+      "docType": "3",
+      "master": "",
+      "thumb": "/images/thumb-default.png",
+      "components": {
+        "2ee8eb13a0124a108e622ce40c0c25a8": 6,
+        "f8151fdc728a41ebbc304e11d39e5437": 2,
+        "f83673d09e13450d934ca6be4be5af8f": 9,
+        "28caffed3a324626a71decaf1ac2cf07": 1,
+        "9f77654394344f25b3de138e0fe05ff6": 1,
+        "282f7786cb6144d097ae00194c3e3fb3": 3,
+        "cbac742657444243abb4be5537ea6a51": 1,
+        "b60f399a7a7e41848b2be1eb49c79141": 22,
+        "398691f1f785460098bbe5ee6590333c": 4,
+        "969a578b2869473fa8ef6283c1b3801c": 1,
+        "72e6fe73f2624d83bfad78ee3565d24b": 4,
+        "e37666892c0741bfa48fa4e53c95b2b0": 1,
+        "4226631fe5194401aef773f6490581ab": 1,
+        "6a8a64c0325d4960a1fa80b1d304726c": 1
+      },
+      "BOM": [
+        [
+          "Value",
+          "Quantity",
+          "Package",
+          "Components",
+          "CustomPara"
+        ],
+        [
+          "0.1u",
+          6,
+          "C0805",
+          "C1,C2,C3,C4,C5,C6",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1uF",
+          1,
+          "C0603",
+          "C7",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "2.2uF",
+          1,
+          "C0603",
+          "C8",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "HDR-F-2.54_1x3",
+          9,
+          "HDR-F-2.54_1X3",
+          "H1,H2,H3,H4,H5,H6,H7,H8,H10",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C146690"
+          }
+        ],
+        [
+          "rp2040_RP2040_breakout_swd",
+          1,
+          "RP2040:RP2040-BREAKOUT_SWD",
+          "IC1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "HDR-M-2.54_1x3",
+          1,
+          "HDR-M-2.54_1X3",
+          "J1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C180248"
+          }
+        ],
+        [
+          "HDR-M-2.54_1x4",
+          3,
+          "HDR-M-2.54_1X4",
+          "J2,J3,J4",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C124378"
+          }
+        ],
+        [
+          "SKMW30f-05",
+          1,
+          "SKMW30G-05",
+          "PM1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "30k",
+          8,
+          "R0805",
+          "R1,R2,R3,R4,R5,R6,R7,R8",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "10k",
+          8,
+          "R0805",
+          "R9,R10,R11,R12,R13,R14,R15,R16",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1k",
+          6,
+          "R0805",
+          "R17,R18,R19,R20,R25,R26",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "10k",
+          4,
+          "R0603",
+          "R21,R22,R23,R24",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "SN74AHC244DW",
+          1,
+          "SOIC-20_L12.8-W7.5-P1.27-LS10.3-BL",
+          "U1",
+          {
+            "Manufacturer Part": "SN74AHC244DW",
+            "Manufacturer": "null",
+            "Supplier": "LCSC",
+            "Supplier Part": "C1548445"
+          }
+        ],
+        [
+          "BTN7970",
+          4,
+          "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+          "U2,U3,U4,U5",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "BMI160",
+          1,
+          "LGA-14_L3.0-W2.5-P0.50-BL",
+          "U6",
+          {
+            "Manufacturer Part": "BMI160",
+            "Manufacturer": "Bosch(博世)",
+            "Supplier": "LCSC",
+            "Supplier Part": "C94021"
+          }
+        ],
+        [
+          "SPX3819M5-L-3-3/TR",
+          1,
+          "SOT-23-5_L3.0-W1.7-P0.95-LS2.8-BR",
+          "U7",
+          {
+            "Manufacturer Part": "SPX3819M5-L-3-3/TR",
+            "Manufacturer": "MaxLinear",
+            "Supplier": "LCSC",
+            "Supplier Part": "C9055"
+          }
+        ]
+      ],
+      "updateTime": 1779888026,
+      "createTime": 1779710921,
+      "histories": [],
+      "created_at": "2026-05-25 15:08:41",
+      "updated_at": "2026-05-27 16:20:26"
+    },
+    {
+      "uuid": "d4f42e71df85731c79bc9090052f58fd",
+      "puuid": "b2a3afe8cbc56bb5d2f0fbb19437a8c2",
+      "title": "PCB_RP2040 copy",
+      "filename": "PCB_RP2040 copy.json",
+      "description": "",
+      "docType": "3",
+      "master": "",
+      "thumb": "/images/thumb-default.png",
+      "components": {
+        "2ee8eb13a0124a108e622ce40c0c25a8": 6,
+        "f8151fdc728a41ebbc304e11d39e5437": 2,
+        "f83673d09e13450d934ca6be4be5af8f": 9,
+        "28caffed3a324626a71decaf1ac2cf07": 1,
+        "9f77654394344f25b3de138e0fe05ff6": 1,
+        "282f7786cb6144d097ae00194c3e3fb3": 3,
+        "cbac742657444243abb4be5537ea6a51": 1,
+        "b60f399a7a7e41848b2be1eb49c79141": 22,
+        "398691f1f785460098bbe5ee6590333c": 4,
+        "969a578b2869473fa8ef6283c1b3801c": 1,
+        "72e6fe73f2624d83bfad78ee3565d24b": 4,
+        "e37666892c0741bfa48fa4e53c95b2b0": 1,
+        "4226631fe5194401aef773f6490581ab": 1,
+        "6a8a64c0325d4960a1fa80b1d304726c": 1
+      },
+      "BOM": [
+        [
+          "Value",
+          "Quantity",
+          "Package",
+          "Components",
+          "CustomPara"
+        ],
+        [
+          "0.1u",
+          6,
+          "C0805",
+          "C1,C2,C3,C4,C5,C6",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1uF",
+          1,
+          "C0603",
+          "C7",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "2.2uF",
+          1,
+          "C0603",
+          "C8",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "HDR-F-2.54_1x3",
+          9,
+          "HDR-F-2.54_1X3",
+          "H1,H2,H3,H4,H5,H6,H7,H8,H10",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C146690"
+          }
+        ],
+        [
+          "rp2040_RP2040_breakout_swd",
+          1,
+          "RP2040:RP2040-BREAKOUT_SWD",
+          "IC1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "HDR-M-2.54_1x3",
+          1,
+          "HDR-M-2.54_1X3",
+          "J1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C180248"
+          }
+        ],
+        [
+          "HDR-M-2.54_1x4",
+          3,
+          "HDR-M-2.54_1X4",
+          "J2,J3,J4",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "LCSC",
+            "Supplier Part": "C124378"
+          }
+        ],
+        [
+          "SKMW30f-05",
+          1,
+          "SKMW30G-05",
+          "PM1",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "30k",
+          8,
+          "R0805",
+          "R1,R2,R3,R4,R5,R6,R7,R8",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "10k",
+          8,
+          "R0805",
+          "R9,R10,R11,R12,R13,R14,R15,R16",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "1k",
+          6,
+          "R0805",
+          "R17,R18,R19,R20,R25,R26",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "10k",
+          4,
+          "R0603",
+          "R21,R22,R23,R24",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "SN74AHC244DW",
+          1,
+          "SOIC-20_L12.8-W7.5-P1.27-LS10.3-BL",
+          "U1",
+          {
+            "Manufacturer Part": "SN74AHC244DW",
+            "Manufacturer": "null",
+            "Supplier": "LCSC",
+            "Supplier Part": "C1548445"
+          }
+        ],
+        [
+          "BTN7970",
+          4,
+          "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+          "U2,U3,U4,U5",
+          {
+            "Manufacturer Part": "",
+            "Manufacturer": "",
+            "Supplier": "",
+            "Supplier Part": ""
+          }
+        ],
+        [
+          "BMI160",
+          1,
+          "LGA-14_L3.0-W2.5-P0.50-BL",
+          "U6",
+          {
+            "Manufacturer Part": "BMI160",
+            "Manufacturer": "Bosch(博世)",
+            "Supplier": "LCSC",
+            "Supplier Part": "C94021"
+          }
+        ],
+        [
+          "SPX3819M5-L-3-3/TR",
+          1,
+          "SOT-23-5_L3.0-W1.7-P0.95-LS2.8-BR",
+          "U7",
+          {
+            "Manufacturer Part": "SPX3819M5-L-3-3/TR",
+            "Manufacturer": "MaxLinear",
+            "Supplier": "LCSC",
+            "Supplier Part": "C9055"
+          }
+        ]
+      ],
+      "updateTime": 1788419842,
+      "createTime": 1788419284,
+      "histories": [],
+      "created_at": "2026-09-03 10:08:04",
+      "updated_at": "2026-09-03 10:17:22"
+    }
+  ],
+  "sort": [],
+  "title": "RP2040",
+  "foldername": "RP2040",
+  "schfilename": "RP2040.json",
+  "schfilemtime": 1779719412078
+}
