@@ -25,3 +25,4 @@ kicad/**/gerber/render/
 *.kicad_pcb-bak
 fp-info-cache
 *.erc.rpt
+.history/

@@ -1,7 +1,7 @@
 (kicad_project
   (version 20231120)
-  (generator "python")
-  (paper "A2")
+  (generator "easyeda2kicad")
+  (paper "A3")
   (schematic
     (legacy_lib_dir "")
     (legacy_lib_list "")
