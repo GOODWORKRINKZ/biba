@@ -1,0 +1,9 @@
+(kicad_project
+  (version 20231120)
+  (generator "python")
+  (paper "A2")
+  (schematic
+    (legacy_lib_dir "")
+    (legacy_lib_list "")
+  )
+)

@@ -117,6 +117,22 @@ def main() -> int:
                 f"{c['mfr_part']}\t{len(c['pads'])}\t{c['rotation']}\t{c['x']}\t{c['y']}\t{c['link']}\n"
             )
 
+    # machine-readable для генератора схемы
+    data = {
+        "components": [
+            {
+                "designator": c["designator"],
+                "value": c["value"],
+                "package": c["package"],
+                "lcsc": c["lcsc"],
+                "pins": [{"pin": n, "net": net} for n, net in c["pads"] if net],
+            }
+            for c in comps
+        ],
+    }
+    with open(out / "netlist.json", "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
     # консоль
     print(f"Компонентов: {len(comps)}")
     print(f"Сетей: {len(nets)}")
