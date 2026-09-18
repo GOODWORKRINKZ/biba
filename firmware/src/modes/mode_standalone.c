@@ -1205,6 +1205,20 @@ void biba_mode_standalone_tick(void)
         biba_ramp_reset(&s_rpm_setpoint_ramp_left);
         biba_ramp_reset(&s_rpm_setpoint_ramp_right);
     }
+#elif !BIBA_FEATURE_RPM_CLOSED_LOOP
+    /* Open-loop duty ramp (BIBA_RAMP_*): limited accel/decel, a slower
+     * decel before a direction change and a zero hold before driving the
+     * other way — no instant full-forward → full-reverse on the bridges.
+     * The ramp state is shared with the RPM setpoint ramp (only one of the
+     * two paths is compiled), so the arm/disarm/failsafe edge resets
+     * above apply here as well. */
+    if (armed && !failsafe) {
+        left_out  = biba_ramp_update(&s_rpm_setpoint_ramp_left,  left_out,  dt);
+        right_out = biba_ramp_update(&s_rpm_setpoint_ramp_right, right_out, dt);
+    } else {
+        biba_ramp_reset(&s_rpm_setpoint_ramp_left);
+        biba_ramp_reset(&s_rpm_setpoint_ramp_right);
+    }
 #else
     biba_ramp_reset(&s_rpm_setpoint_ramp_left);
     biba_ramp_reset(&s_rpm_setpoint_ramp_right);
@@ -1498,7 +1512,13 @@ void biba_mode_standalone_tick(void)
      * All other melodies use standard symmetric push-pull (zero net torque). */
 #if BIBA_FEATURE_MELODY
     if (s_reverse_pip_active) {
-        biba_melody_player_tick_biased(&s_player, now, left_out, right_out);
+        /* The biased tick drives the H-bridge directly (RPWM = hardware
+         * forward), so apply the per-motor direction here just like
+         * biba_bts7960_drive() does — otherwise an inverted motor gets
+         * ~90 % duty against the traction command on every pip. */
+        biba_melody_player_tick_biased(&s_player, now,
+                                       left_out  * BIBA_LEFT_MOTOR_DIR,
+                                       right_out * BIBA_RIGHT_MOTOR_DIR);
     } else {
         biba_melody_player_tick(&s_player, now);
     }
@@ -1509,6 +1529,22 @@ void biba_mode_standalone_tick(void)
     if (!s_player.active) {
 #if BIBA_TARGET_HAS_BTS7960_2CH
         biba_bts7960_drive(left_out, right_out);
+#if BIBA_MOTOR_COAST_WHEN_DISARMED
+        /* Disarmed (or failsafe) at rest: sleep the bridges (R_EN/L_EN
+         * low) so the wheels coast instead of short-braking through the
+         * low-side switches, which burned U2 — see
+         * kicad/variants/brushed-bts7960/analysis/M1-driver-failure.md. */
+        if (!armed && left_out == 0.0f && right_out == 0.0f) {
+            biba_bts7960_set_enabled(false);
+        }
+#endif
+#endif
+    } else {
+#if BIBA_TARGET_HAS_BTS7960_2CH && BIBA_MOTOR_COAST_WHEN_DISARMED
+        /* The melody player drives the coils through the PWM block; with
+         * coast-when-disarmed the bridges may be asleep at rest, so wake
+         * them up to sound through the coils. */
+        biba_bts7960_set_enabled(true);
 #endif
     }
 
@@ -1526,6 +1562,11 @@ void biba_mode_standalone_tick(void)
 #else
     /* MELODY disabled — always drive motors directly. */
     biba_bts7960_drive(left_out, right_out);
+#if BIBA_TARGET_HAS_BTS7960_2CH && BIBA_MOTOR_COAST_WHEN_DISARMED
+    if (!armed && left_out == 0.0f && right_out == 0.0f) {
+        biba_bts7960_set_enabled(false);
+    }
+#endif
 #endif
 
     /* Update RGB status LED. */

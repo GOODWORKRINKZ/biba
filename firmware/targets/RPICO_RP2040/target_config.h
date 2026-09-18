@@ -48,6 +48,16 @@
 #define BIBA_LEFT_MAX_POWER_W        0.0f
 #define BIBA_RIGHT_MAX_POWER_W       0.0f
 
+/* Open-loop duty ramp (no speed feedback on this board).  Soft PWM braking
+ * keeps the braking current — which flows through the static low-side
+ * switch (U2 burned, kicad/variants/brushed-bts7960/analysis/) and back
+ * into the 6S pack (BTN7970 over-voltage lockout at 28 V) — bounded:
+ * full → 0 in 1 s, full → reverse in 2 s + 0.4 s at rest. */
+#define BIBA_RAMP_ACCEL_RATE           2.0f
+#define BIBA_RAMP_DECEL_RATE           1.0f
+#define BIBA_RAMP_REVERSE_DECEL_RATE   0.5f
+#define BIBA_RAMP_ZERO_HOLD_MS         400u
+
 /* --- Feature toggle overrides (D-07) ----------------------------------- */
 /* Reverse backup beep is OFF on RP2040 by default (match legacy behaviour). */
 #define BIBA_FEATURE_REVERSE_PIP          0

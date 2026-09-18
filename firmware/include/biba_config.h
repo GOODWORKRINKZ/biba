@@ -57,6 +57,16 @@
 #ifndef BIBA_BTS7960_RESET_PULSE_US
 #  define BIBA_BTS7960_RESET_PULSE_US  100u
 #endif
+/* Standalone mode, open loop: on disarm/failsafe the outputs are zeroed
+ * and, once both are at zero, the bridges are put to sleep (R_EN/L_EN low)
+ * so the wheels coast instead of short-braking through the low-side
+ * switches (which burned U2 —
+ * kicad/variants/brushed-bts7960/analysis/M1-driver-failure.md).
+ * While armed, zero duty keeps the bridges on: both low-side switches
+ * short the motor and hold the wheels.  0 = bridges stay on when disarmed. */
+#ifndef BIBA_MOTOR_COAST_WHEN_DISARMED
+#  define BIBA_MOTOR_COAST_WHEN_DISARMED  1
+#endif
 
 /* --- Current sense calibration (BTS7960 IS pin, volts → amps) ---------- */
 

@@ -110,51 +110,94 @@ void biba_hal_motor_pwm_right(float duty)
  *   channels 1 and 3 are ignored (LPWM is driven by inversion)
  * ----------------------------------------------------------------------- */
 
-bool biba_hal_motor_audio_begin(void)
-{
-    /* Silence traction outputs before switching mode. */
-    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
-    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
-    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
-    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
-    /* Invert channel B (LPWM) on both slices so that setting RPWM and
-     * LPWM to the same duty produces complementary drive (push-pull). */
-    pwm_set_output_polarity(s_slice_l, false, true);
-    pwm_set_output_polarity(s_slice_r, false, true);
-    s_audio_mode = true;
-    return true;
-}
-
-bool biba_hal_motor_audio_end(void)
-{
-    /* Silence before restoring traction settings. */
-    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
-    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
-    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
-    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
-    /* Restore traction carrier, clock divider, and normal polarity. */
-    pwm_set_clkdiv(s_slice_l, 1.0f);
-    pwm_set_clkdiv(s_slice_r, 1.0f);
-    pwm_set_wrap(s_slice_l, PWM_WRAP);
-    pwm_set_wrap(s_slice_r, PWM_WRAP);
-    pwm_set_output_polarity(s_slice_l, false, false);
-    pwm_set_output_polarity(s_slice_r, false, false);
-    s_audio_mode = false;
-    return true;
-}
+/* Compare level above any wrap in use: the raw output is always HIGH, so an
+ * inverted channel is always LOW.  Level 0 on an inverted channel would be
+ * a constant 100 % reverse drive. */
+#define LEVEL_INVERTED_OFF  UINT16_MAX
 
 /* Audio wrap: fixed at 2499 counts.
  * Clock divider is varied per-note so actual frequency = SYSCLK / (div * 2500).
  * With div in [1..255] this covers ~196 Hz (G3) .. 50 kHz, covering all
  * musical notes used in the melody catalog.
  *
- * SILENCE BUG NOTE: channel B (LPWM) has polarity inversion active.
- * Setting level=0 on an inverted channel means "HIGH when counter<0" = never
- * HIGH normally → after inversion = ALWAYS HIGH = 100% reverse drive!
- * Fix: for silence, set RPWM level=0 AND LPWM level=(AUDIO_WRAP+1).
- * Since counter only reaches AUDIO_WRAP=2499, level=2500 is never reached
- * → raw output always HIGH → after inversion = always LOW = silence. */
+ * SILENCE NOTE: channel B (LPWM) has polarity inversion active.
+ * Level 0 on an inverted channel means "HIGH when counter<0" = never HIGH
+ * normally → after inversion = ALWAYS HIGH = 100% reverse drive!
+ * Silence is therefore RPWM=0 and LPWM=LEVEL_INVERTED_OFF (above any wrap,
+ * also the 20 kHz traction wrap still active before the first note). */
 #define AUDIO_WRAP  2499u
+
+/* Longest PWM period in use on either slice, µs.  Compare/TOP writes are
+ * applied at the next counter wrap, while the polarity switch is immediate,
+ * so mode changes hold LPWM low for one full period (see lpwm_hold_low). */
+#define TRACTION_PERIOD_US  (1000000u / BIBA_PWM_FREQUENCY_HZ)
+static uint32_t s_audio_period_us = TRACTION_PERIOD_US;
+
+/* Park both LPWM pins as plain GPIO LOW (hold=true) or hand them back to
+ * the PWM block (hold=false).  SIO value/direction are set before the
+ * function switch, so the pin never glitches high. */
+static void lpwm_hold_low(bool hold)
+{
+    const uint pins[2] = { BIBA_PIN_LEFT_LPWM_GPIO, BIBA_PIN_RIGHT_LPWM_GPIO };
+    for (unsigned i = 0; i < 2u; i++) {
+        if (hold) {
+            gpio_put(pins[i], 0);
+            gpio_set_dir(pins[i], GPIO_OUT);
+            gpio_set_function(pins[i], GPIO_FUNC_SIO);
+        } else {
+            gpio_set_function(pins[i], GPIO_FUNC_PWM);
+        }
+    }
+}
+
+bool biba_hal_motor_audio_begin(void)
+{
+    /* Silence traction outputs, then switch LPWM to inverted polarity with
+     * the inverted-off level.  LPWM is parked low until the new level has
+     * been latched (one traction period), so no reverse pulse escapes. */
+    lpwm_hold_low(true);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  LEVEL_INVERTED_OFF);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, LEVEL_INVERTED_OFF);
+    /* Invert channel B (LPWM) on both slices so that setting RPWM and
+     * LPWM to the same duty produces complementary drive (push-pull). */
+    pwm_set_output_polarity(s_slice_l, false, true);
+    pwm_set_output_polarity(s_slice_r, false, true);
+    sleep_us(2u * TRACTION_PERIOD_US);
+    lpwm_hold_low(false);
+    s_audio_period_us = TRACTION_PERIOD_US;
+    s_audio_mode = true;
+    return true;
+}
+
+bool biba_hal_motor_audio_end(void)
+{
+    /* Park LPWM low, restore the traction carrier, clock divider, normal
+     * polarity and zero duty, then release LPWM once the last (possibly
+     * long, down to ~196 Hz) audio period has wrapped. */
+    lpwm_hold_low(true);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
+    pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO,  0u);
+    pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, 0u);
+    pwm_set_clkdiv(s_slice_l, 1.0f);
+    pwm_set_clkdiv(s_slice_r, 1.0f);
+    pwm_set_wrap(s_slice_l, PWM_WRAP);
+    pwm_set_wrap(s_slice_r, PWM_WRAP);
+    pwm_set_output_polarity(s_slice_l, false, false);
+    pwm_set_output_polarity(s_slice_r, false, false);
+    sleep_us(s_audio_period_us + 2u * TRACTION_PERIOD_US);
+    lpwm_hold_low(false);
+    s_audio_mode = false;
+    return true;
+}
+
+static uint32_t audio_period_us(float div)
+{
+    return (uint32_t)(div * (float)(AUDIO_WRAP + 1u) * 1000000.0f
+                      / (float)BIBA_SYS_CLOCK_HZ) + 1u;
+}
 
 bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
                                   const float    duty_unit[4])
@@ -172,11 +215,11 @@ bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
          * makes them complementary → true push-pull, zero net torque. */
         pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO, lvl);
         pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, lvl);
+        uint32_t per = audio_period_us(div);
+        if (per > s_audio_period_us) s_audio_period_us = per;
     } else {
-        /* Silence on inverted channel: level > wrap → raw always HIGH
-         * → after inversion always LOW.  RPWM level=0 → always LOW. */
         pwm_set_gpio_level(BIBA_PIN_LEFT_RPWM_GPIO, 0u);
-        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, (uint16_t)(AUDIO_WRAP + 1u));
+        pwm_set_gpio_level(BIBA_PIN_LEFT_LPWM_GPIO, LEVEL_INVERTED_OFF);
     }
 
     /* --- Right motor (slice r, channels A=RPWM / B=LPWM inverted) --- */
@@ -190,9 +233,11 @@ bool biba_hal_motor_audio_set_all(const uint32_t freq_hz[4],
         uint16_t lvl = (uint16_t)(duty_unit[2] * (float)(AUDIO_WRAP + 1u));
         pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, lvl);
         pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, lvl);
+        uint32_t per = audio_period_us(div);
+        if (per > s_audio_period_us) s_audio_period_us = per;
     } else {
         pwm_set_gpio_level(BIBA_PIN_RIGHT_RPWM_GPIO, 0u);
-        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, (uint16_t)(AUDIO_WRAP + 1u));
+        pwm_set_gpio_level(BIBA_PIN_RIGHT_LPWM_GPIO, LEVEL_INVERTED_OFF);
     }
 
     return true;

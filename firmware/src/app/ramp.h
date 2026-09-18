@@ -15,18 +15,29 @@ extern "C" {
 #endif
 
 typedef struct {
-    float current;           /* _current in Python SpeedRamp */
-    float hold_remaining_s;  /* _hold_remaining in Python SpeedRamp */
+    float  current;           /* _current in Python SpeedRamp */
+    float  hold_remaining_s;  /* pause left before driving the other way (info) */
+    float  zero_time_s;       /* time the output has been sitting at zero */
+    int8_t last_dir;          /* sign of the last non-zero output, 0 = none */
 } biba_ramp_t;
 
 /* Initialise the ramp state to zero. */
 void  biba_ramp_init(biba_ramp_t *r);
 
-/* Hard-reset to zero — emergency stop, no gradual decel (D-04). */
+/* Hard-reset to zero — emergency stop, no gradual decel (D-04).
+ * Keeps the last direction, so a reversal right after the reset still
+ * waits the zero hold. */
 void  biba_ramp_reset(biba_ramp_t *r);
 
 /* Compute the next ramped output value given target in [-1, 1] and dt in seconds.
- * Returns the new current value (also stored in r->current). */
+ * Returns the new current value (also stored in r->current).
+ *
+ * Direction change: the output first decays to zero at reverse_decel_rate,
+ * then stays at zero until it has been there for zero_hold_ms — also when
+ * the command passed through zero (stick centred) before reversing — and
+ * only then accelerates the other way.
+ * Divergence from Python SpeedRamp: there the hold only follows a sign flip
+ * while the output is still non-zero. */
 float biba_ramp_update(biba_ramp_t *r, float target, float dt);
 
 /* Same ramp logic with caller-provided rates. Useful when a control mode needs
