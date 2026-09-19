@@ -166,12 +166,13 @@
 #endif
 
 /* Motor direction inversion (1 = normal, -1 = inverted).
- * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py. */
+ * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py:
+ * left motor inverted, right motor normal. */
 #ifndef BIBA_LEFT_MOTOR_DIR
 #  define BIBA_LEFT_MOTOR_DIR    1
 #endif
 #ifndef BIBA_RIGHT_MOTOR_DIR
-#  define BIBA_RIGHT_MOTOR_DIR  (-1)
+#  define BIBA_RIGHT_MOTOR_DIR   1
 #endif
 
 /* Motor trim channel: trim_ch * MAX_EFFECT applied post-mix.

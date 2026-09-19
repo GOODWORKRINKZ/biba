@@ -58,6 +58,14 @@
 #define BIBA_RAMP_REVERSE_DECEL_RATE   0.5f
 #define BIBA_RAMP_ZERO_HOLD_MS         400u
 
+/* Speed mode scales (3-position switch, brushed variant).
+ * Old first gear (1/3) was too slow, so:
+ *   1st gear = old 2nd (2/3), 2nd gear = halfway between old 2nd and 3rd
+ *   (5/6), 3rd gear unchanged at 1.0 (global default). */
+#define BIBA_SPEED_MODE_SLOW_SCALE       (2.0f / 3.0f)
+#define BIBA_SPEED_MODE_MEDIUM_SCALE     (5.0f / 6.0f)
+/* BIBA_SPEED_MODE_FAST_SCALE stays at the global default 1.0f */
+
 /* --- Feature toggle overrides (D-07) ----------------------------------- */
 /* Reverse backup beep is OFF on RP2040 by default (match legacy behaviour). */
 #define BIBA_FEATURE_REVERSE_PIP          0
