@@ -167,7 +167,7 @@
 
 /* Motor direction inversion (1 = normal, -1 = inverted).
  * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py:
- * left motor inverted, right motor normal. */
+ * left motor normal, right motor normal. */
 #ifndef BIBA_LEFT_MOTOR_DIR
 #  define BIBA_LEFT_MOTOR_DIR    1
 #endif
