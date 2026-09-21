@@ -51,12 +51,45 @@
 /* Open-loop duty ramp (no speed feedback on this board).  Soft PWM braking
  * keeps the braking current — which flows through the static low-side
  * switch (U2 burned, kicad/variants/brushed-bts7960/analysis/) and back
- * into the 6S pack (BTN7970 over-voltage lockout at 28 V) — bounded:
- * full → 0 in 1 s, full → reverse in 2 s + 0.4 s at rest. */
+ * into the 6S pack (BTN7970 over-voltage lockout at 28 V) — bounded.
+ * NOTE: the current limiter is off on this board (MAX_CURRENT_A = 0 above
+ * disables it), so this ramp is the only firmware-side protection.
+ *
+ * Field test 2026-09-20 (first run with the ramp): steering became
+ * unusable.  A wheel asked to flip sign sat at zero for
+ * |duty| / REVERSE_DECEL_RATE + ZERO_HOLD_MS — with 0.5f / 400 ms that is
+ * 2.4 s at full duty — while the other wheel kept pulling, so the machine
+ * yawed away on its own.  Re-centring and driving off paid the penalty a
+ * second time.
+ *
+ * Three changes:
+ *  - ZERO_HOLD_MS 400 → 30.  The hold happens at zero duty with the wheel
+ *    already stopped or coasting; there is no braking current left to
+ *    bound, so it was pure latency.  It also hurt most exactly where there
+ *    is no energy to dump at all: turning in place from a standstill.
+ *    30 ms still covers electrical settling (motor L/R is ~ms).
+ *  - REVERSE_DECEL_RATE 0.5f → 4.0f.  Being SLOWER than DECEL_RATE was
+ *    never defensible — winding duty down ahead of a reversal is the same
+ *    electrical event as an ordinary throttle release.  Going past
+ *    DECEL_RATE to 4.0f does widen the regen envelope, and is deliberate:
+ *    it rides on the snubber / TVS / bulk-ceramic rework (2084a2f) fitted
+ *    after U2 burned, which clamps exactly the rail transient the old
+ *    rate was substituting for.
+ *  - ACCEL_RATE untouched.  It is the only constant bounding current INTO
+ *    a stalled or back-driven motor, and nothing in the field report
+ *    pointed at it.
+ * Worst case reversal is now ~280 ms at full duty instead of 2400 ms.
+ *
+ * If the pack rail trips the 28 V BTN7970 lockout under hard reversals,
+ * back off from build_flags before editing this file:
+ *   -D BIBA_RAMP_REVERSE_DECEL_RATE=1.0f -D BIBA_RAMP_ZERO_HOLD_MS=50
+ * (= reversal no slower than an ordinary stop, ~1.05 s, regen envelope
+ * unchanged from the pre-rework board).  The other lever is the current
+ * limiter, still disabled above. */
 #define BIBA_RAMP_ACCEL_RATE           2.0f
 #define BIBA_RAMP_DECEL_RATE           1.0f
-#define BIBA_RAMP_REVERSE_DECEL_RATE   0.5f
-#define BIBA_RAMP_ZERO_HOLD_MS         400u
+#define BIBA_RAMP_REVERSE_DECEL_RATE   4.0f
+#define BIBA_RAMP_ZERO_HOLD_MS         30u
 
 /* Speed mode scales (3-position switch, brushed variant).
  * Old first gear (1/3) was too slow, so:

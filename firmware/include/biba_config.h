@@ -194,6 +194,23 @@
 /* --- Motor output ramp (open-loop duty slew limiter) -------------------- */
 /* Mirror RAMP_* from biba-controller/config.py. Not feature-gated —
  * these are critical for smooth motor control in all modes.            */
+/* Rates are in duty units per second, so time-to-zero from duty D is D/rate.
+ * Targets may override these — RPICO_RP2040 does, see its target_config.h
+ * for the board-specific rationale and the field-test history.
+ *
+ * Invariant: REVERSE_DECEL_RATE >= DECEL_RATE.  Winding duty down ahead of a
+ * reversal is the same electrical event as an ordinary throttle release, so
+ * making it slower buys no protection and only delays the wheel — which the
+ * operator feels as the wheel dropping out mid-turn while the other wheel
+ * keeps pulling (field test 2026-09-20).
+ *
+ * Field tuning without a code change (platformio.ini build_flags):
+ *   -D BIBA_RAMP_REVERSE_DECEL_RATE=4.0f   quicker reversal
+ *   -D BIBA_RAMP_REVERSE_DECEL_RATE=0.0f   cross zero immediately (no limit)
+ *   -D BIBA_RAMP_ZERO_HOLD_MS=0            no dead time at zero
+ * Only REVERSE_DECEL_RATE treats 0 as "no limit"; 0 accel/decel is not a
+ * disable.  Both knobs widen the regenerative-braking envelope on boards
+ * without the snubber/TVS rework — check the target before loosening them. */
 #ifndef BIBA_RAMP_ACCEL_RATE
 #  define BIBA_RAMP_ACCEL_RATE           2.0f
 #endif
@@ -201,10 +218,10 @@
 #  define BIBA_RAMP_DECEL_RATE           2.0f
 #endif
 #ifndef BIBA_RAMP_REVERSE_DECEL_RATE
-#  define BIBA_RAMP_REVERSE_DECEL_RATE   0.5f
+#  define BIBA_RAMP_REVERSE_DECEL_RATE   2.0f
 #endif
 #ifndef BIBA_RAMP_ZERO_HOLD_MS
-#  define BIBA_RAMP_ZERO_HOLD_MS         150u
+#  define BIBA_RAMP_ZERO_HOLD_MS         50u
 #endif
 
 /* --- Motor / RPM calibration -------------------------------------------- */
@@ -433,11 +450,13 @@
 #ifndef BIBA_RPM_SETPOINT_DECEL_RATE
 #  define BIBA_RPM_SETPOINT_DECEL_RATE   1.0f
 #endif
+/* Kept in step with BIBA_RAMP_REVERSE_DECEL_RATE / BIBA_RAMP_ZERO_HOLD_MS:
+ * the same slow-reversal handling problem applies to the setpoint ramp. */
 #ifndef BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE
-#  define BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE 0.5f
+#  define BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE 1.0f
 #endif
 #ifndef BIBA_RPM_SETPOINT_ZERO_HOLD_MS
-#  define BIBA_RPM_SETPOINT_ZERO_HOLD_MS 150u
+#  define BIBA_RPM_SETPOINT_ZERO_HOLD_MS 50u
 #endif
 
 /* --- Feature: Motor Coil Melodies -------------------------------------- */

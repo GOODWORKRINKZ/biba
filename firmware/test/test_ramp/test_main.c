@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "ramp.h"
+#include "biba_config.h"
 #include "biba_test_support.h"
 
 /* -----------------------------------------------------------------------
@@ -83,17 +84,80 @@ static void test_deceleration_from_positive(void)
 
 /* -----------------------------------------------------------------------
  * Test 6: Direction change uses REVERSE_DECEL_RATE, not accel/decel rate
- * REVERSE_DECEL_RATE=0.5, current=0.5, target=-1.0, dt=0.1 → step=0.05 → 0.45f
- * (accel would give 0.3f, decel would give 0.4f — wrong)
+ * Derived from the config so a retune does not need a test edit; the rates
+ * are distinct enough that accel/decel would give a different answer.
  * ----------------------------------------------------------------------- */
 static void test_direction_change_uses_reverse_decel_rate(void)
 {
+    /* Explicit rates: reverse 0.5, distinct from accel 2.0 and decel 3.0,
+     * so only the reversal branch can produce this answer. */
     biba_ramp_t r;
     biba_ramp_init(&r);
     r.current = 0.5f;
-    float out = biba_ramp_update(&r, -1.0f, 0.1f);
+    float out = biba_ramp_update_with_rates(&r, -1.0f, 0.1f,
+                                            2.0f, 3.0f, 0.5f, 150u);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.45f, out);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.45f, r.current);
+}
+
+/* -----------------------------------------------------------------------
+ * Test 6a: reverse_decel_rate <= 0 means "no reversal slew limit" — the
+ * output lands on zero in a single tick from any duty.
+ * ----------------------------------------------------------------------- */
+static void test_zero_reverse_rate_crosses_immediately(void)
+{
+    biba_ramp_t r;
+    biba_ramp_init(&r);
+    r.current = 1.0f;
+    float out = biba_ramp_update_with_rates(&r, -1.0f, 0.002f,
+                                            2.0f, 2.0f, 0.0f, 0u);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, out);
+
+    out = biba_ramp_update_with_rates(&r, -1.0f, 0.002f,
+                                      2.0f, 2.0f, 0.0f, 0u);
+    TEST_ASSERT_TRUE(out < 0.0f);
+}
+
+/* -----------------------------------------------------------------------
+ * Test 6b: The reversal path is not slower than plain deceleration.
+ * Regression guard for the 2026-09-20 field report: REVERSE_DECEL_RATE used
+ * to be 4x slower than DECEL_RATE, so a wheel asked to flip sign sat at the
+ * old duty for seconds while the other wheel kept pulling the robot around.
+ * ----------------------------------------------------------------------- */
+static void test_reverse_is_not_slower_than_decel(void)
+{
+    TEST_ASSERT_TRUE(BIBA_RAMP_REVERSE_DECEL_RATE >= BIBA_RAMP_DECEL_RATE);
+}
+
+/* -----------------------------------------------------------------------
+ * Test 6c: Steering through a reversal never costs more than stopping and
+ * driving off again.  Regression guard for the 2026-09-20 field report,
+ * where REVERSE_DECEL_RATE was half DECEL_RATE and the hold was 400 ms, so
+ * a wheel asked to flip sign sat at the old duty for seconds while the
+ * other wheel kept pulling the robot around.
+ * Budget is derived, so a retune needs no test edit.
+ * ----------------------------------------------------------------------- */
+static void test_full_reversal_latency_within_budget(void)
+{
+    const float dt     = 1.0f / (float)BIBA_CONTROL_LOOP_HZ;
+    /* full duty down to zero at the ordinary decel rate, plus the hold,
+     * plus a couple of ticks of slack for the discrete stepping. */
+    const float budget = 1.0f / BIBA_RAMP_DECEL_RATE
+                       + (float)BIBA_RAMP_ZERO_HOLD_MS / 1000.0f
+                       + 2.0f * dt;
+    biba_ramp_t r;
+    biba_ramp_init(&r);
+    r.current  = 1.0f;
+    r.last_dir = 1;
+
+    float elapsed = 0.0f;
+    while (elapsed <= budget) {
+        float out = biba_ramp_update(&r, -1.0f, dt);
+        elapsed += dt;
+        if (out < 0.0f) break;
+    }
+    TEST_ASSERT_TRUE(r.current < 0.0f);
+    TEST_ASSERT_TRUE(elapsed <= budget);
 }
 
 /* -----------------------------------------------------------------------
@@ -109,8 +173,9 @@ static void test_direction_change_triggers_zero_hold(void)
     /* Large dt forces current to reach zero, hold timer should arm */
     float out = biba_ramp_update(&r, -1.0f, 1.0f);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, out);
-    /* hold_remaining_s = 150ms = 0.15f */
-    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.15f, r.hold_remaining_s);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f,
+                             (float)BIBA_RAMP_ZERO_HOLD_MS / 1000.0f,
+                             r.hold_remaining_s);
 
     /* Tick during hold: output must remain frozen at 0.0 */
     float out2 = biba_ramp_update(&r, -1.0f, 0.05f);
@@ -219,6 +284,9 @@ static void run_all(void)
     RUN_TEST(test_custom_accel_rate_limits_soft_start);
     RUN_TEST(test_deceleration_from_positive);
     RUN_TEST(test_direction_change_uses_reverse_decel_rate);
+    RUN_TEST(test_zero_reverse_rate_crosses_immediately);
+    RUN_TEST(test_reverse_is_not_slower_than_decel);
+    RUN_TEST(test_full_reversal_latency_within_budget);
     RUN_TEST(test_direction_change_triggers_zero_hold);
     RUN_TEST(test_clamp_output_to_unit);
     RUN_TEST(test_reversal_through_zero_waits_hold);

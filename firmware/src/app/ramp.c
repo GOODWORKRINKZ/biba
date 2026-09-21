@@ -59,11 +59,18 @@ float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
     }
 
     /* Direction change: decelerate toward zero, do NOT cross it.
-     * Uses reverse_decel_rate (slower than normal decel). */
+     * Uses reverse_decel_rate, which is deliberately FASTER than the normal
+     * decel rate — this is the path the operator feels when steering. */
     if ((r->current > 0.0f && target < 0.0f) ||
         (r->current < 0.0f && target > 0.0f)) {
 
-        float max_step = reverse_decel_rate * dt;
+        /* reverse_decel_rate <= 0 disables the reversal slew limit: the step
+         * becomes larger than any valid duty, so the output lands on zero
+         * this tick and (with zero_hold_ms 0) drives the other way on the
+         * next one. Field-tuning escape hatch — see biba_config.h. */
+        float max_step = (reverse_decel_rate > 0.0f)
+                             ? reverse_decel_rate * dt
+                             : 2.0f;
         float abs_cur  = (r->current < 0.0f) ? -r->current : r->current;
 
         if (abs_cur <= max_step) {

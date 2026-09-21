@@ -37,7 +37,12 @@ void  biba_ramp_reset(biba_ramp_t *r);
  * the command passed through zero (stick centred) before reversing — and
  * only then accelerates the other way.
  * Divergence from Python SpeedRamp: there the hold only follows a sign flip
- * while the output is still non-zero. */
+ * while the output is still non-zero.
+ *
+ * Reversal latency is therefore |current| / reverse_decel_rate + zero_hold_ms;
+ * keep that budget under ~0.3 s or steering through a sign flip feels like the
+ * wheel dropped out (field test 2026-09-20). A reverse_decel_rate <= 0 means
+ * "no reversal slew limit" — cross zero on the next tick. */
 float biba_ramp_update(biba_ramp_t *r, float target, float dt);
 
 /* Same ramp logic with caller-provided rates. Useful when a control mode needs

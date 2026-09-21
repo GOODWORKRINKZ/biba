@@ -159,11 +159,18 @@ STM32_LINK_SPI_BUS = _get_env_int("STM32_LINK_SPI_BUS", 0)
 STM32_LINK_SPI_DEVICE = _get_env_int("STM32_LINK_SPI_DEVICE", 0)
 STM32_LINK_SPI_SPEED_HZ = _get_env_int("STM32_LINK_SPI_SPEED_HZ", 8_000_000)
 
-# Motor ramping / slew rate
+# Motor ramping / slew rate.
+# Rates are duty per second, so a wheel that must flip sign is stuck at zero
+# for |duty| / RAMP_REVERSE_DECEL_RATE + RAMP_ZERO_HOLD_S.  Invariant:
+# RAMP_REVERSE_DECEL_RATE >= RAMP_DECEL_RATE — winding duty down ahead of a
+# reversal is the same electrical event as an ordinary throttle release, so
+# making it slower protects nothing and only delays the wheel while the other
+# one keeps pulling the robot off course (field test 2026-09-20).
+# Mirrors BIBA_RAMP_* in firmware/include/biba_config.h.
 RAMP_ACCEL_RATE = _get_env_float("RAMP_ACCEL_RATE", 2.0)
 RAMP_DECEL_RATE = _get_env_float("RAMP_DECEL_RATE", 2.0)
-RAMP_REVERSE_DECEL_RATE = _get_env_float("RAMP_REVERSE_DECEL_RATE", 0.5)
-RAMP_ZERO_HOLD_S = _get_env_float("RAMP_ZERO_HOLD_S", 0.15)
+RAMP_REVERSE_DECEL_RATE = _get_env_float("RAMP_REVERSE_DECEL_RATE", 2.0)
+RAMP_ZERO_HOLD_S = _get_env_float("RAMP_ZERO_HOLD_S", 0.05)
 MOTOR_DEADBAND = _get_env_float("MOTOR_DEADBAND", 0.05)
 
 # Beacon / SOS
