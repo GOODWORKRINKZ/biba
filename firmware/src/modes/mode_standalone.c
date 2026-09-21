@@ -879,7 +879,7 @@ void biba_mode_standalone_tick(void)
     float raw_throttle = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_THROTTLE]);
     /* Steering sign inverted: left/right turn swapped to match operator
      * expectation.  Remove the leading '-' to flip back. */
-    float raw_steering = failsafe ? 0.0f : -rc_to_unit(s_channels[BIBA_CH_STEERING]);
+    float raw_steering = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_STEERING]);
     float arm_ch       = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_ARM]);
     float speed_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_SPEED_MODE]);
     float drive_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_DRIVE_MODE]);
