@@ -877,9 +877,9 @@ void biba_mode_standalone_tick(void)
      * Channel reads (normalised -1..+1, mirroring biba-controller/config.py)
      * ------------------------------------------------------------------ */
     float raw_throttle = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_THROTTLE]);
-    /* Steering: left/right turn direction.  Add a leading '-' to rc_to_unit
-     * here if the operator's wheel turns the robot the wrong way. */
-    float raw_steering = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_STEERING]);
+    /* Steering sign inverted: left/right turn swapped to match operator
+     * expectation.  Remove the leading '-' to flip back. */
+    float raw_steering = failsafe ? 0.0f : -rc_to_unit(s_channels[BIBA_CH_STEERING]);
     float arm_ch       = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_ARM]);
     float speed_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_SPEED_MODE]);
     float drive_sel    = failsafe ? 0.0f : rc_to_unit(s_channels[BIBA_CH_DRIVE_MODE]);
