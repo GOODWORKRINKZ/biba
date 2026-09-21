@@ -25,6 +25,9 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from easyeda_netlist import footprint_name
+
 SCALE = 0.254  # 1 единица EasyEDA = 10 mil
 # рамка EasyEDA: x 0..1632, y -1149..0 → лист A3 KiCad (420×297 мм)
 OFF_X, OFF_Y = 10, 1150
@@ -572,10 +575,12 @@ def main() -> int:
                 f"      (effects (font (size 1.27 1.27)){hide}))\n"
             )
         a = c["attrs"]
+        package = a.get("package", "")
         extra = {
-            "Footprint": "",
+            # имя то же, что даёт плате gen_pcb.py, иначе футпринт не найдётся
+            "Footprint": f"{LIB}:{footprint_name(package)}" if package else "",
             "Datasheet": "",
-            "Package": a.get("package", ""),
+            "Package": package,
             "LCSC": a.get("Supplier Part", ""),
             "MPN": a.get("Manufacturer Part", ""),
         }

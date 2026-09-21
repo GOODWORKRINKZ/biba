@@ -13,6 +13,29 @@ from collections import defaultdict
 from pathlib import Path
 
 
+# KiCad экранирует запрещённые в LIB_ID символы как {colon}, {slash} и т.д.
+LIB_ID_ESCAPES = {
+    "{colon}": ":", "{slash}": "/", "{backslash}": "\\",
+    "{lt}": "<", "{gt}": ">", "{dblquote}": "\"",
+}
+
+
+def footprint_name(package: str) -> str:
+    """Имя посадочного места EasyEDA -> имя футпринта KiCad.
+
+    EasyEDA пишет package как 'Библиотека:Имя' либо просто 'Имя'. Префикс
+    библиотеки отбрасываем, запрещённые в LIB_ID символы заменяем на '_'.
+    На вход принимается и уже экранированное KiCad имя ('A{colon}B'), чтобы
+    генератор платы и генератор схемы получали одинаковый результат — иначе
+    футпринт из схемы не найдётся в biba.pretty.
+    """
+    name = package
+    for esc, char in LIB_ID_ESCAPES.items():
+        name = name.replace(esc, char)
+    name = name.rsplit(":", 1)[-1].strip()
+    return re.sub(r"[\s/\\<>\"{}]", "_", name)
+
+
 def parse_attrs(s: str) -> dict:
     """'key`value`key`value' -> {key: value}."""
     toks = s.split("`")

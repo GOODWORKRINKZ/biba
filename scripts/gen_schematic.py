@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """Генерация KiCad-проекта (схема) из нетлиста EasyEDA (netlist.json).
 
+УСТАРЕЛО. Актуальный генератор схемы — scripts/easyeda_sch2kicad.py: он
+переносит графику символов и провода 1:1, а здесь связи выражены только
+глобальными метками. Запуск этого скрипта перезапишет и схему, и
+kicad/common/symbols/biba.kicad_sym более бедным вариантом.
+
 Создаёт в <variant>/kicad_out/:
   - biba.kicad_sym        — собственные символы (в kicad/common/symbols/)
   - brushed-bts7960.kicad_pro / .kicad_sch
@@ -13,6 +18,9 @@ import json
 import sys
 import uuid
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from easyeda_netlist import footprint_name
 
 PIN_LEN = 3.81
 PIN_X = -5.08
@@ -200,6 +208,8 @@ def gen_sch(components, paper="A2") -> str:
         x, y = placed[d]
         ref = d
         value = c["value"]
+        # то же имя, что даёт плате gen_pcb.py — иначе футпринт не найдётся
+        footprint = f"biba:{footprint_name(c['package'])}" if c.get("package") else ""
         lines.append(
             f"  (symbol (lib_id \"biba:{sym}\") (at {x:.2f} {y:.2f} 0) (unit 1)\n"
             f"    (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid \"{uuid.uuid4()}\")\n"
@@ -207,7 +217,7 @@ def gen_sch(components, paper="A2") -> str:
             f"      (effects (font (size 1.27 1.27))))\n"
             f"    (property \"Value\" \"{value}\" (at {x + 2.54:.2f} {y - 1.27:.2f} 0)\n"
             f"      (effects (font (size 1.27 1.27))))\n"
-            f"    (property \"Footprint\" \"\" (at {x:.2f} {y:.2f} 0)\n"
+            f"    (property \"Footprint\" \"{footprint}\" (at {x:.2f} {y:.2f} 0)\n"
             f"      (effects (font (size 1.27 1.27)) hide))\n"
             f"    (property \"Datasheet\" \"\" (at {x:.2f} {y:.2f} 0)\n"
             f"      (effects (font (size 1.27 1.27)) hide))\n"
@@ -245,6 +255,10 @@ def _refkey(d: str):
 
 
 def main() -> int:
+    # консоль Windows по умолчанию cp1252 — русские сообщения её роняют
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     variant = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     netlist = json.load(open(variant / "easyeda" / "RP2040" / "netlist.json", encoding="utf-8"))
     comps = netlist["components"]
@@ -261,11 +275,14 @@ def main() -> int:
     proj_name = "brushed-bts7960"
     (proj_dir / f"{proj_name}.kicad_sch").write_text(gen_sch(comps), encoding="utf-8")
 
-    (proj_dir / f"{proj_name}.kicad_pro").write_text(
-        "(kicad_project\n  (version 20231120)\n  (generator \"python\")\n"
-        "  (paper \"A2\")\n  (schematic\n    (legacy_lib_dir \"\")\n    (legacy_lib_list \"\")\n  )\n)\n",
-        encoding="utf-8",
-    )
+    # .kicad_pro — JSON, и в нём лежат настройки платы (классы цепей, DRC).
+    # Существующий не трогаем, иначе потеряем то, что положил gen_pcb.py.
+    pro_path = proj_dir / f"{proj_name}.kicad_pro"
+    if not pro_path.exists():
+        pro_path.write_text(
+            json.dumps({"meta": {"filename": pro_path.name, "version": 3}}, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     rel = sym_path.resolve().as_posix()
     (proj_dir / "sym-lib-table").write_text(
@@ -274,7 +291,11 @@ def main() -> int:
         ")\n",
         encoding="utf-8",
     )
-    (proj_dir / "fp-lib-table").write_text("(fp_lib_table\n  (version 7)\n)\n", encoding="utf-8")
+    # fp-lib-table пишет gen_pcb.py (там знают путь до biba.pretty) —
+    # создаём пустую заглушку, только если платы ещё не генерировали
+    fp_table = proj_dir / "fp-lib-table"
+    if not fp_table.exists():
+        fp_table.write_text("(fp_lib_table\n  (version 7)\n)\n", encoding="utf-8")
 
     print("Символы:", sym_path)
     print("Проект:", proj_dir)
