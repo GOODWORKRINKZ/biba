@@ -302,12 +302,20 @@ def print_drc(data: dict) -> None:
 
 
 def main() -> int:
-    variant = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    variant = Path(args[0] if args else ".").resolve()
     src = variant / SRC_PCB
     if not src.exists():
         raise SystemExit(f"Нет исходника EasyEDA: {src}")
 
+    # импорт разовый: плата дальше ведётся в KiCad, перезапуск сотрёт правки
     pcb_path = variant / f"{PROJ_NAME}.kicad_pcb"
+    if pcb_path.exists() and "--force" not in sys.argv:
+        raise SystemExit(
+            f"{pcb_path.name} уже существует. Импорт из EasyEDA — разовый:\n"
+            f"  плата ведётся в KiCad, повторный запуск сотрёт правки и разводку.\n"
+            f"  Если это действительно нужно: gen_pcb.py <variant> --force"
+        )
     run_import(src, pcb_path)
 
     board = pcbnew.LoadBoard(str(pcb_path))

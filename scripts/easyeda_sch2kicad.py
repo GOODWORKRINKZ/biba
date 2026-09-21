@@ -489,8 +489,25 @@ def on_segment(p, a, b, eps=0.01):
 
 
 # ---------------------------------------------------------------- main
+def guard_overwrite(path: Path) -> None:
+    """Не затирать схему, которую уже правили руками.
+
+    Импорт — разовая операция: после него схема ведётся в KiCad, и
+    перезапуск конвертера выбросит всё, что дорисовали (снабберы, TVS,
+    керамику). Осознанный повторный импорт — через --force.
+    """
+    if path.exists() and "--force" not in sys.argv:
+        raise SystemExit(
+            f"{path.name} уже существует. Импорт из EasyEDA — разовый:\n"
+            f"  схема ведётся в KiCad, повторный запуск сотрёт правки.\n"
+            f"  Если это действительно нужно: {Path(__file__).name} <variant> --force"
+        )
+
+
 def main() -> int:
-    variant = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    variant = Path(args[0] if args else ".")
+    guard_overwrite(variant / f"{PROJ}.kicad_sch")
     src = variant / "easyeda" / "RP2040" / "RP2040.json"
     doc = json.load(open(src, encoding="utf-8"))
     shapes = doc["schematics"][0]["dataStr"]["shape"]
