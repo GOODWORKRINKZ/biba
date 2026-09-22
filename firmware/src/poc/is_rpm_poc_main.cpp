@@ -280,9 +280,13 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
          * controller sees meas → 0 and can raise duty to restart.  Without
          * this decay the EMA stays frozen at the last high value and the
          * integral winds negative, cutting motor power permanently. */
-        const float ZC_MIN_VALID_HZ = 80.0f;
-        const float ZC_MAX_VALID_HZ = target_hz * 2.5f + 300.0f;
-        if (meas_raw >= ZC_MIN_VALID_HZ && meas_raw <= ZC_MAX_VALID_HZ) {
+        /* Lower-case locals: the upper-case ZC_MIN_VALID_HZ is an object-like
+         * macro in biba_config.h and would be expanded inside the declaration.
+         * 80 Hz deliberately overrides that 50 Hz default — this PoC drives a
+         * DC motor whose ZC floor sits higher than the shared config assumes. */
+        const float zc_min_valid_hz = 80.0f;
+        const float zc_max_valid_hz = target_hz * 2.5f + 300.0f;
+        if (meas_raw >= zc_min_valid_hz && meas_raw <= zc_max_valid_hz) {
             meas_ema = EMA_ALPHA * meas_raw + (1.0f - EMA_ALPHA) * meas_ema;
         } else if (meas_raw == 0.0f) {
             /* Wheel stopped / no ZC: decay slowly toward 0 so the controller
@@ -788,10 +792,14 @@ static void cmd_rpmtrack(const char *shape,
                                     RPMRUN_SPS);
 
         /* EMA (magnitude) + validity gate */
-        const float ZC_MIN_VALID_HZ = 80.0f;
-        const float ZC_MAX_VALID_HZ = (target_mag > 0.0f ? target_mag : amp_hz)
+        /* Lower-case locals: the upper-case ZC_MIN_VALID_HZ is an object-like
+         * macro in biba_config.h and would be expanded inside the declaration.
+         * 80 Hz deliberately overrides that 50 Hz default — this PoC drives a
+         * DC motor whose ZC floor sits higher than the shared config assumes. */
+        const float zc_min_valid_hz = 80.0f;
+        const float zc_max_valid_hz = (target_mag > 0.0f ? target_mag : amp_hz)
                                       * 2.5f + 300.0f;
-        if (meas_raw >= ZC_MIN_VALID_HZ && meas_raw <= ZC_MAX_VALID_HZ) {
+        if (meas_raw >= zc_min_valid_hz && meas_raw <= zc_max_valid_hz) {
             meas_ema = EMA_ALPHA * meas_raw + (1.0f - EMA_ALPHA) * meas_ema;
         } else if (meas_raw == 0.0f) {
             meas_ema *= 0.9f;
