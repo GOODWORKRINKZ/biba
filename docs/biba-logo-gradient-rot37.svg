@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1020" viewBox="10 -330 1180 1020" role="img" aria-labelledby="title desc">
+  <title id="title">БиБа gradient ASCII logo (rotated 37° CW)</title>
+  <desc id="desc">Terminal-style framed БиБа logo rotated 37° clockwise for silkscreen — cyan/magenta/violet gradient on transparent background.</desc>
+  <defs>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#48e7ff"/>
+      <stop offset="52%" stop-color="#ff5fd2"/>
+      <stop offset="100%" stop-color="#8f6bff"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-25%" width="140%" height="150%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="rotate(37, 600, 180)">
+    <text
+      x="600"
+      y="68"
+      xml:space="preserve"
+      text-anchor="middle"
+      fill="url(#textGradient)"
+      stroke="#16091f"
+      stroke-opacity="0.36"
+      stroke-width="0.8"
+      paint-order="stroke fill"
+      filter="url(#glow)"
+      font-family="DejaVu Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+      font-size="28"
+      font-weight="700"
+    >
+      <tspan x="600" dy="00">╔═════════════════════════════════════════════╗</tspan>
+      <tspan x="600" dy="30">║  ███████╗  ██╗   ███╗  ███████╗  █████╗     ║</tspan>
+      <tspan x="600" dy="30">║  ██╔════╝  ██║  ████║  ██╔════╝ ██╔══██╗    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╗   ██║ ██╔██║  ██████╗  ███████║    ║</tspan>
+      <tspan x="600" dy="30">║  ██╔══██╗  ██║██╔╝██║  ██╔══██╗ ██╔══██║    ║</tspan>
+      <tspan x="600" dy="30">║  ██████╔╝  ████╔╝ ██║  ██████╔╝ ██║  ██║    ║</tspan>
+      <tspan x="600" dy="30">║  ╚═════╝   ╚═══╝  ╚═╝  ╚═════╝  ╚═╝  ╚═╝    ║</tspan>
+      <tspan x="600" dy="30">╚═════════════════════════════════════════════╝</tspan>
+    </text>
+  </g>
+</svg>

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
-import importlib.util
-
 
 SCRIPT_PATH = Path("scripts/vcp_capture.py")
 

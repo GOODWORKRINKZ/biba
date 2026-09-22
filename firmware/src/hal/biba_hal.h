@@ -37,6 +37,32 @@ void biba_hal_status_led_set(bool on);
 /* RGB NeoPixel LED (WS2812).  No-op on targets without BIBA_HAS_RGB_LED. */
 void biba_hal_rgb_led_set(uint8_t r, uint8_t g, uint8_t b);
 
+/* --- Addressable LED strip (indicator panels) --------------------------- *
+ *
+ * A single WS2812 chain carrying the front indicator panels (see
+ * src/app/led_panel.c).  Separate from biba_hal_rgb_led_set(), which
+ * drives the board's own status NeoPixel on a different pin.
+ *
+ * No-op on targets without BIBA_HAS_LED_PANEL.
+ */
+
+/* Bring up the strip.  Called from biba_hal_init(); safe to call twice. */
+void biba_hal_led_strip_init(void);
+
+/* Queue one frame.  `rgb` is 3 bytes per LED in R,G,B order and is
+ * consumed (copied into the driver's own buffer) before returning, so
+ * the caller may reuse its frame buffer immediately.
+ *
+ * Non-blocking: the bytes are clocked out by DMA in the background.  A
+ * frame submitted while the previous one is still on the wire is
+ * dropped rather than waited on — at BIBA_LED_PANEL_REFRESH_MS the
+ * previous transfer has always finished, so a drop means something
+ * else stalled and the next repaint fixes it anyway. */
+void biba_hal_led_strip_write(const uint8_t *rgb, size_t led_count);
+
+/* True while a frame is still being clocked out. */
+bool biba_hal_led_strip_busy(void);
+
 /* Raise/lower the DATA_READY line to the SBC. */
 void biba_hal_data_ready_set(bool on);
 void biba_hal_data_ready_pulse(void);
@@ -49,7 +75,7 @@ void biba_hal_left_enable(bool enabled);
 void biba_hal_right_enable(bool enabled);
 
 /* SSR (Solid-State Relay) — BTS7960 power-rail control.
- * Implemented in biba_hal_rp2040.c; no-op stubs in biba_hal.c (STM32/debug).
+ * Implemented in biba_hal_rp2040.c.
  * D-13: init drives pin LOW at boot; set follows arm state in mode_standalone. */
 void biba_hal_ssr_init(void);
 void biba_hal_ssr_set(bool enabled);
@@ -57,9 +83,9 @@ void biba_hal_ssr_set(bool enabled);
 /* --- Motor PWM ---------------------------------------------------------- */
 
 /* Initialise the four BTS7960 motor-PWM lines. The exact topology is
- * per-target: BLUEPILL_F103C8 uses a single shared timer (TIM1), while
- * BIBA_F103_REV_A binds each line to its own hardware timer so the
- * motor-audio API below can run four independent carriers at once. */
+ * per-target: some targets use a single shared timer, while others bind
+ * each line to its own hardware timer so the motor-audio API below can
+ * run four independent carriers at once (BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM). */
 void biba_hal_motor_pwm_init(void);
 
 /* Traction-mode drive. `duty` is [-1.0, 1.0]. Negative drives LPWM,
@@ -168,6 +194,13 @@ bool biba_hal_i2c_read(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
  * returned.  Returns false when no complete line is available yet.
  * Empty lines (\n\n) are silently discarded. */
 bool biba_hal_serial_readline(char *buf, size_t max_len);
+
+/* Write `len` raw bytes to USB CDC without any encoding (used by the
+ * blackbox download protocol to stream binary .bbd data). */
+void biba_hal_serial_write_bytes(const uint8_t *buf, size_t len);
+
+/* Write a NUL-terminated string to USB CDC (convenience wrapper). */
+void biba_hal_serial_write_str(const char *s);
 
 #ifdef __cplusplus
 }

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
 from motors.ramping import ScalarKalmanFilter, SpeedRamp
-
 
 DT = 0.02  # 50 Hz control loop tick
 

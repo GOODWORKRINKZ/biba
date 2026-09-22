@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 from bms.daly import BatteryState
 from bms.poller import BMSPoller
@@ -23,12 +22,12 @@ def _make_state(voltage: float = 24.0) -> BatteryState:
 
 
 class FakeBMS:
-    def __init__(self, state: Optional[BatteryState] = None) -> None:
+    def __init__(self, state: BatteryState | None = None) -> None:
         self.state = state
         self.call_count = 0
         self.delay = 0.0
 
-    def read_state(self) -> Optional[BatteryState]:
+    def read_state(self) -> BatteryState | None:
         self.call_count += 1
         if self.delay:
             time.sleep(self.delay)
@@ -81,7 +80,7 @@ def test_poller_clears_timestamp_after_read_exception() -> None:
         def __init__(self) -> None:
             self.call_count = 0
 
-        def read_state(self) -> Optional[BatteryState]:
+        def read_state(self) -> BatteryState | None:
             self.call_count += 1
             if self.call_count == 1:
                 return state
@@ -151,7 +150,7 @@ def test_poller_clears_latest_state_after_read_exception() -> None:
         def __init__(self) -> None:
             self.call_count = 0
 
-        def read_state(self) -> Optional[BatteryState]:
+        def read_state(self) -> BatteryState | None:
             self.call_count += 1
             if self.call_count == 1:
                 return state

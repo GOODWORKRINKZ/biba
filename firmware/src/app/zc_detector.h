@@ -19,8 +19,13 @@ extern "C" {
  * ZC_SUBWIN_K equal blocks; each block computes a local baseline (min/max/mid)
  * and counts Schmitt-trigger transitions independently. Local baselines
  * remove low-frequency DC drift that ruins a single global-mean detector
- * during PWM transients. */
-#define ZC_SUBWIN_K          8u
+ * during PWM transients.
+ *
+ * Defaults are set in biba_config.h; these #ifndef guards allow target
+ * overrides to propagate through. */
+#ifndef ZC_SUBWIN_K
+#  define ZC_SUBWIN_K          8u
+#endif
 
 /* Minimum per-block peak-to-peak (LSB) to consider a block "active" — blocks
  * with less AC content are skipped (DC-only or noise-floor segments).
@@ -31,7 +36,9 @@ extern "C" {
  * Threshold 120 gives 0% false positives (stopped) while keeping 84% of
  * real-signal windows.  The previous value of 30 allowed PWM noise through
  * at ~110 Hz — above the ZC_MIN_VALID_HZ=80 gate — corrupting the EMA. */
-#define ZC_SUBWIN_MIN_PKPK   120u
+#ifndef ZC_SUBWIN_MIN_PKPK
+#  define ZC_SUBWIN_MIN_PKPK   120u
+#endif
 
 /* Minimum per-block sample standard deviation (LSB) to consider a block
  * "active". This is a much stronger discriminator than pkpk alone because
@@ -44,16 +51,22 @@ extern "C" {
  *   - Motor STOPPED (LEFT in REV, only PWM noise):  std = 10–26 LSB
  *   - Motor RUNNING (LEFT FWD / RIGHT both dirs):   std = 50–450 LSB
  * Threshold 40 cleanly separates the two regimes. */
-#define ZC_SUBWIN_MIN_STD    40.0f
+#ifndef ZC_SUBWIN_MIN_STD
+#  define ZC_SUBWIN_MIN_STD    40.0f
+#endif
 
 /* Low-side validity gate for zc_ema_update: readings below this are treated
  * as noise-floor (back-EMF saturation / no IS current) rather than real
  * commutation frequency. */
-#define ZC_MIN_VALID_HZ      50.0f
+#ifndef ZC_MIN_VALID_HZ
+#  define ZC_MIN_VALID_HZ      50.0f
+#endif
 
 /* EMA smoothing factor for the validity-gated update (alpha=0.7 → 70% weight
  * on the new reading). Two-cycle (~200 ms @ 10 Hz loop) step response. */
-#define ZC_EMA_ALPHA         0.7f
+#ifndef ZC_EMA_ALPHA
+#  define ZC_EMA_ALPHA         0.7f
+#endif
 
 typedef struct {
 	float freq_hz;

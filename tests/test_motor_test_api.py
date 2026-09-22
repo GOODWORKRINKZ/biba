@@ -8,7 +8,6 @@ import urllib.request
 from dataclasses import asdict
 
 import pytest
-
 from pid_tuning import PidTuningSnapshot, PidTuningStore
 from settings_store import MotorTrimStore
 

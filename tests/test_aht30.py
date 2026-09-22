@@ -10,7 +10,6 @@ Firmware reference: aht30.c  aht30.h  (BIBA_NATIVE_TEST path)
 
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # Decode helpers (mirror the C formulas exactly)
 # ---------------------------------------------------------------------------
@@ -86,7 +85,7 @@ def test_humidity_midscale_is_fifty_percent() -> None:
 def test_humidity_known_value() -> None:
     """hum_raw = 524288 → 50.0 %.  hum_raw = 629145.6... → 60 %; use closest int."""
     # 60 % → raw = 0x60 / 100 * 1048576 ≈ 629145
-    raw = int(round(60.0 / 100.0 * 1048576))
+    raw = round(60.0 / 100.0 * 1048576)
     buf = _build_buf(0x00, hum_raw=raw, temp_raw=0)
     pct = _decode_humidity(buf)
     assert abs(pct - 60.0) < 0.01
@@ -119,7 +118,7 @@ def test_temperature_midscale_is_50_deg() -> None:
 
 def test_temperature_25_deg_roundtrip() -> None:
     """25 °C → raw = (25+50)/200 × 1048576 ≈ 393216; roundtrip within 0.01 °C."""
-    raw = int(round((25.0 + 50.0) / 200.0 * 1048576))
+    raw = round((25.0 + 50.0) / 200.0 * 1048576)
     buf = _build_buf(0x00, hum_raw=0, temp_raw=raw)
     t = _decode_temperature(buf)
     assert abs(t - 25.0) < 0.01

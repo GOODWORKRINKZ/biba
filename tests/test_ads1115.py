@@ -10,9 +10,6 @@ Firmware reference: ads1115.c  ads1115.h  (BIBA_NATIVE_TEST path)
 
 from __future__ import annotations
 
-import struct
-
-
 # ---------------------------------------------------------------------------
 # Voltage-conversion formula
 # ---------------------------------------------------------------------------
@@ -59,7 +56,7 @@ def test_voltage_conversion_known_current_at_8amps() -> None:
     raw = 0.941 / LSB ≈ 7534.  Verify reverse: raw → volts → amps ≈ 8 A."""
     amps_per_volt = 8.5
     expected_amps = 8.0
-    raw = int(round((expected_amps / amps_per_volt) / ADS1115_FSR_4096_LSB_V))
+    raw = round((expected_amps / amps_per_volt) / ADS1115_FSR_4096_LSB_V)
     v = _raw_to_volts(raw)
     computed_amps = v * amps_per_volt
     assert abs(computed_amps - expected_amps) < 0.05  # within 50 mA

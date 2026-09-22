@@ -2,17 +2,25 @@
 #include "biba_config.h"
 #include <stddef.h>
 
+/* Cap for zero_time_s so it never overflows float precision. */
+#define ZERO_TIME_CAP_S  1000.0f
+
 void biba_ramp_init(biba_ramp_t *r)
 {
     if (r == NULL) return;
     r->current          = 0.0f;
     r->hold_remaining_s = 0.0f;
+    r->zero_time_s      = ZERO_TIME_CAP_S;
+    r->last_dir         = 0;
 }
 
 void biba_ramp_reset(biba_ramp_t *r)
 {
     /* D-04: hard reset — emergency stop, no gradual decel */
     if (r == NULL) return;
+    if (r->current != 0.0f) {
+        r->zero_time_s = 0.0f;
+    }
     r->current          = 0.0f;
     r->hold_remaining_s = 0.0f;
 }
@@ -29,27 +37,47 @@ float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
     if (target >  1.0f) target =  1.0f;
     if (target < -1.0f) target = -1.0f;
 
-    /* Zero-hold: stay frozen at zero until hold timer expires. */
-    if (r->hold_remaining_s > 0.0f) {
-        r->hold_remaining_s -= dt;
-        if (r->hold_remaining_s > 0.0f) {
+    const float hold_s = (float)zero_hold_ms / 1000.0f;
+
+    if (r->current > 0.0f) {
+        r->last_dir = 1;
+    } else if (r->current < 0.0f) {
+        r->last_dir = -1;
+    } else if (r->zero_time_s < ZERO_TIME_CAP_S) {
+        r->zero_time_s += dt;
+    }
+    r->hold_remaining_s = 0.0f;
+
+    /* Zero hold: the output is at zero and the command asks for the other
+     * direction — wait until the output has rested at zero long enough. */
+    if (r->current == 0.0f && r->last_dir != 0 &&
+        ((r->last_dir > 0 && target < 0.0f) || (r->last_dir < 0 && target > 0.0f))) {
+        if (r->zero_time_s < hold_s) {
+            r->hold_remaining_s = hold_s - r->zero_time_s;
             return r->current;  /* still holding at 0.0 */
         }
-        r->hold_remaining_s = 0.0f;
     }
 
     /* Direction change: decelerate toward zero, do NOT cross it.
-     * Uses reverse_decel_rate (slower than normal decel). */
+     * Uses reverse_decel_rate, which is deliberately FASTER than the normal
+     * decel rate — this is the path the operator feels when steering. */
     if ((r->current > 0.0f && target < 0.0f) ||
         (r->current < 0.0f && target > 0.0f)) {
 
-        float max_step = reverse_decel_rate * dt;
+        /* reverse_decel_rate <= 0 disables the reversal slew limit: the step
+         * becomes larger than any valid duty, so the output lands on zero
+         * this tick and (with zero_hold_ms 0) drives the other way on the
+         * next one. Field-tuning escape hatch — see biba_config.h. */
+        float max_step = (reverse_decel_rate > 0.0f)
+                             ? reverse_decel_rate * dt
+                             : 2.0f;
         float abs_cur  = (r->current < 0.0f) ? -r->current : r->current;
 
         if (abs_cur <= max_step) {
-            /* Reached zero: arm the hold timer. */
+            /* Reached zero: start the hold. */
             r->current          = 0.0f;
-            r->hold_remaining_s = (float)zero_hold_ms / 1000.0f;
+            r->zero_time_s      = 0.0f;
+            r->hold_remaining_s = hold_s;
         } else if (r->current > 0.0f) {
             r->current -= max_step;
         } else {
@@ -71,6 +99,7 @@ float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
     int   accelerating = (abs_target > abs_current);
     float rate         = accelerating ? accel_rate : decel_rate;
     float max_step     = rate * dt;
+    bool  was_moving   = (r->current != 0.0f);
 
     if (abs_diff <= max_step) {
         r->current = target;
@@ -81,6 +110,14 @@ float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
     /* Final output clamp. */
     if (r->current >  1.0f) r->current =  1.0f;
     if (r->current < -1.0f) r->current = -1.0f;
+
+    if (r->current > 0.0f) {
+        r->last_dir = 1;
+    } else if (r->current < 0.0f) {
+        r->last_dir = -1;
+    } else if (was_moving) {
+        r->zero_time_s = 0.0f;  /* just came to rest */
+    }
 
     return r->current;
 }

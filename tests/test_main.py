@@ -5,7 +5,6 @@ import json
 import logging
 
 import pytest
-
 from bms.daly import BatteryState
 from motors.assisted_drive import AssistedDriveResult, DriveMode
 from motors.current_control import MotorCurrentSample

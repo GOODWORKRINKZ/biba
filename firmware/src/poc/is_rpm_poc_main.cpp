@@ -31,24 +31,34 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include <hardware/adc.h>
 
 extern "C" {
 #include "hal/biba_hal.h"
 #include "biba_board.h"
 #include "biba_config.h"
+#include "app/motor_bridge.h"
+#include "app/adc_capture.h"
 }
-#include "poc/adc_capture.h"
 
 static uint16_t s_buf[ADC_CAPTURE_MAX_SAMPLES];
+static uint16_t s_pair_buf[ADC_CAPTURE_MAX_SAMPLES];
+static volatile bool s_capture_pair_done;
 
-/* Re-arm the motor bridge (SSR + half-bridge enables).
- * Called at the start of every motor command so that a prior STOP does not
- * leave the hardware disarmed for the next run. */
+static void on_capture_pair_done(const uint16_t *, uint16_t)
+{
+    s_capture_pair_done = true;
+}
+
+#define IS_POC_REARM_SETTLE_MS  5u
+
+/* Re-arm the motor bridge for the next command. This mirrors the
+ * standalone arm edge by pulsing BTS7960 enables first, which clears a
+ * possible thermal latch after a stalled/aborted previous run. */
 static void ensure_armed(void)
 {
-    biba_hal_ssr_set(true);
-    biba_hal_left_enable(true);
-    biba_hal_right_enable(true);
+    biba_motor_bridge_rearm();
+    delay(IS_POC_REARM_SETTLE_MS);
 }
 
 /* Default spin-up settle window before sampling. Motor inertia + RC-filter
@@ -194,6 +204,8 @@ static void cmd_rpmrun(float target_hz, uint32_t duration_ms,
     if (target_hz < 0.0f)    target_hz = 0.0f;
     if (target_hz > 2000.0f) target_hz = 2000.0f;
     const uint8_t adc_chan = motor ? BIBA_ADC_CHAN_IS_RIGHT : BIBA_ADC_CHAN_IS_LEFT;
+
+    ensure_armed();
 
     /* 1. Baseline IS reading with motor off — DC offset on the IS line. */
     if (motor) biba_hal_motor_pwm_right(0.0f); else biba_hal_motor_pwm_left(0.0f);
@@ -408,7 +420,9 @@ static void cmd_capture_both(float signed_duty, bool is_fwd,
 {
     if (signed_duty > 1.0f)  signed_duty = 1.0f;
     if (signed_duty < -1.0f) signed_duty = -1.0f;
-    if (n_samples > ADC_CAPTURE_MAX_SAMPLES) n_samples = ADC_CAPTURE_MAX_SAMPLES;
+    if (n_samples > (ADC_CAPTURE_MAX_SAMPLES / 2u)) {
+        n_samples = ADC_CAPTURE_MAX_SAMPLES / 2u;
+    }
     if (settle_ms == 0u)                    settle_ms = IS_POC_DEFAULT_SETTLE_MS;
     if (settle_ms > IS_POC_MAX_SETTLE_MS)   settle_ms = IS_POC_MAX_SETTLE_MS;
 
@@ -418,7 +432,7 @@ static void cmd_capture_both(float signed_duty, bool is_fwd,
     biba_hal_motor_pwm_right(signed_duty);
     delay(settle_ms);
 
-    adc_capture_init(sps);
+    adc_capture_init(sps * 2u);
 
     Serial.printf("CAPTURE2_START duty=%d dir=%s sps=%lu n=%u settle_ms=%lu\n",
                   (int)(fabsf(signed_duty) * 100.0f),
@@ -427,18 +441,34 @@ static void cmd_capture_both(float signed_duty, bool is_fwd,
                   (unsigned)n_samples,
                   (unsigned long)settle_ms);
 
-    for (uint8_t ch = 0; ch < 2u; ++ch) {
-        bool ok = adc_capture_burst(ch, n_samples, s_buf);
-        if (!ok) {
+    s_capture_pair_done = false;
+    if (!adc_capture_start_async_pair(BIBA_ADC_CHAN_IS_LEFT,
+                                      BIBA_ADC_CHAN_IS_RIGHT,
+                                      n_samples,
+                                      s_pair_buf,
+                                      on_capture_pair_done)) {
+        biba_hal_motor_pwm_left(0.0f);
+        biba_hal_motor_pwm_right(0.0f);
+        Serial.println("ERROR capture busy");
+        return;
+    }
+
+    uint32_t t0 = millis();
+    while (!s_capture_pair_done) {
+        if ((millis() - t0) > 500u) {
             biba_hal_motor_pwm_left(0.0f);
             biba_hal_motor_pwm_right(0.0f);
             Serial.println("ERROR capture timeout");
             return;
         }
+    }
+
+    for (uint8_t ch = 0; ch < 2u; ++ch) {
         Serial.printf("CAPTURE2_CHAN %u\n", (unsigned)ch);
         for (uint16_t i = 0; i < n_samples; ++i) {
-            Serial.print(s_buf[i]);
-            Serial.print((i + 1) < n_samples ? ',' : '\n');
+            const uint32_t idx = (uint32_t)i * 2u + (uint32_t)ch;
+            Serial.print(s_pair_buf[idx]);
+            Serial.print((i + 1u) < n_samples ? ',' : '\n');
         }
     }
 
@@ -457,6 +487,7 @@ static void cmd_chantest(uint8_t run_left, uint8_t run_right,
 {
     if (settle_ms == 0u) settle_ms = IS_POC_DEFAULT_SETTLE_MS;
     if (settle_ms > IS_POC_MAX_SETTLE_MS) settle_ms = IS_POC_MAX_SETTLE_MS;
+    ensure_armed();
     if (run_left)  biba_hal_motor_pwm_left(signed_duty);
     if (run_right) biba_hal_motor_pwm_right(signed_duty);
     delay(settle_ms);
@@ -502,6 +533,8 @@ static void cmd_rpmrun_both(float tgt_l, float tgt_r, uint32_t duration_ms,
     if (tgt_r < 0.0f) tgt_r = 0.0f;
     if (tgt_l > 2000.0f) tgt_l = 2000.0f;
     if (tgt_r > 2000.0f) tgt_r = 2000.0f;
+
+    ensure_armed();
 
     /* Baseline: both motors off */
     biba_hal_motor_pwm_left(0.0f);
@@ -652,6 +685,8 @@ static void cmd_rpmtrack(const char *shape,
     if (duration_ms > RPMRUN_MAX_DUR_MS) duration_ms = RPMRUN_MAX_DUR_MS;
     if (p_start_ms < 200u)   p_start_ms = 200u;
     if (p_end_ms   < 200u)   p_end_ms   = 200u;
+
+    ensure_armed();
 
     /* Baseline */
     biba_hal_motor_pwm_left(0.0f);
@@ -841,6 +876,8 @@ static void cmd_steprun(int duty_start_pct, int duty_end_pct,
     if (post_windows < 1)  post_windows = 1;
     if (post_windows > 100) post_windows = 100;
 
+    ensure_armed();
+
     /* Baseline with motor off */
     biba_hal_motor_pwm_left(0.0f);
     delay(200);
@@ -965,6 +1002,8 @@ static void cmd_sweep(const char *shape, int amp_pct,
         Serial.println("ERR sweep shape must be SIN or TRAP");
         return;
     }
+
+    ensure_armed();
 
     /* Baseline with motor off */
     biba_hal_motor_pwm_left(0.0f);
@@ -1198,9 +1237,9 @@ static void cmd_sweepraw_r(const char *shape, int amp_pct,
     Serial.println("SWEEPRAW_END");
 }
 
-/* SWEEPRAW_BOTH: BOTH motors simultaneously, stream L then R per window.
- * Protocol: SWEEPRAW2_START / SWEEPRAW2_WIN <idx> <t> <duty> L / samples /
- *            SWEEPRAW2_WIN <idx> <t> <duty> R / samples / ... / SWEEPRAW2_END */
+/* SWEEPRAW_BOTH: BOTH motors + VBAT/IBAT in 4-channel round-robin DMA.
+ * Protocol: SWEEPRAW2_START / SWEEPRAW2_WIN <idx> <t> <duty> L <vbat> <ibat>
+ * / samples / SWEEPRAW2_WIN <idx> <t> <duty> R / samples / ... */
 static void cmd_sweepraw_both(const char *shape, int amp_pct,
                                uint32_t period_ms, uint32_t n_windows)
 {
@@ -1218,22 +1257,22 @@ static void cmd_sweepraw_both(const char *shape, int amp_pct,
     biba_hal_motor_pwm_left(0.0f);
     biba_hal_motor_pwm_right(0.0f);
     delay(200);
-    adc_capture_init(RPMRUN_SPS);
-    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
-        Serial.println("ERROR baseline_L"); return;
+
+    /* 4-channel round-robin @ RPMRUN_SPS per channel = 40 kSPS total */
+    adc_capture_init_4ch(RPMRUN_SPS * 4u);
+    if (!adc_capture_burst_4ch(RPMRUN_N_SAMPLES, s_buf)) {
+        Serial.println("ERROR baseline"); return;
     }
-    uint32_t bl = 0;
-    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
-    float bl_l = (float)bl / RPMRUN_N_SAMPLES;
-    if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_buf)) {
-        Serial.println("ERROR baseline_R"); return;
+    uint32_t bl_l = 0, bl_r = 0;
+    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) {
+        bl_l += s_buf[i];
+        bl_r += s_buf[RPMRUN_N_SAMPLES + i];
     }
-    bl = 0;
-    for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) bl += s_buf[i];
-    float bl_r = (float)bl / RPMRUN_N_SAMPLES;
+    float bl_lf = (float)bl_l / RPMRUN_N_SAMPLES;
+    float bl_rf = (float)bl_r / RPMRUN_N_SAMPLES;
 
     Serial.printf("SWEEPRAW2_START shape=%s amp=%d period_ms=%lu n_windows=%lu bl_L=%.1f bl_R=%.1f\n",
-                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, bl_l, bl_r);
+                  shape, amp_pct, (unsigned long)period_ms, (unsigned long)n_windows, bl_lf, bl_rf);
 
     float amp = amp_pct / 100.0f;
     uint32_t t_start = millis();
@@ -1242,22 +1281,33 @@ static void cmd_sweepraw_both(const char *shape, int amp_pct,
         float duty = _sweep_duty(is_sin, amp, t_now, period_ms);
         biba_hal_motor_pwm_left(duty);
         biba_hal_motor_pwm_right(duty);
-        /* capture LEFT into s_buf */
-        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_LEFT, RPMRUN_N_SAMPLES, s_buf)) {
+
+        /* 4-channel round-robin: IS_L, IS_R, VBAT, IBAT in one DMA burst */
+        if (!adc_capture_burst_4ch(RPMRUN_N_SAMPLES, s_buf)) {
             biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
-            Serial.println("ERROR cap_L"); return;
+            Serial.println("ERROR cap_4ch"); return;
         }
-        /* capture RIGHT into s_win_r — both motors still running */
-        if (!adc_capture_burst(BIBA_ADC_CHAN_IS_RIGHT, RPMRUN_N_SAMPLES, s_win_r)) {
-            biba_hal_motor_pwm_left(0.0f); biba_hal_motor_pwm_right(0.0f);
-            Serial.println("ERROR cap_R"); return;
+
+        /* Compute per-channel DC means for VBAT/IBAT */
+        uint32_t sum_vbat = 0, sum_ibat = 0;
+        for (uint16_t i = 0; i < RPMRUN_N_SAMPLES; ++i) {
+            sum_vbat += s_buf[RPMRUN_N_SAMPLES * 2 + i];
+            sum_ibat += s_buf[RPMRUN_N_SAMPLES * 3 + i];
         }
-        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L\n",
-                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
-        _print_win(s_buf, RPMRUN_N_SAMPLES);
+        uint16_t vbat_raw = (uint16_t)(sum_vbat / RPMRUN_N_SAMPLES);
+        uint16_t ibat_raw = (uint16_t)(sum_ibat / RPMRUN_N_SAMPLES);
+
+        /* Print LEFT IS channel + VBAT/IBAT means in header */
+        Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f L %u %u\n",
+                      (unsigned long)w, (unsigned long)t_now, duty * 100.0f,
+                      (unsigned)vbat_raw, (unsigned)ibat_raw);
+        _print_win(s_buf, RPMRUN_N_SAMPLES);  /* IS_LEFT samples */
+
+        /* Print RIGHT IS channel */
         Serial.printf("SWEEPRAW2_WIN %lu %lu %.1f R\n",
                       (unsigned long)w, (unsigned long)t_now, duty * 100.0f);
-        _print_win(s_win_r, RPMRUN_N_SAMPLES);
+        _print_win(&s_buf[RPMRUN_N_SAMPLES], RPMRUN_N_SAMPLES);  /* IS_RIGHT samples */
+
         if (Serial.available()) {
             String ln = Serial.readStringUntil('\n'); ln.trim();
             if (ln == "STOP") {
@@ -1286,6 +1336,8 @@ static void cmd_calrun(int duty_pct, uint32_t settle_ms)
 
     const uint16_t n_samples = 1024u;
     const uint32_t sps = 10000u;
+
+    ensure_armed();
 
     biba_hal_motor_pwm_left((float)duty_pct / 100.0f);
     delay(settle_ms);
@@ -1330,12 +1382,7 @@ void setup(void)
     Serial.begin(115200);
     Serial.ignoreFlowControl(true);
     biba_hal_init();
-    /* Issue 6 fix: ARM the BTS7960. SSR powers the bridge, REN/LEN enables
-     * activate the half-bridges. Without these, PWM drives nothing and the
-     * IS signal is zero. */
-    biba_hal_ssr_set(true);
-    biba_hal_left_enable(true);
-    biba_hal_right_enable(true);
+    ensure_armed();
     Serial.println("IS_POC_READY");
 }
 

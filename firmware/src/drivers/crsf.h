@@ -21,6 +21,7 @@ extern "C" {
 #define CRSF_FRAMETYPE_RC_CHANNELS  0x16u
 #define CRSF_FRAMETYPE_LINK_STATS   0x14u
 #define CRSF_FRAMETYPE_BATTERY      0x08u
+#define CRSF_FRAMETYPE_GPS          0x02u
 
 #define CRSF_RC_CHANNEL_COUNT       16u
 
@@ -67,6 +68,29 @@ bool biba_crsf_unpack_channels(const uint8_t *payload,
 bool biba_crsf_parse_link_stats(const uint8_t *payload,
                                 size_t payload_len,
                                 biba_crsf_link_stats_t *stats);
+
+/* --- Encoder side (used by the PWM→CRSF bridge) ------------------------ */
+
+#define CRSF_RC_PAYLOAD_SIZE        22u
+#define CRSF_LINK_STATS_PAYLOAD_SIZE 10u
+
+/* Pack 16 channel values [0..2047] into the 22-byte RC payload.
+ * Inverse of biba_crsf_unpack_channels(). */
+void biba_crsf_pack_channels(const uint16_t channels[CRSF_RC_CHANNEL_COUNT],
+                             uint8_t out[CRSF_RC_PAYLOAD_SIZE]);
+
+/* Serialise a 10-byte link statistics payload. */
+void biba_crsf_pack_link_stats(const biba_crsf_link_stats_t *stats,
+                               uint8_t out[CRSF_LINK_STATS_PAYLOAD_SIZE]);
+
+/* Build a full frame (sync, len, type, payload, crc) into `out`.
+ * Returns the frame length, or 0 if it does not fit into `out_cap`
+ * or exceeds CRSF_MAX_FRAME_SIZE. */
+size_t biba_crsf_build_frame(uint8_t type,
+                             const uint8_t *payload,
+                             size_t payload_len,
+                             uint8_t *out,
+                             size_t out_cap);
 
 #ifdef __cplusplus
 }

@@ -74,8 +74,10 @@ def test_config_uses_defaults_when_environment_is_missing(monkeypatch: pytest.Mo
     assert module.THROTTLE_KALMAN_MEASUREMENT_NOISE == pytest.approx(0.5)
     assert module.RAMP_ACCEL_RATE == pytest.approx(2.0)
     assert module.RAMP_DECEL_RATE == pytest.approx(2.0)
-    assert module.RAMP_REVERSE_DECEL_RATE == pytest.approx(0.5)
-    assert module.RAMP_ZERO_HOLD_S == pytest.approx(0.15)
+    # 54af6db raised the reverse rate and shortened the hold to kill the
+    # 2.4 s steering stall; these track config.py's defaults.
+    assert module.RAMP_REVERSE_DECEL_RATE == pytest.approx(2.0)
+    assert module.RAMP_ZERO_HOLD_S == pytest.approx(0.05)
     assert module.MOTOR_CURRENT_LIMITING_ENABLED is False
     assert module.MOTOR_CURRENT_SENSE_ENABLED is False
     assert module.MOTOR_CURRENT_SENSE_I2C_ADDRESS == 0x48

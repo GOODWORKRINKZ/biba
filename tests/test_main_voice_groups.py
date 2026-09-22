@@ -27,7 +27,6 @@ def test_main_uses_round_robin_voice_group_for_startup(monkeypatch: pytest.Monke
 
         def get_channels(self):
             main.RUNNING = False
-            return None
 
     class FakeTelemetry:
         def __init__(self, *args, **kwargs) -> None:
@@ -175,7 +174,6 @@ def test_main_uses_named_synth_for_startup_when_sound_mode_is_synth(monkeypatch:
 
         def get_channels(self):
             main.RUNNING = False
-            return None
 
     class FakeTelemetry:
         def __init__(self, *args, **kwargs) -> None:
@@ -491,7 +489,6 @@ def test_main_uses_sos_melody_even_when_sos_voice_is_configured(monkeypatch: pyt
             self._calls += 1
             if self._calls > 1:
                 main.RUNNING = False
-            return None
 
     class FakeTelemetry:
         def __init__(self, *args, **kwargs) -> None:

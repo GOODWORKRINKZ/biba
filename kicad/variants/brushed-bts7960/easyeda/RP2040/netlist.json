@@ -1,0 +1,1340 @@
+{
+  "components": [
+    {
+      "designator": "C1",
+      "value": "0.1u",
+      "package": "C0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "+5V"
+        }
+      ]
+    },
+    {
+      "designator": "C2",
+      "value": "0.1u",
+      "package": "C0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "R_IS"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "C3",
+      "value": "0.1u",
+      "package": "C0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "L_IS"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "C4",
+      "value": "0.1u",
+      "package": "C0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "IC1_35"
+        }
+      ]
+    },
+    {
+      "designator": "C5",
+      "value": "0.1u",
+      "package": "C0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "IC1_34"
+        }
+      ]
+    },
+    {
+      "designator": "C6",
+      "value": "0.1u",
+      "package": "C0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "3.3V"
+        }
+      ]
+    },
+    {
+      "designator": "C7",
+      "value": "1uF",
+      "package": "C0603",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "C8",
+      "value": "2.2uF",
+      "package": "C0603",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "3.3V"
+        }
+      ]
+    },
+    {
+      "designator": "H1",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP10"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H2",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP11"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H3",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP14"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H4",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP15"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H5",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP16"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H6",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP17"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H7",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP18"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H8",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GP19"
+        },
+        {
+          "pin": "2",
+          "net": "+5V"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "H10",
+      "value": "HDR-F-2.54_1x3",
+      "package": "HDR-F-2.54_1X3",
+      "lcsc": "C146690",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GND"
+        },
+        {
+          "pin": "2",
+          "net": "VBAT"
+        },
+        {
+          "pin": "3",
+          "net": "IBAT"
+        }
+      ]
+    },
+    {
+      "designator": "IC1",
+      "value": "rp2040_RP2040_breakout_swd",
+      "package": "RP2040:RP2040-BREAKOUT_SWD",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "CRSF_TX"
+        },
+        {
+          "pin": "2",
+          "net": "CRSF_RX"
+        },
+        {
+          "pin": "3",
+          "net": "GND"
+        },
+        {
+          "pin": "4",
+          "net": "L_RPWM"
+        },
+        {
+          "pin": "5",
+          "net": "L_LPWM"
+        },
+        {
+          "pin": "6",
+          "net": "L_REN"
+        },
+        {
+          "pin": "7",
+          "net": "L_LEN"
+        },
+        {
+          "pin": "8",
+          "net": "GND"
+        },
+        {
+          "pin": "9",
+          "net": "R_RPWM"
+        },
+        {
+          "pin": "10",
+          "net": "R_LPWM"
+        },
+        {
+          "pin": "11",
+          "net": "R_REN"
+        },
+        {
+          "pin": "12",
+          "net": "R_LEN"
+        },
+        {
+          "pin": "13",
+          "net": "GND"
+        },
+        {
+          "pin": "14",
+          "net": "GP10"
+        },
+        {
+          "pin": "15",
+          "net": "GP11"
+        },
+        {
+          "pin": "16",
+          "net": "UART1_TX"
+        },
+        {
+          "pin": "17",
+          "net": "UART1_RX"
+        },
+        {
+          "pin": "18",
+          "net": "GND"
+        },
+        {
+          "pin": "19",
+          "net": "GP14"
+        },
+        {
+          "pin": "20",
+          "net": "GP15"
+        },
+        {
+          "pin": "21",
+          "net": "GP16"
+        },
+        {
+          "pin": "22",
+          "net": "GP17"
+        },
+        {
+          "pin": "23",
+          "net": "GND"
+        },
+        {
+          "pin": "24",
+          "net": "GP18"
+        },
+        {
+          "pin": "25",
+          "net": "GP19"
+        },
+        {
+          "pin": "26",
+          "net": "I2C0_SDA"
+        },
+        {
+          "pin": "27",
+          "net": "I2C0_SCL"
+        },
+        {
+          "pin": "28",
+          "net": "GND"
+        },
+        {
+          "pin": "29",
+          "net": "IMU_INT1"
+        },
+        {
+          "pin": "31",
+          "net": "R_IS"
+        },
+        {
+          "pin": "32",
+          "net": "L_IS"
+        },
+        {
+          "pin": "33",
+          "net": "GND"
+        },
+        {
+          "pin": "34",
+          "net": "IC1_34"
+        },
+        {
+          "pin": "35",
+          "net": "IC1_35"
+        },
+        {
+          "pin": "38",
+          "net": "GND"
+        },
+        {
+          "pin": "39",
+          "net": "+5V"
+        },
+        {
+          "pin": "44",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "J1",
+      "value": "HDR-M-2.54_1x3",
+      "package": "HDR-M-2.54_1X3",
+      "lcsc": "C180248",
+      "pins": [
+        {
+          "pin": "3",
+          "net": "+5V"
+        },
+        {
+          "pin": "2",
+          "net": "PM1_4"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "J2",
+      "value": "HDR-M-2.54_1x4",
+      "package": "HDR-M-2.54_1X4",
+      "lcsc": "C124378",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "SW"
+        },
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "3",
+          "net": "+5V"
+        },
+        {
+          "pin": "4",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "J3",
+      "value": "HDR-M-2.54_1x4",
+      "package": "HDR-M-2.54_1X4",
+      "lcsc": "C124378",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "+5V"
+        },
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "3",
+          "net": "CRSF_TX"
+        },
+        {
+          "pin": "4",
+          "net": "CRSF_RX"
+        }
+      ]
+    },
+    {
+      "designator": "J4",
+      "value": "HDR-M-2.54_1x4",
+      "package": "HDR-M-2.54_1X4",
+      "lcsc": "C124378",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "+5V"
+        },
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "3",
+          "net": "UART1_TX"
+        },
+        {
+          "pin": "4",
+          "net": "UART1_RX"
+        }
+      ]
+    },
+    {
+      "designator": "PM1",
+      "value": "SKMW30f-05",
+      "package": "SKMW30G-05",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "6",
+          "net": "SW"
+        },
+        {
+          "pin": "5",
+          "net": "GND"
+        },
+        {
+          "pin": "4",
+          "net": "PM1_4"
+        },
+        {
+          "pin": "3",
+          "net": "+5V"
+        },
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "VIN"
+        }
+      ]
+    },
+    {
+      "designator": "R1",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "R_RPWM"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R2",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "R_REN"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R3",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "R_LPWM"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R4",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "R_LEN"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R5",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "L_RPWM"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R6",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "L_REN"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R7",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "L_LPWM"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R8",
+      "value": "30k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "L_LEN"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R9",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U4_6"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R10",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U4_5"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R11",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U2_6"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R12",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U2_5"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R13",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U3_6"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R14",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "U3_5"
+        }
+      ]
+    },
+    {
+      "designator": "R15",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "U5_6"
+        }
+      ]
+    },
+    {
+      "designator": "R16",
+      "value": "10k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U5_5"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "R17",
+      "value": "1k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U2_6"
+        },
+        {
+          "pin": "1",
+          "net": "R_IS"
+        }
+      ]
+    },
+    {
+      "designator": "R18",
+      "value": "1k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U3_6"
+        },
+        {
+          "pin": "1",
+          "net": "R_IS"
+        }
+      ]
+    },
+    {
+      "designator": "R19",
+      "value": "1k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U4_6"
+        },
+        {
+          "pin": "1",
+          "net": "L_IS"
+        }
+      ]
+    },
+    {
+      "designator": "R20",
+      "value": "1k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U5_6"
+        },
+        {
+          "pin": "1",
+          "net": "L_IS"
+        }
+      ]
+    },
+    {
+      "designator": "R25",
+      "value": "1k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "IBAT"
+        },
+        {
+          "pin": "1",
+          "net": "IC1_35"
+        }
+      ]
+    },
+    {
+      "designator": "R26",
+      "value": "1k",
+      "package": "R0805",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "VBAT"
+        },
+        {
+          "pin": "1",
+          "net": "IC1_34"
+        }
+      ]
+    },
+    {
+      "designator": "R21",
+      "value": "10k",
+      "package": "R0603",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "U6_12"
+        },
+        {
+          "pin": "1",
+          "net": "3.3V"
+        }
+      ]
+    },
+    {
+      "designator": "R22",
+      "value": "10k",
+      "package": "R0603",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "3.3V"
+        },
+        {
+          "pin": "1",
+          "net": "I2C0_SCL"
+        }
+      ]
+    },
+    {
+      "designator": "R23",
+      "value": "10k",
+      "package": "R0603",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "3.3V"
+        },
+        {
+          "pin": "1",
+          "net": "I2C0_SDA"
+        }
+      ]
+    },
+    {
+      "designator": "R24",
+      "value": "10k",
+      "package": "R0603",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "3.3V"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "U1",
+      "value": "SN74AHC244DW",
+      "package": "SOIC-20_L12.8-W7.5-P1.27-LS10.3-BL",
+      "lcsc": "C1548445",
+      "pins": [
+        {
+          "pin": "11",
+          "net": "L_RPWM"
+        },
+        {
+          "pin": "12",
+          "net": "INH2"
+        },
+        {
+          "pin": "13",
+          "net": "L_REN"
+        },
+        {
+          "pin": "14",
+          "net": "IN2"
+        },
+        {
+          "pin": "15",
+          "net": "L_LPWM"
+        },
+        {
+          "pin": "16",
+          "net": "INH1"
+        },
+        {
+          "pin": "17",
+          "net": "L_LEN"
+        },
+        {
+          "pin": "18",
+          "net": "IN1"
+        },
+        {
+          "pin": "19",
+          "net": "GND"
+        },
+        {
+          "pin": "20",
+          "net": "+5V"
+        },
+        {
+          "pin": "10",
+          "net": "GND"
+        },
+        {
+          "pin": "9",
+          "net": "IN3"
+        },
+        {
+          "pin": "8",
+          "net": "R_LEN"
+        },
+        {
+          "pin": "7",
+          "net": "INH3"
+        },
+        {
+          "pin": "6",
+          "net": "R_LPWM"
+        },
+        {
+          "pin": "5",
+          "net": "IN4"
+        },
+        {
+          "pin": "4",
+          "net": "R_REN"
+        },
+        {
+          "pin": "3",
+          "net": "INH4"
+        },
+        {
+          "pin": "2",
+          "net": "R_RPWM"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "U2",
+      "value": "BTN7970",
+      "package": "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "8",
+          "net": "M1+"
+        },
+        {
+          "pin": "7",
+          "net": "VIN"
+        },
+        {
+          "pin": "6",
+          "net": "U2_6"
+        },
+        {
+          "pin": "5",
+          "net": "U2_5"
+        },
+        {
+          "pin": "4",
+          "net": "M1+"
+        },
+        {
+          "pin": "3",
+          "net": "INH1"
+        },
+        {
+          "pin": "2",
+          "net": "IN1"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "U3",
+      "value": "BTN7970",
+      "package": "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "8",
+          "net": "M1-"
+        },
+        {
+          "pin": "7",
+          "net": "VIN"
+        },
+        {
+          "pin": "6",
+          "net": "U3_6"
+        },
+        {
+          "pin": "5",
+          "net": "U3_5"
+        },
+        {
+          "pin": "4",
+          "net": "M1-"
+        },
+        {
+          "pin": "3",
+          "net": "INH2"
+        },
+        {
+          "pin": "2",
+          "net": "IN2"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "U4",
+      "value": "BTN7970",
+      "package": "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "8",
+          "net": "M2+"
+        },
+        {
+          "pin": "7",
+          "net": "VIN"
+        },
+        {
+          "pin": "6",
+          "net": "U4_6"
+        },
+        {
+          "pin": "5",
+          "net": "U4_5"
+        },
+        {
+          "pin": "4",
+          "net": "M2+"
+        },
+        {
+          "pin": "3",
+          "net": "INH3"
+        },
+        {
+          "pin": "2",
+          "net": "IN3"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "U5",
+      "value": "BTN7970",
+      "package": "TO-263-7_L10.2-W10.4-P1.27-LS14.4-B",
+      "lcsc": "",
+      "pins": [
+        {
+          "pin": "8",
+          "net": "M2-"
+        },
+        {
+          "pin": "7",
+          "net": "VIN"
+        },
+        {
+          "pin": "6",
+          "net": "U5_6"
+        },
+        {
+          "pin": "5",
+          "net": "U5_5"
+        },
+        {
+          "pin": "4",
+          "net": "M2-"
+        },
+        {
+          "pin": "3",
+          "net": "INH4"
+        },
+        {
+          "pin": "2",
+          "net": "IN4"
+        },
+        {
+          "pin": "1",
+          "net": "GND"
+        }
+      ]
+    },
+    {
+      "designator": "U6",
+      "value": "BMI160",
+      "package": "LGA-14_L3.0-W2.5-P0.50-BL",
+      "lcsc": "C94021",
+      "pins": [
+        {
+          "pin": "1",
+          "net": "GND"
+        },
+        {
+          "pin": "4",
+          "net": "IMU_INT1"
+        },
+        {
+          "pin": "5",
+          "net": "3.3V"
+        },
+        {
+          "pin": "6",
+          "net": "GND"
+        },
+        {
+          "pin": "7",
+          "net": "GND"
+        },
+        {
+          "pin": "8",
+          "net": "3.3V"
+        },
+        {
+          "pin": "12",
+          "net": "U6_12"
+        },
+        {
+          "pin": "13",
+          "net": "I2C0_SCL"
+        },
+        {
+          "pin": "14",
+          "net": "I2C0_SDA"
+        }
+      ]
+    },
+    {
+      "designator": "U7",
+      "value": "SPX3819M5-L-3-3/TR",
+      "package": "SOT-23-5_L3.0-W1.7-P0.95-LS2.8-BR",
+      "lcsc": "C9055",
+      "pins": [
+        {
+          "pin": "5",
+          "net": "3.3V"
+        },
+        {
+          "pin": "3",
+          "net": "+5V"
+        },
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "+5V"
+        }
+      ]
+    },
+    {
+      "designator": "C9",
+      "value": "1000uF",
+      "package": "CAP-TH_BD16.0-P7.50-D0.8-FD-H25.0",
+      "lcsc": "C51904448",
+      "pins": [
+        {
+          "pin": "2",
+          "net": "GND"
+        },
+        {
+          "pin": "1",
+          "net": "VIN"
+        }
+      ]
+    }
+  ]
+}

@@ -32,6 +32,11 @@
 
 #endif /* BIBA_NATIVE_TEST */
 
+/* ========================================================================
+ * CRITICAL SAFETY — NO FEATURE TOGGLES
+ * These are always present and cannot be disabled (per D-05).
+ * ======================================================================== */
+
 /* --- Control loop timing ------------------------------------------------ */
 
 #ifndef BIBA_CONTROL_LOOP_HZ
@@ -52,26 +57,19 @@
 #ifndef BIBA_BTS7960_RESET_PULSE_US
 #  define BIBA_BTS7960_RESET_PULSE_US  100u
 #endif
-
-/* --- Current / power limits (match Pi defaults) ------------------------- */
-
-#ifndef BIBA_LEFT_MAX_CURRENT_A
-#  define BIBA_LEFT_MAX_CURRENT_A      18.0f
-#endif
-#ifndef BIBA_RIGHT_MAX_CURRENT_A
-#  define BIBA_RIGHT_MAX_CURRENT_A     18.0f
-#endif
-#ifndef BIBA_LEFT_MAX_POWER_W
-#  define BIBA_LEFT_MAX_POWER_W        180.0f
-#endif
-#ifndef BIBA_RIGHT_MAX_POWER_W
-#  define BIBA_RIGHT_MAX_POWER_W       180.0f
-#endif
-#ifndef BIBA_FALLBACK_SUPPLY_V
-#  define BIBA_FALLBACK_SUPPLY_V       24.0f
+/* Standalone mode, open loop: on disarm/failsafe the outputs are zeroed
+ * and, once both are at zero, the bridges are put to sleep (R_EN/L_EN low)
+ * so the wheels coast instead of short-braking through the low-side
+ * switches (which burned U2 —
+ * kicad/variants/brushed-bts7960/analysis/M1-driver-failure.md).
+ * While armed, zero duty keeps the bridges on: both low-side switches
+ * short the motor and hold the wheels.  0 = bridges stay on when disarmed. */
+#ifndef BIBA_MOTOR_COAST_WHEN_DISARMED
+#  define BIBA_MOTOR_COAST_WHEN_DISARMED  1
 #endif
 
-/* BTS7960 current sense calibration defaults (volts -> amps). */
+/* --- Current sense calibration (BTS7960 IS pin, volts → amps) ---------- */
+
 #ifndef BIBA_IS_ZERO_OFFSET_V
 #  define BIBA_IS_ZERO_OFFSET_V        0.0f
 #endif
@@ -79,10 +77,10 @@
 #  define BIBA_IS_AMPS_PER_VOLT        1.0f
 #endif
 
-/* --- Battery voltage divider (default 1:11 for ~33 V max) -------------- */
+/* --- Battery / ADC ------------------------------------------------------ */
 
 #ifndef BIBA_VBAT_DIVIDER_RATIO
-#  define BIBA_VBAT_DIVIDER_RATIO      11.0f
+#  define BIBA_VBAT_DIVIDER_RATIO      10.12f  /* calibrated 2026-05-26: APM module, 23.3V bat → 2858 raw */
 #endif
 
 /* 3DR Power Module battery current calibration defaults.
@@ -143,7 +141,7 @@
 #  define BIBA_CH_SPEED_MODE        5   /* CH6 */
 #endif
 #ifndef BIBA_CH_DRIVE_MODE
-#  define BIBA_CH_DRIVE_MODE        6   /* CH7 */
+#  define BIBA_CH_DRIVE_MODE        9   /* CH10 */
 #endif
 #ifndef BIBA_CH_BEACON
 #  define BIBA_CH_BEACON            7   /* CH8 */
@@ -157,7 +155,338 @@
 #  define BIBA_ARM_THRESHOLD        0.3f
 #endif
 
-/* Speed mode 3-position switch thresholds (normalised -1..+1). */
+/* Drive mode switch: low position → MANUAL, else → STABILIZED. */
+#ifndef BIBA_DRIVE_MODE_LOW_THRESHOLD
+#  define BIBA_DRIVE_MODE_LOW_THRESHOLD   (-0.3f)
+#endif
+
+/* Deadband below which throttle/steering are not considered active. */
+#ifndef BIBA_MOTOR_DEADBAND
+#  define BIBA_MOTOR_DEADBAND               0.05f
+#endif
+
+/* Motor direction inversion (1 = normal, -1 = inverted).
+ * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py:
+ * left motor normal, right motor inverted. */
+#ifndef BIBA_LEFT_MOTOR_DIR
+#  define BIBA_LEFT_MOTOR_DIR    1
+#endif
+#ifndef BIBA_RIGHT_MOTOR_DIR
+#  define BIBA_RIGHT_MOTOR_DIR   (-1)
+#endif
+
+/* Motor trim channel: trim_ch * MAX_EFFECT applied post-mix.
+ * Positive trim → attenuate right motor, negative → attenuate left. */
+#ifndef BIBA_MOTOR_TRIM_MAX_EFFECT
+#  define BIBA_MOTOR_TRIM_MAX_EFFECT        0.30f
+#endif
+
+/* Trim gesture: hold the first 4 RC channels above this threshold
+ * for BIBA_TRIM_CONFIRM_HOLD_MS (while disarmed) to enter/exit trim mode.
+ * Matches biba-controller/main.py _TRIM_GESTURE_HIGH_THRESHOLD / MOTOR_TRIM_CONFIRM_HOLD_S. */
+#ifndef BIBA_TRIM_GESTURE_THRESHOLD
+#  define BIBA_TRIM_GESTURE_THRESHOLD       0.9f
+#endif
+#ifndef BIBA_TRIM_CONFIRM_HOLD_MS
+#  define BIBA_TRIM_CONFIRM_HOLD_MS         5000u
+#endif
+
+/* --- Motor output ramp (open-loop duty slew limiter) -------------------- */
+/* Mirror RAMP_* from biba-controller/config.py. Not feature-gated —
+ * these are critical for smooth motor control in all modes.            */
+/* Rates are in duty units per second, so time-to-zero from duty D is D/rate.
+ * Targets may override these — RP2040_DC_BTS7960_PWM does, see its target_config.h
+ * for the board-specific rationale and the field-test history.
+ *
+ * Invariant: REVERSE_DECEL_RATE >= DECEL_RATE.  Winding duty down ahead of a
+ * reversal is the same electrical event as an ordinary throttle release, so
+ * making it slower buys no protection and only delays the wheel — which the
+ * operator feels as the wheel dropping out mid-turn while the other wheel
+ * keeps pulling (field test 2026-09-20).
+ *
+ * Field tuning without a code change (platformio.ini build_flags):
+ *   -D BIBA_RAMP_REVERSE_DECEL_RATE=4.0f   quicker reversal
+ *   -D BIBA_RAMP_REVERSE_DECEL_RATE=0.0f   cross zero immediately (no limit)
+ *   -D BIBA_RAMP_ZERO_HOLD_MS=0            no dead time at zero
+ * Only REVERSE_DECEL_RATE treats 0 as "no limit"; 0 accel/decel is not a
+ * disable.  Both knobs widen the regenerative-braking envelope on boards
+ * without the snubber/TVS rework — check the target before loosening them. */
+#ifndef BIBA_RAMP_ACCEL_RATE
+#  define BIBA_RAMP_ACCEL_RATE           2.0f
+#endif
+#ifndef BIBA_RAMP_DECEL_RATE
+#  define BIBA_RAMP_DECEL_RATE           2.0f
+#endif
+#ifndef BIBA_RAMP_REVERSE_DECEL_RATE
+#  define BIBA_RAMP_REVERSE_DECEL_RATE   2.0f
+#endif
+#ifndef BIBA_RAMP_ZERO_HOLD_MS
+#  define BIBA_RAMP_ZERO_HOLD_MS         50u
+#endif
+
+/* --- Motor / RPM calibration -------------------------------------------- */
+/* MY1016Z3 24V 350W, 2-pole 4-brush, G=9:1 planetary gearbox,
+ * N_comm=16 commutator bars.
+ * Verified: 798.4 Hz @ 329 RPM wheel → G*N = 144.0 (1.1% err vs 145.6) */
+#ifndef BIBA_RPM_GEAR_RATIO
+#  define BIBA_RPM_GEAR_RATIO             9
+#endif
+#ifndef BIBA_RPM_COMMUTATOR_BARS
+#  define BIBA_RPM_COMMUTATOR_BARS        16
+#endif
+#ifndef BIBA_RPM_PULSES_PER_WHEEL_REV
+#  define BIBA_RPM_PULSES_PER_WHEEL_REV   (BIBA_RPM_GEAR_RATIO * BIBA_RPM_COMMUTATOR_BARS)  /* 144 */
+#endif
+
+/* --- Blackbox recorder -------------------------------------------------- */
+/* Not feature-gated per D-05 — blackbox does not affect the signal chain;
+ * recording is controlled by CH7 switch at runtime. */
+
+#ifndef BIBA_BLACKBOX_RATE_HZ
+#  define BIBA_BLACKBOX_RATE_HZ      25
+#endif
+#ifndef BIBA_BLACKBOX_FIELD_MASK
+#  define BIBA_BLACKBOX_FIELD_MASK   0xFFFFu
+#endif
+#ifndef BIBA_BLACKBOX_MIN_FREE_KB
+#  define BIBA_BLACKBOX_MIN_FREE_KB  64u
+#endif
+#ifndef BIBA_CH_BLACKBOX
+#  define BIBA_CH_BLACKBOX  6   /* CH7 */
+#endif
+
+
+/* ========================================================================
+ * FEATURE TOGGLES
+ *
+ * Each feature below has a BIBA_FEATURE_<NAME> toggle (default 1 = enabled)
+ * and all its configuration parameters grouped in a named section.
+ * Set any toggle to 0 in target_config.h to disable that feature.
+ *
+ * When BIBA_FEATURE_RPM_CLOSED_LOOP=0, ALL RPM sub-features (ZC, spectral,
+ * dual-window, load gate, DR, PI, anti-stall) are disabled regardless of
+ * their individual toggle settings.
+ * ======================================================================== */
+
+/* --- Feature: RPM Closed-Loop Master ----------------------------------- */
+#ifndef BIBA_FEATURE_RPM_CLOSED_LOOP
+#  define BIBA_FEATURE_RPM_CLOSED_LOOP   0
+#endif
+
+/* --- Feature: RPM ZC Detector ------------------------------------------ */
+#ifndef BIBA_FEATURE_RPM_ZC
+#  define BIBA_FEATURE_RPM_ZC            1
+#endif
+#ifndef ZC_SUBWIN_K
+#  define ZC_SUBWIN_K                    8u
+#endif
+#ifndef ZC_SUBWIN_MIN_PKPK
+#  define ZC_SUBWIN_MIN_PKPK             120u
+#endif
+#ifndef ZC_SUBWIN_MIN_STD
+#  define ZC_SUBWIN_MIN_STD              40.0f
+#endif
+#ifndef ZC_MIN_VALID_HZ
+#  define ZC_MIN_VALID_HZ                50.0f
+#endif
+#ifndef ZC_EMA_ALPHA
+#  define ZC_EMA_ALPHA                   0.7f
+#endif
+
+/* --- Feature: RPM Spectral Estimator ----------------------------------- */
+#ifndef BIBA_FEATURE_RPM_SPECTRAL
+#  define BIBA_FEATURE_RPM_SPECTRAL      1
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MIN_TARGET_HZ
+#  define BIBA_RPM_SPECTRAL_MIN_TARGET_HZ      50.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MAX_TARGET_HZ
+#  define BIBA_RPM_SPECTRAL_MAX_TARGET_HZ    1200.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_REL_BAND
+#  define BIBA_RPM_SPECTRAL_REL_BAND           0.35f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_ABS_BAND_HZ
+#  define BIBA_RPM_SPECTRAL_ABS_BAND_HZ        80.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MIN_PEAK_AMP_LSB
+#  define BIBA_RPM_SPECTRAL_MIN_PEAK_AMP_LSB   45.0f
+#endif
+#ifndef BIBA_RPM_SPECTRAL_MIN_QUALITY
+#  define BIBA_RPM_SPECTRAL_MIN_QUALITY         3.0f
+#endif
+
+/* --- Feature: RPM Dual-Window Search ----------------------------------- */
+#ifndef BIBA_FEATURE_RPM_DUAL_WINDOW
+#  define BIBA_FEATURE_RPM_DUAL_WINDOW   1
+#endif
+
+/* --- Feature: RPM IS-Pin Load Gate (Phase 11) -------------------------- */
+#ifndef BIBA_FEATURE_RPM_LOAD_GATE
+#  define BIBA_FEATURE_RPM_LOAD_GATE     1
+#endif
+#ifndef BIBA_RPM_LOAD_RATIO_THRESH
+#  define BIBA_RPM_LOAD_RATIO_THRESH     1.5f   /* ratio = mean_IS_primary / mean_IS_other */
+#endif
+#ifndef BIBA_RPM_LOAD_QUALITY_MAX
+#  define BIBA_RPM_LOAD_QUALITY_MAX      10.0f  /* gate fires only when quality < this */
+#endif
+#ifndef BIBA_RPM_LOAD_ABS_THRESH_ADC
+#  define BIBA_RPM_LOAD_ABS_THRESH_ADC   3800u  /* absolute ADC count fallback gate (D-A3) */
+#endif
+
+/* --- Feature: RPM Dead Reckoning --------------------------------------- */
+#ifndef BIBA_FEATURE_RPM_DR
+#  define BIBA_FEATURE_RPM_DR            1
+#endif
+#ifndef BIBA_RPM_DR_MAX_STREAK
+#  define BIBA_RPM_DR_MAX_STREAK    5u       /* ~500 ms at 10 Hz ADC loop */
+#endif
+#ifndef BIBA_RPM_DR_RATIO_LO
+#  define BIBA_RPM_DR_RATIO_LO      0.50f    /* p10 floor across all sweep channels */
+#endif
+#ifndef BIBA_RPM_DR_RATIO_HI
+#  define BIBA_RPM_DR_RATIO_HI      1.30f    /* generous ceiling above p95=1.129 LEFT FWD */
+#endif
+#ifndef BIBA_RPM_DR_ALPHA
+#  define BIBA_RPM_DR_ALPHA         0.2f     /* EMA smoothing (5-step time constant) */
+#endif
+
+/* --- Feature: RPM PI Controller ---------------------------------------- */
+#ifndef BIBA_FEATURE_RPM_PI
+#  define BIBA_FEATURE_RPM_PI            1
+#endif
+#ifndef BIBA_RPM_PI_KP
+#  define BIBA_RPM_PI_KP                 0.003f
+#endif
+#ifndef BIBA_RPM_PI_KI
+#  define BIBA_RPM_PI_KI                 0.010f
+#endif
+#ifndef BIBA_RPM_PI_KI_LOW
+#  define BIBA_RPM_PI_KI_LOW             0.005f
+#endif
+#ifndef BIBA_RPM_PI_KI_LOW_THRESH
+#  define BIBA_RPM_PI_KI_LOW_THRESH      200.0f
+#endif
+#ifndef BIBA_RPM_PI_FF_SLOPE
+#  define BIBA_RPM_PI_FF_SLOPE           10.13f
+#endif
+#ifndef BIBA_RPM_PI_FF_DEAD
+#  define BIBA_RPM_PI_FF_DEAD            74.6f
+#endif
+#ifndef BIBA_RPM_PI_STICTION
+#  define BIBA_RPM_PI_STICTION           0.15f
+#endif
+#ifndef BIBA_RPM_PI_P_CLAMP
+#  define BIBA_RPM_PI_P_CLAMP            0.20f
+#endif
+#ifndef BIBA_RPM_PI_DT_S
+#  define BIBA_RPM_PI_DT_S               0.104f
+#endif
+
+/* --- Feature: RPM Anti-Stall (Phase 11) -------------------------------- */
+#ifndef BIBA_FEATURE_RPM_ANTI_STALL
+#  define BIBA_FEATURE_RPM_ANTI_STALL    1
+#endif
+#ifndef BIBA_ANTISTALL_RAMP_STEP
+#  define BIBA_ANTISTALL_RAMP_STEP       0.02f   /* +2% duty per window (~200ms) */
+#endif
+#ifndef BIBA_ANTISTALL_MAX_DUTY
+#  define BIBA_ANTISTALL_MAX_DUTY        0.60f   /* cap at 60% */
+#endif
+#ifndef BIBA_ANTISTALL_CONFIRM
+#  define BIBA_ANTISTALL_CONFIRM            2u   /* 2 consecutive HIGH_LOAD windows */
+#endif
+
+/* --- Feature: BTS7960 Latch Recovery ----------------------------------- */
+#ifndef BIBA_FEATURE_LATCH_RECOVERY
+#  define BIBA_FEATURE_LATCH_RECOVERY    1
+#endif
+#ifndef BIBA_LATCH_IS_RAW_MIN
+#  define BIBA_LATCH_IS_RAW_MIN          3500u  /* ≈2.82 V; latch saturates ADC to 4095 */
+#endif
+#ifndef BIBA_LATCH_BLOCKS_CONFIRM
+#  define BIBA_LATCH_BLOCKS_CONFIRM         3u  /* 3 × ~51 ms DMA window ≈ 150 ms */
+#endif
+#ifndef BIBA_LATCH_COOLDOWN_WINDOWS
+#  define BIBA_LATCH_COOLDOWN_WINDOWS      20u  /* 20 × ~51 ms ≈ 1 s spin-up grace */
+#endif
+
+/* --- Feature: Per-Motor Current/Power Limiter -------------------------- */
+#ifndef BIBA_FEATURE_CURRENT_LIMITER
+#  define BIBA_FEATURE_CURRENT_LIMITER   1
+#endif
+#ifndef BIBA_LEFT_MAX_CURRENT_A
+#  define BIBA_LEFT_MAX_CURRENT_A        18.0f
+#endif
+#ifndef BIBA_RIGHT_MAX_CURRENT_A
+#  define BIBA_RIGHT_MAX_CURRENT_A       18.0f
+#endif
+#ifndef BIBA_LEFT_MAX_POWER_W
+#  define BIBA_LEFT_MAX_POWER_W          180.0f
+#endif
+#ifndef BIBA_RIGHT_MAX_POWER_W
+#  define BIBA_RIGHT_MAX_POWER_W         180.0f
+#endif
+#ifndef BIBA_FALLBACK_SUPPLY_V
+#  define BIBA_FALLBACK_SUPPLY_V         24.0f
+#endif
+
+/* --- Feature: Steering Deadband ---------------------------------------- */
+#ifndef BIBA_FEATURE_STEERING_DEADBAND
+#  define BIBA_FEATURE_STEERING_DEADBAND 1
+#endif
+#ifndef BIBA_STEERING_DEADBAND
+#  define BIBA_STEERING_DEADBAND         0.20f
+#endif
+
+/* --- Feature: RPM Setpoint Ramp ---------------------------------------- */
+#ifndef BIBA_FEATURE_RPM_RAMP
+#  define BIBA_FEATURE_RPM_RAMP          1
+#endif
+#ifndef BIBA_RPM_SETPOINT_ACCEL_RATE
+#  define BIBA_RPM_SETPOINT_ACCEL_RATE   2.0f
+#endif
+#ifndef BIBA_RPM_SETPOINT_DECEL_RATE
+#  define BIBA_RPM_SETPOINT_DECEL_RATE   1.0f
+#endif
+/* Kept in step with BIBA_RAMP_REVERSE_DECEL_RATE / BIBA_RAMP_ZERO_HOLD_MS:
+ * the same slow-reversal handling problem applies to the setpoint ramp. */
+#ifndef BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE
+#  define BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE 1.0f
+#endif
+#ifndef BIBA_RPM_SETPOINT_ZERO_HOLD_MS
+#  define BIBA_RPM_SETPOINT_ZERO_HOLD_MS 50u
+#endif
+
+/* --- Feature: Motor Coil Melodies -------------------------------------- */
+#ifndef BIBA_FEATURE_MELODY
+#  define BIBA_FEATURE_MELODY            1
+#endif
+
+/* --- Feature: Reverse Backup Pip --------------------------------------- */
+/* Migration: old BIBA_REVERSE_PIP_ENABLED → BIBA_FEATURE_REVERSE_PIP.
+ * The old name is still accepted for backward compat. */
+#ifdef BIBA_REVERSE_PIP_ENABLED
+#  undef  BIBA_FEATURE_REVERSE_PIP
+#  define BIBA_FEATURE_REVERSE_PIP       BIBA_REVERSE_PIP_ENABLED
+#endif
+#ifndef BIBA_FEATURE_REVERSE_PIP
+#  define BIBA_FEATURE_REVERSE_PIP       0
+#endif
+#ifndef BIBA_REVERSE_PIP_INTERVAL_MS
+#  define BIBA_REVERSE_PIP_INTERVAL_MS   600u
+#endif
+
+/* --- Feature: Heading Hold --------------------------------------------- */
+#ifndef BIBA_FEATURE_HEADING_HOLD
+#  define BIBA_FEATURE_HEADING_HOLD      1
+#endif
+
+/* --- Feature: Speed Mode (3-position switch scaling) ------------------- */
+#ifndef BIBA_FEATURE_SPEED_MODE
+#  define BIBA_FEATURE_SPEED_MODE        1
+#endif
 #ifndef BIBA_SPEED_MODE_LOW_THRESHOLD
 #  define BIBA_SPEED_MODE_LOW_THRESHOLD   (-0.3f)
 #endif
@@ -174,81 +503,152 @@
 #  define BIBA_SPEED_MODE_FAST_SCALE        1.0f
 #endif
 
-/* Drive mode switch: low position → MANUAL, else → STABILIZED. */
-#ifndef BIBA_DRIVE_MODE_LOW_THRESHOLD
-#  define BIBA_DRIVE_MODE_LOW_THRESHOLD   (-0.3f)
+/* --- Feature: Mixer L∞ Ball Projection --------------------------------- */
+#ifndef BIBA_FEATURE_MIXER_PROJECTION
+#  define BIBA_FEATURE_MIXER_PROJECTION  1
 #endif
 
-/* Motor trim channel: trim_ch * MAX_EFFECT applied post-mix.
- * Positive trim → attenuate right motor, negative → attenuate left. */
-#ifndef BIBA_MOTOR_TRIM_MAX_EFFECT
-#  define BIBA_MOTOR_TRIM_MAX_EFFECT        0.30f
+/* --- Feature: Indicator LED Panels -------------------------------------
+ *
+ * Two addressable WS2812 matrices mounted on the front-left and
+ * front-right corners of the robot.  Both panels hang off ONE data
+ * line: the chain starts at the LEFT panel, its DOUT feeds the RIGHT
+ * panel (see BIBA_LED_PANEL_LEFT_IDX / _RIGHT_IDX to swap).
+ *
+ * The hardware pin lives in targets/<TARGET>/target.h as
+ * BIBA_PIN_LED_PANEL_GPIO, gated by BIBA_HAS_LED_PANEL.  Everything
+ * geometric or cosmetic is here so a different panel size is a config
+ * change, not a code change.
+ *
+ * Rendering is a pure function of (mode, now_ms) — see
+ * src/app/led_panel.c.  The three driving states follow car tail-light
+ * convention, so anyone behind the robot reads them without being told:
+ *   forward   → dim red             (running / tail light)
+ *   stopped   → bright red          (brake light)
+ *   reverse   → solid white         (reversing light)
+ *   disarmed  → amber arrow board   (road-service warning)
+ *   beacon    → blue/red double-flash lightbar
+ *   trim      → yellow perimeter chase
+ *   failsafe  → red strobe
+ */
+#ifndef BIBA_FEATURE_LED_PANELS
+#  define BIBA_FEATURE_LED_PANELS        1
 #endif
 
-/* Deadband below which throttle/steering are not considered active. */
-#ifndef BIBA_MOTOR_DEADBAND
-#  define BIBA_MOTOR_DEADBAND               0.05f
+/* Geometry. COLS is the horizontal axis (x, left→right as seen by an
+ * observer in front of the robot); ROWS is vertical (y, top→bottom). */
+#ifndef BIBA_LED_PANEL_COUNT
+#  define BIBA_LED_PANEL_COUNT           2u
+#endif
+#ifndef BIBA_LED_PANEL_COLS
+#  define BIBA_LED_PANEL_COLS            4u
+#endif
+#ifndef BIBA_LED_PANEL_ROWS
+#  define BIBA_LED_PANEL_ROWS            4u
 #endif
 
-/* Operator steering input deadband. The transmitter stick can mechanically
- * stick near center; below this threshold straight throttle must remain straight. */
-#ifndef BIBA_STEERING_DEADBAND
-#  define BIBA_STEERING_DEADBAND            0.20f
+/* Position of each panel inside the daisy chain (0 = first). */
+#ifndef BIBA_LED_PANEL_LEFT_IDX
+#  define BIBA_LED_PANEL_LEFT_IDX        0u
+#endif
+#ifndef BIBA_LED_PANEL_RIGHT_IDX
+#  define BIBA_LED_PANEL_RIGHT_IDX       1u
 #endif
 
-/* Trim gesture: hold the first 4 RC channels above this threshold
- * for BIBA_TRIM_CONFIRM_HOLD_MS (while disarmed) to enter/exit trim mode.
- * Matches biba-controller/main.py _TRIM_GESTURE_HIGH_THRESHOLD / MOTOR_TRIM_CONFIRM_HOLD_S. */
-#ifndef BIBA_TRIM_GESTURE_THRESHOLD
-#  define BIBA_TRIM_GESTURE_THRESHOLD       0.9f
+/* Wiring of a single panel.  Stock 4x4 WS2812 boards are serpentine
+ * (boustrophedon) with pixel 0 in a corner; the two flip flags let a
+ * panel be rotated 180 degrees on the chassis without re-soldering. */
+#ifndef BIBA_LED_PANEL_SERPENTINE
+#  define BIBA_LED_PANEL_SERPENTINE      1
 #endif
-#ifndef BIBA_TRIM_CONFIRM_HOLD_MS
-#  define BIBA_TRIM_CONFIRM_HOLD_MS         5000u
+#ifndef BIBA_LED_PANEL_FLIP_X
+#  define BIBA_LED_PANEL_FLIP_X          0
 #endif
-
-/* Reverse backup beep: interval between pip starts (ms). */
-#ifndef BIBA_REVERSE_PIP_ENABLED
-#  define BIBA_REVERSE_PIP_ENABLED          0
-#endif
-#ifndef BIBA_REVERSE_PIP_INTERVAL_MS
-#  define BIBA_REVERSE_PIP_INTERVAL_MS      600u
+#ifndef BIBA_LED_PANEL_FLIP_Y
+#  define BIBA_LED_PANEL_FLIP_Y          0
 #endif
 
-/* Motor direction inversion (1 = normal, -1 = inverted).
- * Mirror MOTOR1_INVERTED / MOTOR2_INVERTED from biba-controller/config.py. */
-#ifndef BIBA_LEFT_MOTOR_DIR
-#  define BIBA_LEFT_MOTOR_DIR    1
+/* Derived sizes — used to size the frame buffer and the DMA word
+ * buffer in the HAL.  Do not override; override COLS/ROWS/COUNT. */
+#define BIBA_LED_PANEL_PIXELS  (BIBA_LED_PANEL_COLS * BIBA_LED_PANEL_ROWS)
+#define BIBA_LED_PANEL_TOTAL   (BIBA_LED_PANEL_PIXELS * BIBA_LED_PANEL_COUNT)
+
+/* Master brightness, 0..255, applied to every effect as the last step.
+ * 32 WS2812 at full white would pull ~1.9 A off the 5 V rail; 120 keeps
+ * the worst case (solid white while reversing) near 0.9 A.  The red
+ * states cost roughly a third of that. */
+#ifndef BIBA_LED_PANEL_BRIGHTNESS
+#  define BIBA_LED_PANEL_BRIGHTNESS      120u
 #endif
-#ifndef BIBA_RIGHT_MOTOR_DIR
-#  define BIBA_RIGHT_MOTOR_DIR  (-1)
+/* Pre-scale level of the dim red shown while driving forward. The
+ * stopped state uses full red, so this is what sets the contrast
+ * between "rolling" and "standing" — lower it for a sharper brake
+ * light, raise it if the forward state is hard to see in daylight. */
+#ifndef BIBA_LED_PANEL_FORWARD_LEVEL
+#  define BIBA_LED_PANEL_FORWARD_LEVEL   64u
 #endif
 
-/* --- Output ramping (MOTOR-03) --------------------------------------- */
-/* Mirror RAMP_* from biba-controller/config.py.                        */
-#ifndef BIBA_RAMP_ACCEL_RATE
-#  define BIBA_RAMP_ACCEL_RATE           2.0f   /* RAMP_ACCEL_RATE        */
-#endif
-#ifndef BIBA_RAMP_DECEL_RATE
-#  define BIBA_RAMP_DECEL_RATE           2.0f   /* RAMP_DECEL_RATE        */
-#endif
-#ifndef BIBA_RAMP_REVERSE_DECEL_RATE
-#  define BIBA_RAMP_REVERSE_DECEL_RATE   0.5f   /* RAMP_REVERSE_DECEL_RATE */
-#endif
-#ifndef BIBA_RAMP_ZERO_HOLD_MS
-#  define BIBA_RAMP_ZERO_HOLD_MS         150u   /* RAMP_ZERO_HOLD_S * 1000 */
+/* Repaint period. 20 ms = 50 Hz; one 32-LED frame takes ~1 ms on the
+ * wire, which also satisfies the WS2812 >50 us inter-frame reset. */
+#ifndef BIBA_LED_PANEL_REFRESH_MS
+#  define BIBA_LED_PANEL_REFRESH_MS      20u
 #endif
 
-#ifndef BIBA_RPM_SETPOINT_ACCEL_RATE
-#  define BIBA_RPM_SETPOINT_ACCEL_RATE   0.6f   /* full-scale command / second */
+/* Effect timings. */
+#ifndef BIBA_LED_PANEL_SERVICE_STEP_MS
+#  define BIBA_LED_PANEL_SERVICE_STEP_MS 90u   /* arrow-board phase */
 #endif
-#ifndef BIBA_RPM_SETPOINT_DECEL_RATE
-#  define BIBA_RPM_SETPOINT_DECEL_RATE   1.0f   /* 1.0 = full→zero in 1s */
+#ifndef BIBA_LED_PANEL_BEACON_SLOT_MS
+#  define BIBA_LED_PANEL_BEACON_SLOT_MS  60u   /* lightbar slot (16 per cycle) */
 #endif
-#ifndef BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE
-#  define BIBA_RPM_SETPOINT_REVERSE_DECEL_RATE 0.5f
+#ifndef BIBA_LED_PANEL_TRIM_STEP_MS
+#  define BIBA_LED_PANEL_TRIM_STEP_MS    80u   /* perimeter chase step */
 #endif
-#ifndef BIBA_RPM_SETPOINT_ZERO_HOLD_MS
-#  define BIBA_RPM_SETPOINT_ZERO_HOLD_MS 150u
+#ifndef BIBA_LED_PANEL_FAILSAFE_MS
+#  define BIBA_LED_PANEL_FAILSAFE_MS     100u  /* red strobe half-period */
 #endif
+
+/* Amber used by the road-service arrow board (pre-brightness). */
+#ifndef BIBA_LED_PANEL_AMBER_R
+#  define BIBA_LED_PANEL_AMBER_R         255u
+#endif
+#ifndef BIBA_LED_PANEL_AMBER_G
+#  define BIBA_LED_PANEL_AMBER_G         90u
+#endif
+#ifndef BIBA_LED_PANEL_AMBER_B
+#  define BIBA_LED_PANEL_AMBER_B         0u
+#endif
+
+
+/* ========================================================================
+ * DEPENDENCY VALIDATION
+ *
+ * #error checks at the bottom of biba_config.h — after all toggles
+ * and target_config.h overrides are resolved — catch illegal combinations
+ * at compile time.
+ *
+ * When BIBA_FEATURE_RPM_CLOSED_LOOP=0, dependency checks are skipped
+ * because all RPM sub-features are implicitly disabled.
+ * ======================================================================== */
+
+#if BIBA_FEATURE_RPM_CLOSED_LOOP
+
+#  if BIBA_FEATURE_RPM_PI && !BIBA_FEATURE_RPM_DR
+#    error "BIBA_FEATURE_RPM_PI requires BIBA_FEATURE_RPM_DR (PI uses DR as measurement source)"
+#  endif
+
+#  if BIBA_FEATURE_RPM_DUAL_WINDOW && !BIBA_FEATURE_RPM_SPECTRAL
+#    error "BIBA_FEATURE_RPM_DUAL_WINDOW requires BIBA_FEATURE_RPM_SPECTRAL (hint is a second Goertzel search)"
+#  endif
+
+#  if BIBA_FEATURE_RPM_LOAD_GATE && !BIBA_FEATURE_RPM_SPECTRAL
+#    error "BIBA_FEATURE_RPM_LOAD_GATE requires BIBA_FEATURE_RPM_SPECTRAL (gate applied to spectral result)"
+#  endif
+
+#  if BIBA_FEATURE_RPM_ANTI_STALL && !BIBA_FEATURE_RPM_SPECTRAL
+#    error "BIBA_FEATURE_RPM_ANTI_STALL requires BIBA_FEATURE_RPM_SPECTRAL (uses HIGH_LOAD from spectral)"
+#  endif
+
+#endif /* BIBA_FEATURE_RPM_CLOSED_LOOP */
 
 #endif /* BIBA_CONFIG_H */

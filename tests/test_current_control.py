@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import pytest
-
-from motors.current_control import MotorCurrentSample, MotorLimitConfig, apply_motor_limits
+from motors.current_control import (
+    MotorCurrentSample,
+    MotorLimitConfig,
+    apply_motor_limits,
+)
 
 
 def test_apply_motor_limits_preserves_requested_output_when_below_limits() -> None:

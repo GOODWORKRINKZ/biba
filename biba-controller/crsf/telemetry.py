@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import serial
 
@@ -25,17 +24,17 @@ def build_biba_system_metrics(
     right_motor_current_a: float,
 ) -> BIBASystemMetrics:
     return BIBASystemMetrics(
-        cpu_pct=max(0, min(6553, int(round(cpu_pct)))),
-        mem_pct=max(0, min(255, int(round(mem_pct)))),
-        left_wheel_current_ma=max(0, min(6553500, int(round(left_motor_current_a * 1000)))),
-        right_wheel_current_ma=max(0, min(6453500, int(round(right_motor_current_a * 1000)))),
+        cpu_pct=max(0, min(6553, round(cpu_pct))),
+        mem_pct=max(0, min(255, round(mem_pct))),
+        left_wheel_current_ma=max(0, min(6553500, round(left_motor_current_a * 1000))),
+        right_wheel_current_ma=max(0, min(6453500, round(right_motor_current_a * 1000))),
     )
 
 
 class CRSFTelemetry:
     """Send CRSF telemetry frames using an already opened serial link."""
 
-    def __init__(self, serial_port: Optional[serial.Serial]) -> None:
+    def __init__(self, serial_port: serial.Serial | None) -> None:
         self.serial_port = serial_port
 
     def attach(self, serial_port: serial.Serial) -> None:
@@ -53,8 +52,8 @@ class CRSFTelemetry:
         if self.serial_port is None:
             raise RuntimeError("CRSFTelemetry serial port is not attached")
 
-        voltage = max(0, int(round(voltage_v * 10)))
-        current = max(0, int(round(current_a * 10)))
+        voltage = max(0, round(voltage_v * 10))
+        current = max(0, round(current_a * 10))
         capacity = max(0, min(capacity_mah, 0xFFFFFF))
         percentage = max(0, min(remaining_pct, 100))
 
@@ -73,7 +72,7 @@ class CRSFTelemetry:
         left_motor_current_a: float = 0.0,
         right_motor_current_a: float = 0.0,
         *,
-        metrics: Optional[BIBASystemMetrics] = None,
+        metrics: BIBASystemMetrics | None = None,
     ) -> None:
         """Send CPU and memory usage via CRSF GPS frame.
 
@@ -97,8 +96,8 @@ class CRSFTelemetry:
         latitude = 1
         longitude = 1
         groundspeed = max(0, min(65535, metrics.cpu_pct * 10))
-        heading = max(0, min(65535, int(round(metrics.left_wheel_current_ma / 100.0))))
-        altitude = 1000 + max(0, min(64535, int(round(metrics.right_wheel_current_ma / 100.0))))
+        heading = max(0, min(65535, round(metrics.left_wheel_current_ma / 100.0)))
+        altitude = 1000 + max(0, min(64535, round(metrics.right_wheel_current_ma / 100.0)))
         satellites = max(0, min(255, metrics.mem_pct))
 
         payload = bytearray()

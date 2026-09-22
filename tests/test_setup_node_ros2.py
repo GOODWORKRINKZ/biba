@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 SCRIPT = Path("scripts/setup/setup_node_ros2.sh")
 
 

@@ -20,7 +20,7 @@ def load_motor_trim(settings_path: str | Path, *, max_effect: float) -> float:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         trim = float(payload.get("trim", 0.0))
-    except Exception:
+    except Exception:  # noqa: BLE001 -- corrupt/missing settings file must not crash startup
         return 0.0
 
     return clamp_motor_trim(trim, max_effect=max_effect)

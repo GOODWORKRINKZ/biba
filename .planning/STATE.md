@@ -2,27 +2,31 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-last_updated: "2026-05-22T00:00:00.000Z"
+status: in-progress
+last_updated: "2026-05-27T20:00:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 13
+  completed_phases: 12
+  total_plans: 35
+  completed_plans: 35
+  percent: 92
 ---
 
 # Project State
 
 **Project:** BiBa
 **Milestone:** RP2040 Port
-**Phase:** Phase 6 — IS-Signal RPM Proof-of-Concept
-**Status:** Phase 6 COMPLETE — all must_haves passed, findings documented in 06-FINDINGS.md.
-**Last updated:** 2026-05-23
+**Phase:** Phase 13 — Regression Fix (Load Gate / PI Windup)
+**Status:** DISCUSSED (CONTEXT.md written; root cause confirmed; ready for planning)
+**Last updated:** 2026-05-27
 
 ## Current Phase
 
-All phases complete. Next: Phase 7 — интеграция IS-RPM ZC-детектора в основную прошивку.
+Phase 13 diagnosed: the load gate (`BIBA_FEATURE_RPM_LOAD_GATE`, Phase 11) creates **sustained** invalid spectral windows during deceleration (18+ consecutive, vs 1-2 before Phase 11). DR holds stale RPM → PI integral winds to saturation (+3.0 ↔ -1.0) → permanent duty oscillation → wheels jerk and reverse.
+
+Three-tier fix agreed: (1) deceleration bypass in load gate, (2) raise LOAD_QUALITY_MAX 10→15, (3) PI integral reset on gate edge.
+
+Blackbox session_0012 confirms: 72 duty oscillation events, PI integral at limits, negative duty at zero throttle. Simulation models at `scripts/artifacts/phase13_*.png`.
 
 ## Completed Phases
 
@@ -31,18 +35,27 @@ All phases complete. Next: Phase 7 — интеграция IS-RPM ZC-детек
 - Phase 4: Thermal Hardening & ESC Architecture — complete (UAT passed 2026-05-19)
 - Phase 5: Current Sensing & ADC Architecture — complete (2026-05-22)
 - Phase 6: IS-Signal RPM Proof-of-Concept — complete (2026-05-23)
+- Phase 7: IS-RPM Integration — complete (2026-05-25)
+- Phase 8: Blackbox Recorder — complete
+- Phase 9: RPM Estimator Hardening — complete
+- Phase 10: Goertzel Dual-Window — complete (84/84 tests)
+- Phase 11: IS-Pin Load & Stall Detection — complete (88/88 tests)
+- Phase 12: Signal Chain Feature Gating — complete (88/88 tests, 3 plans executed)
+- Phase 13: Regression Fix — discussed (root cause confirmed, CONTEXT.md written)
 
 ## Notes
 
-Phase 4 field validation confirmed: large heatsink installed + one driver replaced → thermal within limits throughout run.
-Center of mass shifted closer to geometric center → handling improved significantly.
-All 10 UAT acceptance criteria passed. 04-UAT.md status=complete.
+Phase 12 delivers 17 `BIBA_FEATURE_*` compile-time toggles:
+- RPM chain (7): ZC, SPECTRAL, DUAL_WINDOW, LOAD_GATE, DR, PI, ANTI_STALL
+- Safety (2): LATCH_RECOVERY, CURRENT_LIMITER
+- Comfort (4): STEERING_DEADBAND, RPM_RAMP, MELODY, REVERSE_PIP
+- Drive (3): HEADING_HOLD, SPEED_MODE, MIXER_PROJECTION
 
-Phase 5 (Current Sensing & ADC Architecture) complete 2026-05-22: ADS1115+AHT30 drivers, per-wheel current sense, VBAT/IBAT, temp/hum telemetry, protocol extended, all tests green.
+Master switch `BIBA_FEATURE_RPM_CLOSED_LOOP` replaces `BIBA_OPEN_LOOP` with backward compat.
+Dependency `#error` checks: PI→DR, DUAL_WINDOW→SPECTRAL, LOAD_GATE→SPECTRAL, ANTI_STALL→SPECTRAL.
+Open-loop mode (RPM_CLOSED_LOOP=0): -40B RAM, -5.8KB Flash vs default.
 
-Phase 6 (IS-Signal RPM PoC) added 2026-05-22: plan committed. Hardware change: IS_LEFT/RIGHT → GP26/27 native ADC through RC filter (1kΩ‖1kΩ + 0.1µF). VBAT/IBAT → ADS1115 AIN0/AIN1. New pio env `rpico_rp2040_is_poc`. Python scripts for DMA capture + FFT/ZC/autocorr analysis.
-
-Phase 2 (Stabilization & Sensing) remains deferred — no directory yet, may follow after Phase 6.
+Physical smoke test pending — requires robot hardware for field validation.
 
 **2026-05-17**: Phase 4 added to roadmap — Thermal Hardening & ESC Architecture. Synthesizing dialogue.log + forum analysis of BTN7970/BTN8982TA/IFX007T tradeoffs and cooling design strategies. Four implementation plans created: failure analysis, ESC evaluation, thermal design, and 60+ min validation test.
 

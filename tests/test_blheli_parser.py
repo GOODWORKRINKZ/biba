@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from buzzer.blheli_parser import note_to_freq, parse_blheli
 
 

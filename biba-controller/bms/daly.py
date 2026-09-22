@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Protocol
+from typing import Protocol
 
 import serial
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -45,7 +48,7 @@ class DalyBMS:
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self.serial_port: Optional[serial.Serial] = None
+        self.serial_port: serial.Serial | None = None
 
     def open(self) -> None:
         """Open the configured BMS serial port."""
@@ -101,7 +104,7 @@ class DalyBMS:
         ]
         return [value for value in frame_cells if value > 0]
 
-    def _send_command(self, command: int) -> Optional[bytes]:
+    def _send_command(self, command: int) -> bytes | None:
         """Send a Daly request frame and return a validated 13-byte response."""
         if self.serial_port is None:
             raise RuntimeError("DalyBMS serial port is not open")
@@ -115,7 +118,7 @@ class DalyBMS:
             return None
         return response
 
-    def get_soc(self) -> Optional[dict[str, float]]:
+    def get_soc(self) -> dict[str, float] | None:
         """Return pack voltage, current, and state-of-charge information."""
         response = self._send_command(0x90)
         if response is None:
@@ -159,7 +162,7 @@ class DalyBMS:
 
         return self._parse_temperature_data(response)
 
-    def read_state(self) -> Optional[BatteryState]:
+    def read_state(self) -> BatteryState | None:
         """Read all available telemetry and return an aggregated battery state."""
         soc = self.get_soc()
         if soc is None:
@@ -193,7 +196,7 @@ class DalyBMSBle(DalyBMS):
         notify_uuid: str,
         timeout: float = 1.5,
         detail_refresh_interval_s: float = 10.0,
-        client_factory: Optional[Callable[[str, str], BleClientProtocol]] = None,
+        client_factory: Callable[[str, str], BleClientProtocol] | None = None,
     ) -> None:
         super().__init__(port=address, baudrate=0, timeout=timeout)
         self.address = address
@@ -201,10 +204,10 @@ class DalyBMSBle(DalyBMS):
         self.write_uuid = write_uuid
         self.notify_uuid = notify_uuid
         self._client_factory = client_factory or _build_ble_client
-        self._client: Optional[BleClientProtocol] = None
+        self._client: BleClientProtocol | None = None
         self._response_lock = threading.Lock()
         self._response_event = threading.Event()
-        self._pending_command: Optional[int] = None
+        self._pending_command: int | None = None
         self._pending_frames: list[bytes] = []
         self._detail_refresh_interval_s = detail_refresh_interval_s
         self._cached_cells: list[float] = []
@@ -228,7 +231,10 @@ class DalyBMSBle(DalyBMS):
         try:
             self._client.stop_notify(self.notify_uuid)
         except Exception:
-            pass
+            # Best-effort: the BLE backend can raise a range of
+            # backend-specific errors here (link already dropped,
+            # characteristic gone, ...); disconnect() below still runs.
+            _LOGGER.debug("stop_notify failed during close()", exc_info=True)
         try:
             self._client.disconnect()
         finally:
@@ -243,7 +249,7 @@ class DalyBMSBle(DalyBMS):
             self._pending_frames.append(data)
             self._response_event.set()
 
-    def _send_command(self, command: int) -> Optional[bytes]:
+    def _send_command(self, command: int) -> bytes | None:
         if self._client is None:
             raise RuntimeError("DalyBMSBle client is not connected")
 
@@ -287,7 +293,7 @@ class DalyBMSBle(DalyBMS):
             return True
         return (now - refreshed_at) >= self._detail_refresh_interval_s
 
-    def read_state(self) -> Optional[BatteryState]:
+    def read_state(self) -> BatteryState | None:
         soc = self.get_soc()
         if soc is None:
             return None
@@ -413,7 +419,7 @@ async def _resolve_bleak_target(address: str) -> object:
                 details,
                 rssi=int(rssi.value) if rssi is not None else None,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001 -- best-effort name resolution, fall back to the raw address
         return address
     finally:
         if bus is not None:

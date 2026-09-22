@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 CRSF_SYNC = 0xC8
 CRSF_MAX_FRAME_SIZE = 64
 
@@ -34,7 +32,7 @@ def build_frame(frame_type: int, payload: bytes) -> bytes:
     return bytes([CRSF_SYNC, length]) + body + bytes([crc])
 
 
-def parse_frame(frame: bytes) -> Optional[tuple[int, bytes]]:
+def parse_frame(frame: bytes) -> tuple[int, bytes] | None:
     """Validate and unpack a CRSF frame.
 
     Returns None when the frame is malformed or the CRC check fails.
@@ -59,7 +57,7 @@ def parse_frame(frame: bytes) -> Optional[tuple[int, bytes]]:
     return frame_type, payload
 
 
-def pop_frame_from_buffer(buffer: bytearray) -> Optional[bytes]:
+def pop_frame_from_buffer(buffer: bytearray) -> bytes | None:
     """Extract one CRSF frame from a byte buffer if a complete frame is present."""
     while buffer and buffer[0] != CRSF_SYNC:
         buffer.pop(0)

@@ -1,0 +1,58 @@
+designator	value	package	lcsc	mfr_part	pins	rotation	x	y	link
+C1	0.1u	C0805			2	90	4201.5	3517	https://item.szlcsc.com/373011.html
+C2	0.1u	C0805			2	180	4300	3525	https://item.szlcsc.com/373011.html
+C3	0.1u	C0805			2	180	4300	3605	https://item.szlcsc.com/373011.html
+C4	0.1u	C0805			2	270	4224	3675	https://item.szlcsc.com/373011.html
+C5	0.1u	C0805			2	270	4254	3675	https://item.szlcsc.com/373011.html
+C6	0.1u	C0805			2	180	4156	3482	https://item.szlcsc.com/373011.html
+C7	1uF	C0603			2	90	4190	3488.5	https://item.szlcsc.com/362304.html
+C8	2.2uF	C0603			2	270	4159	3465.5	https://item.szlcsc.com/362304.html
+C9	1000uF	CAP-TH_BD16.0-P7.50-D0.8-FD-H25.0	C51904448	ERB50V1000M16X25	2	180	4320	3683	https://atta.szlcsc.com/upload/public/pdf/source/20250912/46A302DCA73B95C19C2446BC821F7B24.pdf
+H1	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4095	3430	https://www.cjt.com/Upload/A2541.pdf
+H2	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4105	3430	https://www.cjt.com/Upload/A2541.pdf
+H3	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4115	3430	https://www.cjt.com/Upload/A2541.pdf
+H4	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4125	3430	https://www.cjt.com/Upload/A2541.pdf
+H5	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4055	3430	https://www.cjt.com/Upload/A2541.pdf
+H6	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4065	3430	https://www.cjt.com/Upload/A2541.pdf
+H7	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4075	3430	https://www.cjt.com/Upload/A2541.pdf
+H8	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	90	4085	3430	https://www.cjt.com/Upload/A2541.pdf
+H10	HDR-F-2.54_1x3	HDR-F-2.54_1X3	C146690		3	180	4239	3699	https://www.cjt.com/Upload/A2541.pdf
+IC1	rp2040_RP2040_breakout_swd	RP2040:RP2040-BREAKOUT_SWD			44	180	4091.5	3581	
+J1	HDR-M-2.54_1x3	HDR-M-2.54_1X3	C180248		3	90	4170	3383.5	
+J2	HDR-M-2.54_1x4	HDR-M-2.54_1X4	C124378		4	180	4160	3341.5	
+J3	HDR-M-2.54_1x4	HDR-M-2.54_1X4	C124378		4		4174.5	3698.5	
+J4	HDR-M-2.54_1x4	HDR-M-2.54_1X4	C124378		4	180	4100	3341.5	
+PM1	SKMW30f-05	SKMW30G-05			6	90	4299	3433.5	
+R1	30k	R0805			2	90	4211.5	3597	https://item.szlcsc.com/142685.html
+R2	30k	R0805			2	90	4221.5	3597	https://item.szlcsc.com/142685.html
+R3	30k	R0805			2	90	4231.5	3597	https://item.szlcsc.com/142685.html
+R4	30k	R0805			2	90	4241.5	3597	https://item.szlcsc.com/142685.html
+R5	30k	R0805			2	270	4241.5	3517	https://item.szlcsc.com/142685.html
+R6	30k	R0805			2	270	4231.5	3517	https://item.szlcsc.com/142685.html
+R7	30k	R0805			2	270	4221.5	3517	https://item.szlcsc.com/142685.html
+R8	30k	R0805			2	270	4211.5	3517	https://item.szlcsc.com/142685.html
+R9	10k	R0805			2		4300	3585	https://item.szlcsc.com/142685.html
+R10	10k	R0805			2		4300	3575	https://item.szlcsc.com/142685.html
+R11	10k	R0805			2		4300	3505	https://item.szlcsc.com/142685.html
+R12	10k	R0805			2		4300	3495	https://item.szlcsc.com/142685.html
+R13	10k	R0805			2		4300	3545	https://item.szlcsc.com/142685.html
+R14	10k	R0805			2	180	4300	3535	https://item.szlcsc.com/142685.html
+R15	10k	R0805			2	180	4300	3625	https://item.szlcsc.com/142685.html
+R16	10k	R0805			2		4300	3615	https://item.szlcsc.com/142685.html
+R17	1k	R0805			2		4300	3515	https://item.szlcsc.com/142685.html
+R18	1k	R0805			2		4300	3555	https://item.szlcsc.com/142685.html
+R19	1k	R0805			2		4300	3595	https://item.szlcsc.com/142685.html
+R20	1k	R0805			2		4300	3635	https://item.szlcsc.com/142685.html
+R21	10k	R0603			2	180	4194	3477	https://www.mouser.in/datasheet/2/447/PYu_RT_1_to_0_01_RoHS_L_11-1669912.pdf
+R22	10k	R0603			2		4194	3469	https://www.mouser.in/datasheet/2/447/PYu_RT_1_to_0_01_RoHS_L_11-1669912.pdf
+R23	10k	R0603			2		4194	3460	https://www.mouser.in/datasheet/2/447/PYu_RT_1_to_0_01_RoHS_L_11-1669912.pdf
+R24	10k	R0603			2		4184.5	3450	https://www.mouser.in/datasheet/2/447/PYu_RT_1_to_0_01_RoHS_L_11-1669912.pdf
+R25	1k	R0805			2	270	4234	3675	https://item.szlcsc.com/142685.html
+R26	1k	R0805			2	270	4244	3675	https://item.szlcsc.com/142685.html
+U1	SN74AHC244DW	SOIC-20_L12.8-W7.5-P1.27-LS10.3-BL	C1548445	SN74AHC244DW	20		4223	3557.5	https://atta.szlcsc.com/upload/public/pdf/source/20210720/C906746_0CC5C426796129A62340EE6012BC95AE.pdf
+U2	BTN7970	TO-263-7_L10.2-W10.4-P1.27-LS14.4-B			8	180	4400.5	3375	
+U3	BTN7970	TO-263-7_L10.2-W10.4-P1.27-LS14.4-B			8	180	4400.666	3472	
+U4	BTN7970	TO-263-7_L10.2-W10.4-P1.27-LS14.4-B			8	180	4401	3569.5	
+U5	BTN7970	TO-263-7_L10.2-W10.4-P1.27-LS14.4-B			8	180	4400	3666.5	
+U6	BMI160	LGA-14_L3.0-W2.5-P0.50-BL	C94021	BMI160	14	180	4175	3465.5	https://lcsc.com/product-detail/Sensors_Bosch_BMG250_BMG250_C189521.html
+U7	SPX3819M5-L-3-3/TR	SOT-23-5_L3.0-W1.7-P0.95-LS2.8-BR	C9055	SPX3819M5-L-3-3/TR	5	270	4175.5	3487.5	

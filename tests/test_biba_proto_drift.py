@@ -20,7 +20,6 @@ from pathlib import Path
 
 import pytest
 
-
 PAIRS = [
     (
         Path("firmware/src/proto/biba_proto.h"),
