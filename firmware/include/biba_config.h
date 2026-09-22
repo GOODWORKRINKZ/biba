@@ -198,11 +198,19 @@
  * Targets may override these — RP2040_DC_BTS7960_PWM does, see its target_config.h
  * for the board-specific rationale and the field-test history.
  *
- * Invariant: REVERSE_DECEL_RATE >= DECEL_RATE.  Winding duty down ahead of a
- * reversal is the same electrical event as an ordinary throttle release, so
- * making it slower buys no protection and only delays the wheel — which the
- * operator feels as the wheel dropping out mid-turn while the other wheel
- * keeps pulling (field test 2026-09-20).
+ * Invariant: REVERSE_DECEL_RATE == DECEL_RATE (enforced by _Static_assert in
+ * ramp.c; REVERSE_DECEL_RATE <= 0 means "no reversal limit" and is exempt).
+ * Winding duty down ahead of a reversal is the same electrical event as an
+ * ordinary throttle release, so whichever of the two is slower buys no
+ * protection — the faster one already sets the regen envelope — and only
+ * delays a wheel.  Both orderings have been felt in the field and both are
+ * felt as steering that does not work:
+ *   REVERSE slower (field test 2026-09-20): the wheel drops out mid-turn
+ *     while the other keeps pulling.
+ *   DECEL slower (field test 2026-09-21): steering with the throttle held
+ *     does nothing, because the mixer asks the inner wheel for a smaller
+ *     duty of the same sign and that goes down the DECEL path — the machine
+ *     only turns once the operator releases the stick.
  *
  * Field tuning without a code change (platformio.ini build_flags):
  *   -D BIBA_RAMP_REVERSE_DECEL_RATE=4.0f   quicker reversal

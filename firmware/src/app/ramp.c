@@ -5,6 +5,23 @@
 /* Cap for zero_time_s so it never overflows float precision. */
 #define ZERO_TIME_CAP_S  1000.0f
 
+/* Winding duty down is one electrical event regardless of what the command
+ * does afterwards, so the two rates that govern it must not disagree.  The
+ * asymmetry is what the operator feels: a wheel asked for a smaller duty of
+ * the SAME sign (steering while the throttle is held) takes the decel path,
+ * a wheel asked to flip sign takes the reversal path.  Letting the reversal
+ * path be the fast one gave a machine that steered only once the throttle
+ * was released (field tests 2026-09-20 / 2026-09-21).
+ * Checked here rather than in biba_config.h because #if cannot compare
+ * floats, and this file is built for every target. */
+_Static_assert(BIBA_RAMP_REVERSE_DECEL_RATE <= 0.0f ||
+               BIBA_RAMP_REVERSE_DECEL_RATE == BIBA_RAMP_DECEL_RATE,
+               "BIBA_RAMP_DECEL_RATE and BIBA_RAMP_REVERSE_DECEL_RATE must "
+               "match (or REVERSE <= 0 for no reversal limit): whichever is "
+               "slower becomes the steering path the operator complains "
+               "about, and neither ordering bounds regen any tighter than "
+               "the faster of the two already does");
+
 void biba_ramp_init(biba_ramp_t *r)
 {
     if (r == NULL) return;
@@ -59,8 +76,10 @@ float biba_ramp_update_with_rates(biba_ramp_t *r, float target, float dt,
     }
 
     /* Direction change: decelerate toward zero, do NOT cross it.
-     * Uses reverse_decel_rate, which is deliberately FASTER than the normal
-     * decel rate — this is the path the operator feels when steering. */
+     * Uses reverse_decel_rate.  Steering splits between this path and the
+     * same-sign decel path below depending on throttle — under held
+     * throttle the inner wheel never changes sign — so the two rates are
+     * kept equal (see the _Static_assert above). */
     if ((r->current > 0.0f && target < 0.0f) ||
         (r->current < 0.0f && target > 0.0f)) {
 
