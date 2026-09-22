@@ -1,4 +1,4 @@
-/* PWM → CRSF bridge — RP2040 entry point (env: pwm2crsf_rp2040).
+/* PWM → CRSF bridge — RP2040 entry point (env: rp2040_bridge_pwm2crsf).
  *
  * Measures servo-PWM high times on PWM2CRSF_INPUT_PINS with GPIO edge
  * interrupts and streams CRSF RC-channel frames out of UART0 at

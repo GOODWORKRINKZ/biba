@@ -163,7 +163,13 @@ static void test_full_reversal_latency_within_budget(void)
 /* -----------------------------------------------------------------------
  * Test 7: Direction change triggers zero-hold and hold freezes output
  * current=0.1, target=-1.0, dt=1.0 → large step → reaches zero → hold set
- * Second call with dt=0.05 (during hold): returns 0.0 (frozen)
+ * Second call with dt inside the hold window: returns 0.0 (frozen)
+ *
+ * The in-hold tick is derived from BIBA_RAMP_ZERO_HOLD_MS rather than
+ * hard-coded.  It used to be a flat 0.05 s, which silently stopped
+ * testing what it claims once the hold was shortened 400 ms → 30 ms
+ * (54af6db): a 50 ms tick then OVERRAN the hold, the ramp legitimately
+ * started moving, and the assert failed on correct behaviour.
  * ----------------------------------------------------------------------- */
 static void test_direction_change_triggers_zero_hold(void)
 {
@@ -177,8 +183,10 @@ static void test_direction_change_triggers_zero_hold(void)
                              (float)BIBA_RAMP_ZERO_HOLD_MS / 1000.0f,
                              r.hold_remaining_s);
 
-    /* Tick during hold: output must remain frozen at 0.0 */
-    float out2 = biba_ramp_update(&r, -1.0f, 0.05f);
+    /* Tick during hold: output must remain frozen at 0.0.  Half the hold
+     * leaves margin at both ends whatever BIBA_RAMP_ZERO_HOLD_MS is. */
+    const float in_hold_dt = (float)BIBA_RAMP_ZERO_HOLD_MS / 2000.0f;
+    float out2 = biba_ramp_update(&r, -1.0f, in_hold_dt);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, out2);
 }
 

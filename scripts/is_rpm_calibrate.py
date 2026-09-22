@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """IS-RPM offline calibration script (Phase 07 Plan 03).
 
-Drives the rpico_rp2040_is_poc firmware over USB CDC, issuing the CALRUN
+Drives the rp2040_dc_bts7960_pwm_is_poc firmware over USB CDC, issuing the CALRUN
 command at each duty point, prompts the operator for an external
 tachometer reading per point, fits a linear K-coefficient model, and
 writes a JSON artifact to scripts/artifacts/calibration/.

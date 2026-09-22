@@ -4,9 +4,9 @@
 /* ODrive CAN protocol constants (CANSimple subset).
  *
  * This header only carries the CAN-specific command IDs and encoding
- * notes.  The transport-agnostic driver API lives in drivers/odrive.h
+ * notes.  The transport-agnostic driver API lives in drivers/bldc.h
  * (see there for the full contract).  Mode / hal code should include
- * drivers/odrive.h; only the CAN backend and the CAN-loopback PoC need
+ * drivers/bldc.h; only the CAN backend and the CAN-loopback PoC need
  * this header for the OD_CMD_* table below.
  *
  * Single CAN transport assumed: SPI0 → MCP2515 → CAN @ 250 kbps.  The
@@ -14,7 +14,7 @@
  * high-level API but none of the constants below.
  */
 
-#include "odrive.h"
+#include "bldc.h"
 
 #include <stdbool.h>
 #include <stddef.h>

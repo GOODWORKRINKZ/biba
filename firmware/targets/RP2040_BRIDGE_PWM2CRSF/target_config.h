@@ -1,7 +1,7 @@
 #ifndef BIBA_TARGET_CONFIG_H
 #define BIBA_TARGET_CONFIG_H
 
-/* Tunables for the PWM → CRSF bridge (PWM2CRSF_RP2040).
+/* Tunables for the PWM → CRSF bridge (RP2040_BRIDGE_PWM2CRSF).
  *
  * Everything here can be overridden with -D in platformio.ini. */
 

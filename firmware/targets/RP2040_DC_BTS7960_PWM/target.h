@@ -1,7 +1,7 @@
 #ifndef BIBA_TARGET_H
 #define BIBA_TARGET_H
 
-/* Target: RPICO_RP2040
+/* Target: RP2040_DC_BTS7960_PWM
  *
  * Compact RP2040 board (dual Cortex-M0+, 125 MHz, 264 KB SRAM).
  * Compatible with Raspberry Pi Pico pinout (PlatformIO board: rpipico).
@@ -48,7 +48,7 @@
  * BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM = 0.
  */
 
-#define BIBA_TARGET_NAME            "RPICO_RP2040"
+#define BIBA_TARGET_NAME            "RP2040_DC_BTS7960_PWM"
 #define BIBA_TARGET_HAS_BTS7960_2CH 1
 #define BIBA_TARGET_HAS_CRSF        1
 #define BIBA_TARGET_HAS_IMU         1

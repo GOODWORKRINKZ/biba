@@ -13,10 +13,20 @@
  *   - Drain RX frames (one at a time) into a caller-owned buffer.
  *   - Install the GPIO IRQ handler for MCP2515 INT (RX pending / error).
  *
- * Anything higher-level — actual ODrive protocol encoding, periodic
- * heartbeat tracking, ODrive-side discovery — lives in
- * `drivers/odrive_can.c`.  Keeping these split matches the ADR-0001 §4
- * table ("drivers/mcp2515.c ~400 LoC, drivers/odrive_can.c ~300 LoC").
+ * Anything higher-level — actual ODrive / VESC protocol encoding,
+ * periodic heartbeat tracking, node discovery — lives in
+ * `drivers/odrive_can.c` and `drivers/vesc_can.c`.  Keeping these
+ * split matches the ADR-0001 §4 table ("drivers/mcp2515.c ~400 LoC,
+ * drivers/odrive_can.c ~300 LoC").
+ *
+ * Two bus dialects share this driver (ADR-0002):
+ *   - ODrive CANSimple — 11-bit standard IDs, 250 kbps, six acceptance
+ *     filters whitelisting the cmd_ids we consume.
+ *   - VESC CAN         — 29-bit extended IDs, 500 kbps, accept-all
+ *     (the VESC id lives in the low 8 bits, so a cmd-wise filter would
+ *     need the extended mask registers; not worth it for a 2-node bus).
+ * Both are selected from the target's target_config.h via
+ * BIBA_CAN_BITRATE_BPS and BIBA_MCP2515_ACCEPT_ALL.
  */
 
 #include <stdbool.h>
@@ -27,10 +37,17 @@
 extern "C" {
 #endif
 
-/* CAN frame representation.  Matches the ODrive CANSimple envelope
- * (11-bit ID, ≤8 bytes data).  See ADR-0001 §1.3. */
+/* CAN frame representation.  Covers both bus dialects: the ODrive
+ * CANSimple envelope (11-bit ID) and the VESC envelope (29-bit
+ * extended ID).  See ADR-0001 §1.3 and ADR-0002 §2.
+ *
+ * `ext == false` → `id` is an 11-bit standard identifier (bits 10:0;
+ * higher bits ignored).  `ext == true` → `id` is a 29-bit extended
+ * identifier (bits 28:0).  RX fills `ext` from the IDE bit of the
+ * received frame, so a caller can tell the two apart on a mixed bus. */
 typedef struct {
-    uint32_t id;       /* 11-bit identifier (top bits ignored). */
+    uint32_t id;       /* 11-bit std, or 29-bit when `ext` is set. */
+    bool     ext;      /* true = 29-bit extended identifier (IDE). */
     uint8_t  dlc;      /* 0..8 */
     uint8_t  data[8];
 } biba_can_frame_t;
@@ -44,13 +61,14 @@ typedef enum {
 } biba_mcp2515_status_t;
 
 /* One-shot bring-up.  Wires SPI0 + CS + INT, runs the MCP2515 RESET
- * sequence, configures 250 kbps with 87.5 % sample point (see
- * ADR-0001 §1.3 / §1.5), enables RX0 + RX1 rollover with the standard
- * ODrive CANSimple acceptance filters (Heartbeat + Set_Input_Vel + the
- * broadcast slot) and enters Normal mode.
+ * sequence, configures BIBA_CAN_BITRATE_BPS with an 87.5 % sample
+ * point (see ADR-0001 §1.3 / §1.5), enables RX0 + RX1 rollover with
+ * either the ODrive CANSimple acceptance filters (Heartbeat +
+ * Set_Input_Vel + the broadcast slot) or accept-all when
+ * BIBA_MCP2515_ACCEPT_ALL is set, and enters Normal mode.
  *
  * Idempotent: calling twice is a no-op.  Safe to call from `setup()`
- * before `biba_odrive_can_init()`. */
+ * before `biba_bldc_init()`. */
 biba_mcp2515_status_t biba_mcp2515_init(void);
 
 /* True once biba_mcp2515_init() has returned BIBA_MCP2515_OK. */

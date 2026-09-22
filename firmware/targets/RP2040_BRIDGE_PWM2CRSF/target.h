@@ -1,12 +1,12 @@
 #ifndef BIBA_TARGET_H
 #define BIBA_TARGET_H
 
-/* Target: PWM2CRSF_RP2040
+/* Target: RP2040_BRIDGE_PWM2CRSF
  *
  * Not a BiBa controller: a stand-alone Raspberry Pi Pico (RP2040) that
  * reads 6 servo-PWM channels from a HotRC receiver and emits CRSF on
  * UART0, so it plugs into BiBa's CRSF port in place of the ELRS receiver.
- * Firmware entry: src/pwm2crsf/pwm2crsf_main.cpp, env `pwm2crsf_rp2040`.
+ * Firmware entry: src/pwm2crsf/pwm2crsf_main.cpp, env `rp2040_bridge_pwm2crsf`.
  *
  * Pin assignment:
  *
@@ -24,7 +24,7 @@
  * whose signal swings to 5 V.
  */
 
-#define BIBA_TARGET_NAME             "PWM2CRSF_RP2040"
+#define BIBA_TARGET_NAME             "RP2040_BRIDGE_PWM2CRSF"
 
 #if !defined(BIBA_NATIVE_TEST)
 #  include "pico/stdlib.h"

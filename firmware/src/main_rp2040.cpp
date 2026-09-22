@@ -32,10 +32,10 @@ void setup()
     delay(150); /* let USB-CDC enumerate on the host before first printf */
 
     printf("\r\n[biba] RP2040 boot " __DATE__ " " __TIME__
-#if defined(BIBA_TARGET_RPICO_RP2040_BLDC)
+#if defined(BIBA_TARGET_RP2040_BLDC_ODRIVE_CAN)
            " target=BLDC"
 #endif
-#if defined(BIBA_TARGET_RPICO_RP2040)
+#if defined(BIBA_TARGET_RP2040_DC_BTS7960_PWM)
            " target=RP2040"
 #endif
 #if defined(BIBA_MODE_STANDALONE)

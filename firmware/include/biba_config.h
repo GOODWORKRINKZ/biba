@@ -195,7 +195,7 @@
 /* Mirror RAMP_* from biba-controller/config.py. Not feature-gated —
  * these are critical for smooth motor control in all modes.            */
 /* Rates are in duty units per second, so time-to-zero from duty D is D/rate.
- * Targets may override these — RPICO_RP2040 does, see its target_config.h
+ * Targets may override these — RP2040_DC_BTS7960_PWM does, see its target_config.h
  * for the board-specific rationale and the field-test history.
  *
  * Invariant: REVERSE_DECEL_RATE >= DECEL_RATE.  Winding duty down ahead of a

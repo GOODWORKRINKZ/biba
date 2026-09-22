@@ -37,7 +37,7 @@
 #if BIBA_TARGET_HAS_BTS7960_2CH
 #  include "drivers/bts7960.h"
 #elif BIBA_TARGET_HAS_BLDC_2CH
-#  include "drivers/odrive.h"
+#  include "drivers/bldc.h"
 #endif
 #define CRSF_ADDR_BROADCAST         0x00u
 #define CRSF_ADDR_FLIGHT_CONTROLLER 0xC8u
@@ -765,8 +765,8 @@ void biba_mode_standalone_init(void)
     biba_bts7960_thermal_reset(BIBA_BTS7960_RESET_PULSE_US);
 #elif BIBA_TARGET_HAS_BLDC_2CH
     /* ODrive has no thermal latch; the BLDC backend resets setpoints
-     * and disarms via biba_odrive_thermal_reset(). */
-    biba_odrive_thermal_reset(0u);
+     * and disarms via biba_bldc_thermal_reset(). */
+    biba_bldc_thermal_reset(0u);
 #endif
 
     /* Suppress failsafe melody on the very first tick (no RC lock-in yet). */
@@ -931,8 +931,8 @@ void biba_mode_standalone_tick(void)
         /* Clear any latched ODrive errors, then request
          * CLOSED_LOOP_CONTROL (8) over CAN so it starts obeying the
          * Set_Input_Vel commands from the drive loop. */
-        biba_odrive_clear_errors();
-        biba_odrive_set_enabled(true);
+        biba_bldc_clear_errors();
+        biba_bldc_set_enabled(true);
 #endif
         printf("[biba] ARMED\r\n");
 #if BIBA_FEATURE_MELODY
@@ -955,8 +955,8 @@ void biba_mode_standalone_tick(void)
 #if BIBA_TARGET_HAS_BLDC_2CH
         /* Clear any latched ODrive errors and return to IDLE (1) so the
          * wheels coast. */
-        biba_odrive_clear_errors();
-        biba_odrive_set_enabled(false);
+        biba_bldc_clear_errors();
+        biba_bldc_set_enabled(false);
 #endif
         biba_pid_reset(&s_heading_pid);
         if (!failsafe) {   /* failsafe already started its own melody */
@@ -1556,8 +1556,8 @@ void biba_mode_standalone_tick(void)
      * melody would stall drive and freeze telemetry during the startup
      * fanfare, failsafe beep, reverse pip, etc. */
 #if BIBA_TARGET_HAS_BLDC_2CH
-    biba_odrive_drive(left_out, right_out);
-    biba_odrive_tick_50hz();
+    biba_bldc_drive(left_out, right_out);
+    biba_bldc_tick_50hz();
 #endif
 #else
     /* MELODY disabled — always drive motors directly. */
@@ -1627,12 +1627,12 @@ void biba_mode_standalone_tick(void)
             int spd = (speed_scale < 0.4f) ? 1 : (speed_scale < 0.8f) ? 2 : 3;
             int current_limited = (left_limited || right_limited) ? 1 : 0;
 #if BIBA_TARGET_HAS_BLDC_2CH
-            int alive_l = (int)biba_odrive_node_alive(0u);
-            int alive_r = (int)biba_odrive_node_alive(1u);
-            unsigned long odrv_tx = (unsigned long)biba_odrive_tx_count();
-            unsigned long odrv_rx = (unsigned long)biba_odrive_rx_count();
-            unsigned long odrv_rc = (unsigned long)biba_odrive_recovery_count();
-            unsigned long odrv_or = (unsigned long)biba_odrive_reset_count();
+            int alive_l = (int)biba_bldc_node_alive(0u);
+            int alive_r = (int)biba_bldc_node_alive(1u);
+            unsigned long odrv_tx = (unsigned long)biba_bldc_tx_count();
+            unsigned long odrv_rx = (unsigned long)biba_bldc_rx_count();
+            unsigned long odrv_rc = (unsigned long)biba_bldc_recovery_count();
+            unsigned long odrv_or = (unsigned long)biba_bldc_reset_count();
 #else
             int alive_l = 0, alive_r = 0;
             unsigned long odrv_tx = 0, odrv_rx = 0, odrv_rc = 0, odrv_or = 0;

@@ -68,22 +68,24 @@ main.c / main_rp2040.cpp
 
 | Target | Назначение и отличия | Env |
 | --- | --- | --- |
-| `RPICO_RP2040` | Текущий default: Arduino-Pico, CRSF UART0, SBC UART1, BTS7960, I2C и четыре ADC-канала; current/power limits временно выключены до аппаратной доработки | `rpico_rp2040_standalone`, `rpico_rp2040_companion`, `rpico_rp2040_is_poc` |
-| `RPICO_RP2040_BLDC` | Альтернативный RP2040-таргет: пара BLDC через ODrive по CAN (MCP2515 на SPI0 GP16–19, INT=GP15); BTS7960 и native ADC-сheck отключены. Архитектура и обоснование — `docs/adr/0001-pico-bldc-target.md`. | `rpico_rp2040_bldc_{standalone,companion,combined}` |
+| `RP2040_DC_BTS7960_PWM` | Текущий default: Arduino-Pico, CRSF UART0, SBC UART1, BTS7960, I2C и четыре ADC-канала; current/power limits временно выключены до аппаратной доработки | `rp2040_dc_bts7960_pwm_standalone`, `rp2040_dc_bts7960_pwm_companion`, `rp2040_dc_bts7960_pwm_is_poc` |
+| `RP2040_BLDC_ODRIVE_CAN` | Пара BLDC через ODrive по CAN (MCP2515 на SPI0 GP16–19, INT=GP15), 250 кбит/с, CANSimple 11-bit; BTS7960 и native ADC отключены. Архитектура — `docs/adr/0001-pico-bldc-target.md`. | `rp2040_bldc_odrive_can_{standalone,companion,combined}` |
+| `RP2040_BLDC_ODRIVE_UART` | Те же ODrive, но по ASCII-протоколу на UART1 (GP4/GP5). Без MCP2515. Сейчас предпочтительный production-линк: CANSimple в прошивке ODrive 0.5.6 залипает на холостом ходу. | `rp2040_bldc_odrive_uart_{standalone,companion,combined}` |
+| `RP2040_BLDC_VESC_CAN` | Пара BLDC через Flipsky dual FSESC (спаренный VESC) по CAN на том же MCP2515-мосту: 500 кбит/с, 29-bit extended ID, big-endian. Требует настройки VESC Tool (VESC ID 0/1, CAN status messages). Детали — `docs/adr/0002-target-naming-and-vesc.md`. | `rp2040_bldc_vesc_can_{standalone,companion,combined}` |
 | без target | Переносимые host-тесты | `native_test` |
 
 STM32F103-таргеты (`BLUEPILL_F103C8`, `BLUEPILL_F103C8_CLONE`,
 `BIBA_F103_REV_A`) удалены из проекта — прошивка под STM32 больше не
 собирается и не поддерживается.
 
-`rpico_rp2040_standalone` указан как `default_envs`. RP2040 platform сейчас
+`rp2040_dc_bts7960_pwm_standalone` указан как `default_envs`. RP2040 platform сейчас
 задан локальным URI `file:///home/ros2/.platformio/platforms/rp2040`, поэтому
 чистая машина без этого каталога не воспроизведёт сборку без предварительной
 настройки platform package.
 
 В документации есть drift, который нельзя принимать за контракт: несколько
 старых разделов утверждают, что clone не имеет своей target-директории и
-полностью повторяет Blue Pill; это уже не так. `RPICO_RP2040/target.md` также
+полностью повторяет Blue Pill; это уже не так. `RP2040_DC_BTS7960_PWM/target.md` также
 называет board id `rpipico`, тогда как текущий env использует
 `vccgnd_yd_rp2040`. Перед проектированием нового target сверяйтесь с INI и
 заголовками, затем обновляйте документацию вместе с кодом.
@@ -100,8 +102,10 @@ shellcheck scripts/*.sh scripts/setup/*.sh
 
 cd firmware
 pio test -e native_test
-pio run -e rpico_rp2040_standalone
-pio run -e rpico_rp2040_bldc_standalone    # BLDC/CAN variant
+pio run -e rp2040_dc_bts7960_pwm_standalone
+pio run -e rp2040_bldc_odrive_can_standalone    # BLDC: ODrive по CAN
+pio run -e rp2040_bldc_odrive_uart_standalone   # BLDC: ODrive по UART
+pio run -e rp2040_bldc_vesc_can_standalone      # BLDC: VESC по CAN
 ```
 
 RP2040 прошивается через `picotool`/BOOTSEL (`pio run -e <env> -t upload`). Не
@@ -134,8 +138,8 @@ Python тесты.
   `platformio.ini`; CI-матрица и таблицы targets обновляются в том же PR.
   Пример добавления полностью нового target с собственным motor backend
   (MCP2515, ODrive) — коммит ADR-0001 (`docs/adr/0001-pico-bldc-target.md`),
-  который заводит `RPICO_RP2040_BLDC` без переписывания существующего
-  `RPICO_RP2040`.
+  который заводит `RP2040_BLDC_ODRIVE_CAN` без переписывания существующего
+  `RP2040_DC_BTS7960_PWM`.
 - Не добавляйте target-ветвления лесенкой в portable `src/`: возможности
   описываются `BIBA_TARGET_HAS_*`, пины — target ABI, политика/калибровки —
   `target_config.h` с fallback в `biba_config.h`.

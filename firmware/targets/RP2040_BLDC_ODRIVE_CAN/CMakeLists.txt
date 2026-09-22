@@ -1,7 +1,7 @@
-# Standalone CMakeLists.txt for the RPICO_RP2040_BLDC firmware target.
+# Standalone CMakeLists.txt for the RP2040_BLDC_ODRIVE_CAN firmware target.
 #
 # This file is **optional** — the project is driven by PlatformIO via
-# `platformio.ini` (`pio run -e rpico_rp2040_bldc_standalone`).
+# `platformio.ini` (`pio run -e rp2040_bldc_odrive_can_standalone`).
 # It exists because:
 #   1. Some IDEs (CLion, VS Code with CMake Tools) want a `CMakeLists.txt`
 #      near every target for code-intel / static analysis to resolve.
@@ -21,12 +21,12 @@
 # which builds via `pio run` exclusively.
 #
 # References:
-#   - platformio.ini `[env:rpico_rp2040_bldc_*]` — primary build path
+#   - platformio.ini `[env:rp2040_bldc_odrive_can_*]` — primary build path
 #   - docs/adr/0001-pico-bldc-target.md — architecture (ADR-0001)
 #   - docs/mcp2515_bldc_research.md — hardware reference
 
 cmake_minimum_required(VERSION 3.16)
-project(biba_rpico_rp2040_bldc C CXX)
+project(biba_rp2040_bldc_odrive_can C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -42,7 +42,7 @@ get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" ABSOLUTE)
 include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
 pico_sdk_init()
 
-add_executable(biba_rpico_rp2040_bldc
+add_executable(biba_rp2040_bldc_odrive_can
     ${CMAKE_CURRENT_LIST_DIR}/../../src/drivers/mcp2515.c
     ${CMAKE_CURRENT_LIST_DIR}/../../src/drivers/can_queue.c
     ${CMAKE_CURRENT_LIST_DIR}/../../src/drivers/odrive_can.c
@@ -54,10 +54,10 @@ add_executable(biba_rpico_rp2040_bldc
     ${CMAKE_CURRENT_LIST_DIR}/../../src/main_rp2040.cpp
     # Add the rest of the bare minimum build here.  Adjust as the
     # firmware picks up new modules.  The full list is encoded in
-    # platformio.ini's `[rp2040_bldc_src_filter]`.
+    # platformio.ini's `[rp2040_bldc_odrive_can_src_filter]`.
 )
 
-target_compile_definitions(biba_rpico_rp2040_bldc PRIVATE
+target_compile_definitions(biba_rp2040_bldc_odrive_can PRIVATE
     -DBIBA_TARGET_HAS_BTS7960_2CH=0
     -DBIBA_TARGET_HAS_BLDC_2CH=1
     -DBIBA_TARGET_HAS_MCP2515=1
@@ -65,18 +65,18 @@ target_compile_definitions(biba_rpico_rp2040_bldc PRIVATE
     -DBIBA_MODE_STANDALONE=1
 )
 
-target_include_directories(biba_rpico_rp2040_bldc PRIVATE
+target_include_directories(biba_rp2040_bldc_odrive_can PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../include
     ${CMAKE_CURRENT_LIST_DIR}/../../src
     ${CMAKE_CURRENT_LIST_DIR}/../../src/proto
     ${CMAKE_CURRENT_LIST_DIR}            # for target.h
 )
 
-target_compile_options(biba_rpico_rp2040_bldc PRIVATE
+target_compile_options(biba_rp2040_bldc_odrive_can PRIVATE
     -Wall -Wextra -Wpedantic -O2 -g
 )
 
-pico_enable_stdio_usb(biba_rpico_rp2040_bldc 1)
-pico_enable_stdio_uart(biba_rpico_rp2040_bldc 0)
+pico_enable_stdio_usb(biba_rp2040_bldc_odrive_can 1)
+pico_enable_stdio_uart(biba_rp2040_bldc_odrive_can 0)
 
-pico_add_extra_outputs(biba_rpico_rp2040_bldc)
+pico_add_extra_outputs(biba_rp2040_bldc_odrive_can)

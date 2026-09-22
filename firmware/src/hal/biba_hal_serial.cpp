@@ -1,7 +1,7 @@
 /* Non-blocking USB-CDC serial line reader — Arduino framework wrapper.
  *
  * Compiled only for RP2040 Arduino-framework targets (not excluded by
- * rp2040_src_filter, and `<Arduino.h>` is unavailable in other envs).
+ * the RP2040 envs' src_filter, and `<Arduino.h>` is unavailable in other envs).
  *
  * Routes serial input from USB CDC (Arduino Serial) into a line buffer;
  * biba_hal_serial_readline() returns true when a complete line is ready.

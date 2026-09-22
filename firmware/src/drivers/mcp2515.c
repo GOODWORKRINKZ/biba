@@ -101,12 +101,43 @@
 #define MCP2515_CNF2_100K       0xA1u
 #define MCP2515_CNF3_100K       0x01u
 
-/* Selected bus bit rate.  The ODrive must be configured to the same
- * value (can.config.baud_rate).  NOTE: ODrive v3 (0.5.1) hardcodes
- * CAN at 250 kbit/s — `can.config.baud_rate` is read-only there, so
- * 250000 is the only supported value on this target. */
+/* 500 kbit/s — the VESC default (`CAN baud rate` in VESC Tool →
+ * App Settings → General).  Same 8 TQ bit layout as 250k, one BRP
+ * step faster:
+ *   Tbit = 2 µs → TQ = 2 µs / 8 = 250 ns → BRP = 1 → BRP-1 = 0
+ *   CNF1 = (SJW-1 = 0)<<6 | 0x00                    = 0x00
+ *   CNF2 = BTLMODE(1)<<7 | (PHSEG1-1 = 4)<<3 | (PRSEG-1 = 0) = 0xA0
+ *   CNF3 = PHSEG2-1 = 0                             = 0x00
+ * Sample point: (1 + 1 + 5) / 8 = 87.5 %, same as the 250k setting. */
+#define MCP2515_CNF1_BRP_500K   0x00u
+#define MCP2515_CNF2_500K       0xA0u
+#define MCP2515_CNF3_500K       0x00u
+
+/* Selected bus bit rate, taken from the target's target_config.h
+ * (BIBA_CAN_BITRATE_BPS).  The controller on the other end must be
+ * configured to the same value:
+ *   - ODrive: `can.config.baud_rate`.  NOTE: ODrive v3 (0.5.1)
+ *     hardcodes CAN at 250 kbit/s — the field is read-only there, so
+ *     250000 is the only usable value on RP2040_BLDC_ODRIVE_CAN.
+ *   - VESC:   VESC Tool → App Settings → General → CAN baud rate,
+ *     default 500 kbit/s (RP2040_BLDC_VESC). */
 #ifndef BIBA_MCP2515_BITRATE_BPS
-#define BIBA_MCP2515_BITRATE_BPS 250000
+#  ifdef BIBA_CAN_BITRATE_BPS
+#    define BIBA_MCP2515_BITRATE_BPS BIBA_CAN_BITRATE_BPS
+#  else
+#    define BIBA_MCP2515_BITRATE_BPS 250000
+#  endif
+#endif
+
+/* Acceptance-filter policy.  0 (default) programs the six ODrive
+ * CANSimple cmd_id filters below; 1 puts both RX buffers into
+ * "receive any message" mode (RXM=11).  VESC needs the latter: its
+ * ids are 29-bit and the node id sits in the low 8 bits, so a
+ * cmd-wise standard-ID filter cannot express "any VESC, these
+ * packet types".  On a two-node bus the CPU cost of accept-all is
+ * negligible — vesc_can.c drops what it does not recognise. */
+#ifndef BIBA_MCP2515_ACCEPT_ALL
+#  define BIBA_MCP2515_ACCEPT_ALL 0
 #endif
 
 /* Acceptance mask layout.  DS20001801J §6.2: for an 11-bit mask, the
@@ -120,6 +151,10 @@
  * modes; leave them 0 for filters, never touch them from a mask.) */
 #define MCP2515_MASK_SIDH       0x03u
 #define MCP2515_MASK_SIDL       0xE0u
+
+/* SIDL[3] — IDE on RX, EXIDE on TX: set when the frame carries a
+ * 29-bit extended identifier (DS20001801J §3.2 / §4.1). */
+#define MCP2515_SIDL_EXIDE      0x08u
 
 /* CANINTE bits (RX0IE / RX1IE). */
 #define MCP2515_CANINTE_RX0IE   0x01u
@@ -291,7 +326,11 @@ static bool reset_and_wait(void)
 
 static void configure_bit_timing_and_filters(void)
 {
-#if BIBA_MCP2515_BITRATE_BPS == 250000
+#if BIBA_MCP2515_BITRATE_BPS == 500000
+    reg_write(MCP2515_REG_CNF1, MCP2515_CNF1_BRP_500K);
+    reg_write(MCP2515_REG_CNF2, MCP2515_CNF2_500K);
+    reg_write(MCP2515_REG_CNF3, MCP2515_CNF3_500K);
+#elif BIBA_MCP2515_BITRATE_BPS == 250000
     reg_write(MCP2515_REG_CNF1, MCP2515_CNF1_BRP_250K);
     reg_write(MCP2515_REG_CNF2, MCP2515_CNF2_250K);
     reg_write(MCP2515_REG_CNF3, MCP2515_CNF3_250K);
@@ -300,8 +339,18 @@ static void configure_bit_timing_and_filters(void)
     reg_write(MCP2515_REG_CNF2, MCP2515_CNF2_100K);
     reg_write(MCP2515_REG_CNF3, MCP2515_CNF3_100K);
 #else
-#  error "BIBA_MCP2515_BITRATE_BPS must be 100000 or 250000"
+#  error "BIBA_MCP2515_BITRATE_BPS must be 100000, 250000 or 500000"
 #endif
+
+#if BIBA_MCP2515_ACCEPT_ALL
+
+    /* RXM=11 on both buffers: every valid frame is handed up, filters
+     * and masks are ignored entirely (DS20001801J §4.2.1).  BUKT is
+     * meaningless in this mode, so RXB0CTRL keeps only the mode bits. */
+    reg_write(MCP2515_REG_RXB0CTRL, 0x60u);
+    reg_write(MCP2515_REG_RXB1CTRL, 0x60u);
+
+#else
 
     /* Mask 0: matches all 11-bit IDs that share the same cmd_id
      * (mask = 0x7E0).  Both masks configured identically for
@@ -358,6 +407,8 @@ static void configure_bit_timing_and_filters(void)
      * keep this simple since ODrive is the only bus traffic. */
     reg_write(MCP2515_REG_RXB0CTRL, 0x04u);    /* RXM=00 filter-match + BUKT rollover */
     reg_write(MCP2515_REG_RXB1CTRL, 0x04u);    /* same for RX1                       */
+
+#endif /* BIBA_MCP2515_ACCEPT_ALL */
 
     /* Interrupt routing: RX0 + RX1 + error.  The host ISR unblocks
      * the main loop on the GPIO IRQ; per-flag handling happens in
@@ -497,15 +548,33 @@ bool biba_mcp2515_tx(const biba_can_frame_t *frame)
         return false;
     }
 
-    /* Load ID + DLC + data through TXB0SIDH / TXB0D0. */
-    const uint32_t sid = frame->id & 0x7FFu;
-    uint8_t sidh = (uint8_t)(sid >> 3u);
-    uint8_t sidl = (uint8_t)(((sid & 0x07u) << 5u) & 0xE0u);
+    /* Load ID + DLC + data through TXB0SIDH / TXB0D0.
+     *
+     * Standard (11-bit) layout, DS20001801J §3.2:
+     *   SIDH = id[10:3], SIDL[7:5] = id[2:0], EXIDE (SIDL[3]) = 0.
+     *
+     * Extended (29-bit) layout — VESC uses these:
+     *   SIDH = id[28:21], SIDL[7:5] = id[20:18], EXIDE = 1,
+     *   SIDL[1:0] = id[17:16], EID8 = id[15:8], EID0 = id[7:0]. */
+    uint8_t sidh, sidl, eid8 = 0u, eid0 = 0u;
+    if (frame->ext) {
+        const uint32_t eid = frame->id & 0x1FFFFFFFu;
+        sidh = (uint8_t)(eid >> 21u);
+        sidl = (uint8_t)((((eid >> 18u) & 0x07u) << 5u) |
+                         MCP2515_SIDL_EXIDE |
+                         ((eid >> 16u) & 0x03u));
+        eid8 = (uint8_t)((eid >> 8u) & 0xFFu);
+        eid0 = (uint8_t)(eid        & 0xFFu);
+    } else {
+        const uint32_t sid = frame->id & 0x7FFu;
+        sidh = (uint8_t)(sid >> 3u);
+        sidl = (uint8_t)(((sid & 0x07u) << 5u) & 0xE0u);
+    }
 
     reg_write(MCP2515_REG_TXB0SIDH, sidh);
     reg_write(MCP2515_REG_TXB0SIDL, sidl);
-    reg_write(0x33u, 0u);             /* EID8  — unused for 11-bit    */
-    reg_write(0x34u, 0u);             /* EID0  — unused for 11-bit    */
+    reg_write(0x33u, eid8);           /* EID8  — 0 for 11-bit         */
+    reg_write(0x34u, eid0);           /* EID0  — 0 for 11-bit         */
 
     uint8_t dlc = (uint8_t)(frame->dlc & 0x0Fu);
     reg_write(MCP2515_REG_TXB0DLC, dlc);
@@ -572,7 +641,21 @@ static bool rx_buffer_drain(uint8_t instr, uint8_t intf_flag,
     spi_read_block(buf, sizeof(buf));
     cs_deselect();
 
-    out->id  = ((uint32_t)buf[0] << 3u) | ((uint32_t)(buf[1] >> 5u) & 0x07u);
+    /* SIDL[3] (IDE) tells the two envelopes apart; reassemble
+     * whichever the sender used.  See the TX path above for the bit
+     * layout. */
+    if (buf[1] & MCP2515_SIDL_EXIDE) {
+        out->ext = true;
+        out->id  = ((uint32_t)buf[0]           << 21u) |
+                   ((uint32_t)(buf[1] >> 5u)   << 18u) |
+                   ((uint32_t)(buf[1] & 0x03u) << 16u) |
+                   ((uint32_t)buf[2]           <<  8u) |
+                    (uint32_t)buf[3];
+    } else {
+        out->ext = false;
+        out->id  = ((uint32_t)buf[0] << 3u) |
+                   ((uint32_t)(buf[1] >> 5u) & 0x07u);
+    }
     out->dlc = buf[4] & 0x0Fu;
     for (unsigned i = 0; i < out->dlc; ++i) {
         out->data[i] = buf[5 + i];

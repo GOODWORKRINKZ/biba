@@ -1,15 +1,15 @@
 #ifndef BIBA_TARGET_CONFIG_H
 #define BIBA_TARGET_CONFIG_H
 
-/* Target-specific overrides for RPICO_RP2040_BLDC.
+/* Target-specific overrides for RP2040_BLDC_ODRIVE_UART.
  *
  * RP2040 runs at 125 MHz (PLL configured by pico-sdk before main).
  *
  * On this target, motor drive is delegated entirely to ODrive. The
  * BTS7960 IS-pin calibration values, motor current limits, motor power
  * limits, and dead-time pre/post here would have no effect — the BLDC
- * backend (drivers/odrive_can.c) uses these values to drive the ODrive
- * controllers over CAN instead.
+ * backend (drivers/odrive_uart.c) uses these values to drive the ODrive
+ * controllers over the ASCII link instead.
  *
  * The values below are sensible defaults for a 'first-light' bench
  * test on the user's two ODrive Pro / S1 units. Tune after measuring
@@ -22,36 +22,30 @@
 /* --- ODrive drive envelope --------------------------------------------
  *
  * The control loop in src/modes/mode_standalone.c computes a normalised
- * duty in [-1.0, +1.0] from CRSF throttle + steering. biba_odrive_drive
- * multiplies this by BIBA_ODRIVE_*_MAX_VEL_REV_S and packs the result
- * into float32 little-endian as part of a CANSimple Set_Input_Vel frame
- * (cmd_id 0x0D).
+ * duty in [-1.0, +1.0] from CRSF throttle + steering. biba_bldc_drive
+ * multiplies this by BIBA_ODRIVE_*_MAX_VEL_REV_S and sends the result
+ * as an ODrive ASCII velocity command on UART1.
  *
- * ODrive will additionally enforce current_limit and velocity_limit set
- * via Set_Limits (cmd_id 0x0F) at boot. Defaults below are conservative
- * — tune after bench-testing the pair.
+ * ODrive additionally enforces the current / velocity limits stored in
+ * its own configuration. Defaults below are conservative — tune after
+ * bench-testing the pair.
  */
 
-#define BIBA_ODRIVE_LEFT_NODE_ID       0   /* maps to LEFT wheel */
-#define BIBA_ODRIVE_RIGHT_NODE_ID      1   /* maps to RIGHT wheel */
-#define BIBA_ODRIVE_DISCOVERY_NODE_ID  0x3F    /* broadcast (cmd_id 0x06, RTR=1) */
+#define BIBA_BLDC_LEFT_NODE_ID       0   /* maps to LEFT wheel */
+#define BIBA_BLDC_RIGHT_NODE_ID      1   /* maps to RIGHT wheel */
+#define BIBA_BLDC_DISCOVERY_NODE_ID  0x3F    /* broadcast (cmd_id 0x06, RTR=1) */
 
-/* --- ODrive link transport selection ---------------------------------
+/* --- ODrive link transport -------------------------------------------
  *
- *   0 = CAN (MCP2515, default)  → drivers/odrive_can.c
- *   1 = UART ASCII (GP4/GP5)    → drivers/odrive_uart.c
- *
- * The CANSimple stack in ODrive fw 0.5.6 silently wedges at idle, so
- * the UART ASCII path is the preferred production transport.  Flip
- * this to 1 (or pass -DBIBA_ODRIVE_LINK_UART=1) to switch — the other
- * backend's TU compiles to nothing, so there is no linker conflict.
+ * Fixed to UART on this target — the link is part of the target name
+ * now (ADR-0002).  drivers/odrive_uart.c provides drivers/bldc.h;
+ * drivers/odrive_can.c compiles to nothing, so there is no linker
+ * conflict even though both sit in the same src_filter.
  */
-#ifndef BIBA_ODRIVE_LINK_UART
-#  define BIBA_ODRIVE_LINK_UART        1
-#endif
+#define BIBA_ODRIVE_LINK_UART          1
 
-/* Liveness timeout for the UART backend (BIBA_ODRIVE_LINK_UART == 1).
- * Each axis is polled ~every 200 ms; 500 ms gives 2.5× margin. */
+/* Liveness timeout for the UART backend.  Each axis is polled
+ * ~every 200 ms; 500 ms gives 2.5x margin. */
 #define BIBA_ODRIVE_UART_TIMEOUT_MS    500
 
 #define BIBA_ODRIVE_LEFT_MAX_VEL_REV_S    10.0f   /* ≈ 600 rpm @ motor */
@@ -83,29 +77,16 @@
 #define BIBA_ODRIVE_MAX_CURRENT_A        30.0f   /* per axis; ODrive enforces */
 #define BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S  10.0f   /* hard ceiling; 10 rev/s ≈ 63 rad/s */
 
-/* --- CAN bus timing -------------------------------------------------- */
-
-/* MCP2515 is set to 250 kbps by default; the formula in §6.2 of the
- * research gives 87.5 % sample point with SJW=1.
- *
- * 8 time quanta per bit, BRP=4 → 125 MHz clk_peri yields 7.8125 MHz
- * clk for the SPI to MCP2515. The MCP2515 itself runs from a 8 MHz
- * crystal; we configure BRP divisor inside the MCP2515 (CNF1) so the
- * target bit-rate is 250 kbps (see drivers/mcp2515.c init).
- */
-
-#define BIBA_CAN_BITRATE_BPS            250000u   /* CAN 2.0B bit-rate */
-
 /* --- Watchdog / failsafe --------------------------------------------- */
 
-/* How long the firmware tolerates a missing ODrive heartbeat before it
- * stops sending Set_Input_Vel (relying on the ODrive's own watchdog
- * for the actual motor disarm). */
+/* How long the firmware tolerates a silent ODrive before it stops
+ * sending setpoints.  Unused by the UART backend, which uses
+ * BIBA_ODRIVE_UART_TIMEOUT_MS above; kept defined so cross-target
+ * code that references the macro still compiles. */
 #define BIBA_ODRIVE_HEARTBEAT_TIMEOUT_MS    250
 
-/* Minimum interval between Set_Input_Vel commands per ODrive. Anything
- * faster than 50 Hz (20 ms) is wasteful on CAN. We send at 50 Hz to
- * match the CRSF control loop period. */
+/* Minimum interval between setpoint commands per ODrive.  We send at
+ * 50 Hz to match the CRSF control loop period. */
 #define BIBA_ODRIVE_SETPOINT_RATE_HZ        50
 
 /* --- Current / power limits (bts7960 macros kept as no-ops) ----------

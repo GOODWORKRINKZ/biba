@@ -1,4 +1,4 @@
-# Таргет: PWM2CRSF_RP2040 — мост HotRC (6×PWM) → CRSF
+# Таргет: RP2040_BRIDGE_PWM2CRSF — мост HotRC (6×PWM) → CRSF
 
 Это **не контроллер бибы**, а отдельная Raspberry Pi Pico (RP2040). Она
 читает 6 PWM-каналов с приёмника HotRC и выдаёт CRSF на UART0. Биба не
@@ -10,7 +10,7 @@
  RadioMaster ))) ELRS приёмник ─────────────────────────────CRSF 420k──► BiBa (GP1)
 ```
 
-- Env: `pwm2crsf_rp2040`
+- Env: `rp2040_bridge_pwm2crsf`
 - Код: [`src/pwm2crsf/`](../../src/pwm2crsf) (`pwm2crsf.c` — логика,
   `pwm2crsf_main.cpp` — пины, прерывания, UART)
 - Тесты: `test/test_pwm2crsf`, `test/test_crsf`
@@ -19,12 +19,12 @@
 
 ```bash
 cd firmware
-pio run -e pwm2crsf_rp2040
+pio run -e rp2040_bridge_pwm2crsf
 # зажать BOOTSEL, подключить USB:
-pio run -e pwm2crsf_rp2040 -t upload
+pio run -e rp2040_bridge_pwm2crsf -t upload
 ```
 
-Можно и без `pio`: скопировать `.pio/build/pwm2crsf_rp2040/firmware.uf2`
+Можно и без `pio`: скопировать `.pio/build/rp2040_bridge_pwm2crsf/firmware.uf2`
 на диск `RPI-RP2`.
 
 ## Распиновка

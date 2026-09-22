@@ -102,7 +102,7 @@ static uint32_t s_last_setpoint_ms_left;
 static uint32_t s_last_setpoint_ms_right;
 static uint32_t s_init_ms;
 
-void biba_odrive_init(void)
+void biba_bldc_init(void)
 {
     memset(s_nodes, 0, sizeof(s_nodes));
     s_enabled = false;
@@ -125,13 +125,13 @@ void biba_odrive_init(void)
      * the current value into vel_limit and vice versa. */
     pack_f32_le(&payload[0], BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S);
     pack_f32_le(&payload[4], BIBA_ODRIVE_MAX_CURRENT_A);
-    send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_SET_LIMITS,
+    send_to_mcp(BIBA_BLDC_LEFT_NODE_ID,  OD_CMD_SET_LIMITS,
                 payload, sizeof(payload));
-    send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_LIMITS,
+    send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_SET_LIMITS,
                 payload, sizeof(payload));
 }
 
-void biba_odrive_set_enabled(bool enabled)
+void biba_bldc_set_enabled(bool enabled)
 {
     /* Always (re-)send the disarm request so a stale CLOSED_LOOP state on
      * the ODrive (left over from a previous Pico session, e.g. after the
@@ -147,9 +147,9 @@ void biba_odrive_set_enabled(bool enabled)
     const uint8_t new_state = enabled ? 0x08u : 0x01u;
     uint8_t payload[8] = { 0 };
     pack_u32_le(&payload[0], new_state);
-    send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_SET_AXIS_STATE,
+    send_to_mcp(BIBA_BLDC_LEFT_NODE_ID,  OD_CMD_SET_AXIS_STATE,
                 payload, 4u);
-    send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE,
+    send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE,
                 payload, 4u);
 
     /* Re-issue limits on every state request.  Some ODrive firmwares
@@ -160,17 +160,17 @@ void biba_odrive_set_enabled(bool enabled)
     uint8_t limits[8];
     pack_f32_le(&limits[0], BIBA_ODRIVE_MAX_VEL_LIMIT_REV_S);
     pack_f32_le(&limits[4], BIBA_ODRIVE_MAX_CURRENT_A);
-    send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_SET_LIMITS, limits, 8u);
-    send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_LIMITS, limits, 8u);
+    send_to_mcp(BIBA_BLDC_LEFT_NODE_ID,  OD_CMD_SET_LIMITS, limits, 8u);
+    send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_SET_LIMITS, limits, 8u);
 
     /* Push the latest setpoint too, so the moment we close-loop we
      * don't have a stale value from the previous session. */
     if (enabled) {
-        biba_odrive_drive(s_setpoint_left, s_setpoint_right);
+        biba_bldc_drive(s_setpoint_left, s_setpoint_right);
     }
 }
 
-void biba_odrive_drive(float left_duty, float right_duty)
+void biba_bldc_drive(float left_duty, float right_duty)
 {
     /* Clamp to [-1, +1] (allows racing RC failure modes). */
     if (left_duty  >  1.0f) left_duty  =  1.0f;
@@ -187,21 +187,21 @@ void biba_odrive_drive(float left_duty, float right_duty)
      * the right setpoint. */
 }
 
-void biba_odrive_thermal_reset(uint32_t pulse_us)
+void biba_bldc_thermal_reset(uint32_t pulse_us)
 {
     /* BLDC hardware manages its own thermal protection; the BTS7960
      * API hook exists for source-compat.  We zero the setpoints and
      * disarm, identical semantics to a normal disarm + safe zero. */
     (void)pulse_us;
-    biba_odrive_set_enabled(false);
-    biba_odrive_drive(0.0f, 0.0f);
+    biba_bldc_set_enabled(false);
+    biba_bldc_drive(0.0f, 0.0f);
 }
 
-void biba_odrive_clear_errors(void)
+void biba_bldc_clear_errors(void)
 {
     /* ODrive CANSimple Clear_Errors (0x018), no payload. */
-    send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_CLEAR_ERRORS, NULL, 0u);
-    send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_CLEAR_ERRORS, NULL, 0u);
+    send_to_mcp(BIBA_BLDC_LEFT_NODE_ID,  OD_CMD_CLEAR_ERRORS, NULL, 0u);
+    send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_CLEAR_ERRORS, NULL, 0u);
 }
 
 /* ---- Rate-limited forwarder -----------------------------------------
@@ -224,7 +224,7 @@ static bool flush_tx_queue(void)
 static void send_set_input_vel(uint8_t node_id, float vel_rev_s,
                                uint32_t now_ms)
 {
-    uint32_t *last_ms = (node_id == BIBA_ODRIVE_LEFT_NODE_ID)
+    uint32_t *last_ms = (node_id == BIBA_BLDC_LEFT_NODE_ID)
                           ? &s_last_setpoint_ms_left
                           : &s_last_setpoint_ms_right;
     const uint32_t min_period_ms = 1000u / BIBA_ODRIVE_SETPOINT_RATE_HZ;
@@ -238,7 +238,7 @@ static void send_set_input_vel(uint8_t node_id, float vel_rev_s,
     uint8_t payload[8];
     pack_f32_le(&payload[0], vel_rev_s);
     pack_f32_le(&payload[4],
-                (node_id == BIBA_ODRIVE_LEFT_NODE_ID)
+                (node_id == BIBA_BLDC_LEFT_NODE_ID)
                     ? BIBA_ODRIVE_LEFT_TORQUE_FF_NM
                     : BIBA_ODRIVE_RIGHT_TORQUE_FF_NM);
     send_to_mcp(node_id, OD_CMD_SET_INPUT_VEL, payload, sizeof(payload));
@@ -309,7 +309,7 @@ static void decode_get_temperature(const biba_can_frame_t *f)
 
 /* Pop MCP2515 RX buffers until they report empty, drain whatever
  * came back into can_queue, then drain it into our decoders. */
-void biba_odrive_drain_rx(void)
+void biba_bldc_drain_rx(void)
 {
     biba_can_frame_t f;
     while (biba_mcp2515_rx_pop(&f)) {
@@ -345,12 +345,12 @@ void biba_odrive_drain_rx(void)
 
 /* ---- Tick -------------------------------------------------------------- */
 
-void biba_odrive_tick_50hz(void)
+void biba_bldc_tick_50hz(void)
 {
     uint32_t now = biba_hal_now_ms();
 
     /* Always drain incoming frames before acting on anything else. */
-    biba_odrive_drain_rx();
+    biba_bldc_drain_rx();
 
     if (!biba_mcp2515_ready()) {
         return;
@@ -381,16 +381,16 @@ void biba_odrive_tick_50hz(void)
     static uint32_t s_silent_since_ms;
     static bool     s_reset_sent;
     bool silent = false;
-    if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
-        !biba_odrive_node_alive(BIBA_ODRIVE_LEFT_NODE_ID)) silent = true;
-    if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
-        !biba_odrive_node_alive(BIBA_ODRIVE_RIGHT_NODE_ID)) silent = true;
+    if (s_nodes[BIBA_BLDC_LEFT_NODE_ID].valid &&
+        !biba_bldc_node_alive(BIBA_BLDC_LEFT_NODE_ID)) silent = true;
+    if (s_nodes[BIBA_BLDC_RIGHT_NODE_ID].valid &&
+        !biba_bldc_node_alive(BIBA_BLDC_RIGHT_NODE_ID)) silent = true;
     if (silent && !s_reset_sent) {
         if (s_silent_since_ms == 0u) {
             s_silent_since_ms = now;
         }
         if ((now - s_silent_since_ms) >= 1000u) {
-            send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID, OD_CMD_RESET_ODRIVE, NULL, 0u);
+            send_to_mcp(BIBA_BLDC_LEFT_NODE_ID, OD_CMD_RESET_ODRIVE, NULL, 0u);
             s_reset_sent = true;
             s_odrive_reset_count++;
         }
@@ -400,11 +400,11 @@ void biba_odrive_tick_50hz(void)
     }
 
     /* Send Set_Input_Vel, rate-limited per-node. */
-    send_set_input_vel(BIBA_ODRIVE_LEFT_NODE_ID,
+    send_set_input_vel(BIBA_BLDC_LEFT_NODE_ID,
                        s_setpoint_left  * BIBA_ODRIVE_LEFT_DIR  *
                                           BIBA_ODRIVE_LEFT_MAX_VEL_REV_S,
                        now);
-    send_set_input_vel(BIBA_ODRIVE_RIGHT_NODE_ID,
+    send_set_input_vel(BIBA_BLDC_RIGHT_NODE_ID,
                        s_setpoint_right * BIBA_ODRIVE_RIGHT_DIR *
                                           BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S,
                        now);
@@ -414,9 +414,9 @@ void biba_odrive_tick_50hz(void)
     s_pull_acc += 20;   /* this function called at 50 Hz; +20 ms per call */
     if (s_pull_acc >= 100u) {
         s_pull_acc = 0u;
-        send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID,  OD_CMD_GET_BUS_VOLTAGE_CURRENT,
+        send_to_mcp(BIBA_BLDC_LEFT_NODE_ID,  OD_CMD_GET_BUS_VOLTAGE_CURRENT,
                     NULL, 0u);
-        send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_GET_BUS_VOLTAGE_CURRENT,
+        send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_GET_BUS_VOLTAGE_CURRENT,
                     NULL, 0u);
     }
 
@@ -426,13 +426,13 @@ void biba_odrive_tick_50hz(void)
      * while the ODrive was still closed-loop). */
     if (!s_enabled) {
         uint8_t idle[4] = { 0x01u, 0u, 0u, 0u };
-        if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state == 0x08u) {
-            send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID, OD_CMD_SET_AXIS_STATE, idle, 4u);
+        if (s_nodes[BIBA_BLDC_LEFT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_state == 0x08u) {
+            send_to_mcp(BIBA_BLDC_LEFT_NODE_ID, OD_CMD_SET_AXIS_STATE, idle, 4u);
         }
-        if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state == 0x08u) {
-            send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE, idle, 4u);
+        if (s_nodes[BIBA_BLDC_RIGHT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_state == 0x08u) {
+            send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE, idle, 4u);
         }
     } else {
         /* Symmetric retry on the arm side: while armed but a node has
@@ -440,13 +440,13 @@ void biba_odrive_tick_50hz(void)
          * was dropped or rejected by a transient ODrive error), keep
          * re-issuing CLOSED_LOOP until the heartbeat confirms it. */
         uint8_t clo[4] = { 0x08u, 0u, 0u, 0u };
-        if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state != 0x08u) {
-            send_to_mcp(BIBA_ODRIVE_LEFT_NODE_ID, OD_CMD_SET_AXIS_STATE, clo, 4u);
+        if (s_nodes[BIBA_BLDC_LEFT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_state != 0x08u) {
+            send_to_mcp(BIBA_BLDC_LEFT_NODE_ID, OD_CMD_SET_AXIS_STATE, clo, 4u);
         }
-        if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state != 0x08u) {
-            send_to_mcp(BIBA_ODRIVE_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE, clo, 4u);
+        if (s_nodes[BIBA_BLDC_RIGHT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_state != 0x08u) {
+            send_to_mcp(BIBA_BLDC_RIGHT_NODE_ID, OD_CMD_SET_AXIS_STATE, clo, 4u);
         }
     }
 
@@ -456,7 +456,7 @@ void biba_odrive_tick_50hz(void)
     flush_tx_queue();
 }
 
-bool biba_odrive_node_alive(uint8_t node_id)
+bool biba_bldc_node_alive(uint8_t node_id)
 {
     if (node_id >= MAX_ODRIVE_NODES) return false;
     if (!s_nodes[node_id].valid)     return false;
@@ -467,20 +467,20 @@ bool biba_odrive_node_alive(uint8_t node_id)
 
 /* ---- Counters --------------------------------------------------------- */
 
-uint32_t biba_odrive_tx_count(void)      { return s_tx_count; }
-uint32_t biba_odrive_rx_count(void)      { return s_rx_count; }
-uint32_t biba_odrive_decode_errors(void) { return s_decode_errors; }
-uint32_t biba_odrive_recovery_count(void) { return biba_mcp2515_recovery_count(); }
-uint32_t biba_odrive_reset_count(void)   { return s_odrive_reset_count; }
+uint32_t biba_bldc_tx_count(void)      { return s_tx_count; }
+uint32_t biba_bldc_rx_count(void)      { return s_rx_count; }
+uint32_t biba_bldc_decode_errors(void) { return s_decode_errors; }
+uint32_t biba_bldc_recovery_count(void) { return biba_mcp2515_recovery_count(); }
+uint32_t biba_bldc_reset_count(void)   { return s_odrive_reset_count; }
 
 /* ---- Telemetry getters ------------------------------------------------ */
 
-float biba_odrive_bus_voltage(void)
+float biba_bldc_bus_voltage(void)
 {
-    return s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_bus_voltage;
+    return s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_bus_voltage;
 }
 
-float biba_odrive_iq_measured(uint8_t node_id)
+float biba_bldc_iq_measured(uint8_t node_id)
 {
     if (node_id >= MAX_ODRIVE_NODES) return 0.0f;
     return s_nodes[node_id].last_iq_measured;
