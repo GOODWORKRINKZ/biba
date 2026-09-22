@@ -1,4 +1,4 @@
-# ADR-0001 — Новый firmware-таргет `RPICO_RP2040_BLDC`
+# ADR-0001 — Новый firmware-таргет `RP2040_BLDC_ODRIVE_CAN`
 
 | Поле | Значение |
 |------|----------|
@@ -13,8 +13,8 @@
 
 ## 0. Контекст
 
-Текущий RP2040-таргет `RPICO_RP2040` управляет двумя щёточными DC-моторами
-через драйверы BTS7960 (см. `firmware/targets/RPICO_RP2040/target.md`).
+Текущий RP2040-таргет `RP2040_DC_BTS7960_PWM` управляет двумя щёточными DC-моторами
+через драйверы BTS7960 (см. `firmware/targets/RP2040_DC_BTS7960_PWM/target.md`).
 Эксплуатация выявила тепловой режим как системное ограничение BTS7960 —
 дешёвые модули без радиатора перегреваются после 20–30 минут активной езды.
 
@@ -25,7 +25,7 @@
 альтернативный канал ODrive UART ASCII @ 115200 для bench-test.
 
 Настоящий ADR фиксирует архитектуру нового таргета
-`RPICO_RP2040_BLDC` (директория `firmware/targets/RPICO_RP2040_BLDC/`),
+`RP2040_BLDC_ODRIVE_CAN` (директория `firmware/targets/RP2040_BLDC_ODRIVE_CAN/`),
 включая:
 
 1. Стек прошивки (Pico SDK + FreeRTOS vs bare-metal).
@@ -41,8 +41,8 @@
 
 ## 1. Решение
 
-Мы вводим третий target **`RPICO_RP2040_BLDC`** как полноценную
-параллель `RPICO_RP2040`. Он собирается из того же дерева `firmware/src/`,
+Мы вводим третий target **`RP2040_BLDC_ODRIVE_CAN`** как полноценную
+параллель `RP2040_DC_BTS7960_PWM`. Он собирается из того же дерева `firmware/src/`,
 но использует **другой набор драйверов** и **другую распиновку**.
 
 Все шесть решений ниже образуют единый связный набор и должны быть
@@ -103,7 +103,7 @@ SMP делается переносом `biba_mode_*_tick` в task'и. Это **
   TX buffer). Latency budget укладывается в control loop 20 мс с
   100× запасом.
 - У RP2040 spi0 выделен на пины GP16(MISO)/GP18(SCK)/GP19(MOSI). Эти
-  пины в текущем `RPICO_RP2040` target свободны — там заняты только
+  пины в текущем `RP2040_DC_BTS7960_PWM` target свободны — там заняты только
   GP0/1 CRSF, GP2-9 мотор, GP20/21 I2C, GP22 IMU_INT1, GP25 LED,
   GP26-29 ADC. GP15 у текущего таргета свободен. Никакого
   переиспользования нет.
@@ -164,7 +164,7 @@ typedef struct {
 
 ### 1.4 Переключение таргетов — `platformio.ini` target-stanza
 
-Решено: **target-stanza в `platformio.ini` + `[env:rpico_rp2040_bldc_*]`**
+Решено: **target-stanza в `platformio.ini` + `[env:rp2040_bldc_odrive_can_*]`**
 (envs по числу firmware mode). Никакого Kconfig, никакого
 `menuconfig`-инструмента.
 
@@ -187,12 +187,12 @@ typedef struct {
 Конкретные имена env (см. §2 для детальной раскладки):
 
 ```
-[env:rpico_rp2040_bldc_standalone]
-[env:rpico_rp2040_bldc_companion]
-[env:rpico_rp2040_bldc_combined]
+[env:rp2040_bldc_odrive_can_standalone]
+[env:rp2040_bldc_odrive_can_companion]
+[env:rp2040_bldc_odrive_can_combined]
 ```
 
-Сборка: `pio run -e rpico_rp2040_bldc_standalone`. Переключение между
+Сборка: `pio run -e rp2040_bldc_odrive_can_standalone`. Переключение между
 старым и новым таргетом — смена имени env, никаких изменений в коде.
 
 Точка обратимости: если когда-то захотим Kconfig (например, при
@@ -250,10 +250,10 @@ void biba_odrive_thermal_reset(uint32_t us);    // BLDC: no-op (ODrive собс�
 `BIBA_ODRIVE_MAX_VEL_REV_S`, упаковывает в float32 little-endian
 и отправляет как `Set_Input_Vel` (cmd_id 0x0D) на node_id 0 и 1.
 
-### 1.6 Распиновка (firmware/targets/RPICO_RP2040_BLDC/target.h)
+### 1.6 Распиновка (firmware/targets/RP2040_BLDC_ODRIVE_CAN/target.h)
 
 Решено: занимаем ровно те пины, которые нужны. Делаем чистый
-target-файл (не наследуем от `RPICO_RP2040`).
+target-файл (не наследуем от `RP2040_DC_BTS7960_PWM`).
 
 Сводная таблица:
 
@@ -295,20 +295,20 @@ IMU-стабилизированного вождения. Если приори
 ### 2.1 Env'ы, которые добавляем в `platformio.ini`
 
 ```ini
-[target_rpico_rp2040_bldc]
+[target_rp2040_bldc_odrive_can]
 board = vccgnd_yd_rp2040
-target_include = targets/RPICO_RP2040_BLDC
+target_include = targets/RP2040_BLDC_ODRIVE_CAN
 build_flags =
-    -DBIBA_TARGET_RPICO_RP2040_BLDC=1
+    -DBIBA_TARGET_RP2040_BLDC_ODRIVE_CAN=1
     -DBIBA_TARGET_HAS_BTS7960_2CH=0
     -DBIBA_TARGET_HAS_BLDC_2CH=1
 
 ; --- Режимы (standalone / companion / combined) -------------------------
 
-[env:rpico_rp2040_bldc_standalone]
+[env:rp2040_bldc_odrive_can_standalone]
 platform = file:///home/ros2/.platformio/platforms/rp2040
 framework = arduino
-board = ${target_rpico_rp2040_bldc.board}
+board = ${target_rp2040_bldc_odrive_can.board}
 upload_protocol = picotool
 debug_tool = cmsis-dap
 build_src_filter = ${rp2040_bldc_src_filter.build_src_filter}
@@ -316,14 +316,14 @@ build_flags =
     -Iinclude
     -Isrc
     -Isrc/proto
-    -I${target_rpico_rp2040_bldc.target_include}
-    ${target_rpico_rp2040_bldc.build_flags}
+    -I${target_rp2040_bldc_odrive_can.target_include}
+    ${target_rp2040_bldc_odrive_can.build_flags}
     ${mode_standalone.build_flags}
 
-[env:rpico_rp2040_bldc_companion]
+[env:rp2040_bldc_odrive_can_companion]
 ... (аналогично)
 
-[env:rpico_rp2040_bldc_combined]
+[env:rp2040_bldc_odrive_can_combined]
 ... (аналогично)
 ```
 
@@ -356,10 +356,10 @@ build_src_filter =
 
 ```bash
 # Обычная brushed-DC сборка (как было)
-pio run -e rpico_rp2040_standalone
+pio run -e rp2040_dc_bts7960_pwm_standalone
 
 # Новая BLDC-CAN сборка
-pio run -e rpico_rp2040_bldc_standalone
+pio run -e rp2040_bldc_odrive_can_standalone
 ```
 
 ---
@@ -477,7 +477,7 @@ ADR фиксирует **v1** минимальный набор. Точки, к�
 | Watchdog | ODrive-side через прекращение `Set_Input_*` (100 ms типично) |
 | Motor backend | `biba_odrive_*` API-совместимый с `biba_bts7960_*`, выбор через `BIBA_TARGET_HAS_*` |
 | UART ASCII fallback | Опция `-DODRIVE_LINK=ASCII`, через PIO-UART на GP4/5 + второй PIO-UART |
-| Переключение таргетов | `[target_rpico_rp2040_bldc]` stanza + `[env:rpico_rp2040_bldc_*]`, без Kconfig |
+| Переключение таргетов | `[target_rp2040_bldc_odrive_can]` stanza + `[env:rp2040_bldc_odrive_can_*]`, без Kconfig |
 | Набор envs | `standalone`, `companion`, `combined` — как у текущего target |
 | src_filter | Новая `[rp2040_bldc_src_filter]`: убирает `bts7960.c` и `biba_hal_motor_rp2040.c`, добавляет `mcp2515.c`/`odrive_can.c`/`can_queue.c`/`biba_hal_motor_bldc.c` |
 
@@ -489,14 +489,14 @@ ADR фиксирует **v1** минимальный набор. Точки, к�
 - `docs/adr/0001-pico-bldc-target.md/diagram-components.mmd` —
   диаграмма компонентов (sibling)
 - `firmware/targets/README.md` — дисциплина target-файлов
-- `firmware/targets/RPICO_RP2040_BLDC/target.h` — скаффолд нового
+- `firmware/targets/RP2040_BLDC_ODRIVE_CAN/target.h` — скаффолд нового
   таргета (sibling)
-- `firmware/targets/RPICO_RP2040_BLDC/target_config.h` — дефолты
+- `firmware/targets/RP2040_BLDC_ODRIVE_CAN/target_config.h` — дефолты
   ODrive (sibling)
-- `firmware/targets/RPICO_RP2040_BLDC/target.md` — описание распиновки
-  и отличий от `RPICO_RP2040` (sibling)
-- `firmware/platformio.ini` — добавление `[target_rpico_rp2040_bldc]`
-  и трёх `[env:rpico_rp2040_bldc_*]` (sibling)
+- `firmware/targets/RP2040_BLDC_ODRIVE_CAN/target.md` — описание распиновки
+  и отличий от `RP2040_DC_BTS7960_PWM` (sibling)
+- `firmware/platformio.ini` — добавление `[target_rp2040_bldc_odrive_can]`
+  и трёх `[env:rp2040_bldc_odrive_can_*]` (sibling)
 
 Sibling-документы ниже в `tasks`:
 - `t_a3ed6b73` — реализация `drivers/mcp2515.c` + queue

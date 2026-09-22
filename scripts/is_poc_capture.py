@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """IS-signal RPM PoC — capture orchestrator (Phase 06 Task 5).
 
-Drives the rpico_rp2040_is_poc firmware over USB CDC and sweeps a
+Drives the rp2040_dc_bts7960_pwm_is_poc firmware over USB CDC and sweeps a
 direction × duty matrix, saving one CSV per capture.
 
 Direction-first command format per D-01:

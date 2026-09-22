@@ -1,4 +1,4 @@
-# Таргет: RPICO_RP2040
+# Таргет: RP2040_DC_BTS7960_PWM
 
 Компактная плата на RP2040 (USB-C, два ядра Cortex-M0+ @ 125 МГц, 264 КБ SRAM, 2 МБ Flash).
 Совместима со стандартной распиновкой Raspberry Pi Pico.
@@ -151,11 +151,11 @@ GP14 → [ ЛЕВАЯ панель ] DOUT → [ ПРАВАЯ панель ]
 
 
 ```
-pio run -e rpico_rp2040_standalone
-pio run -e rpico_rp2040_companion
+pio run -e rp2040_dc_bts7960_pwm_standalone
+pio run -e rp2040_dc_bts7960_pwm_companion
 ```
 
 Прошивка через USB (зажать BOOTSEL, подключить USB, отпустить BOOTSEL):
 ```
-pio run -e rpico_rp2040_standalone --target upload
+pio run -e rp2040_dc_bts7960_pwm_standalone --target upload
 ```

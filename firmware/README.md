@@ -31,23 +31,33 @@ STM32-таргеты (Blue Pill / BIBA_F103_REV_A) удалены из прое�
 ```bash
 cd firmware
 
-# дефолтный env (RPICO_RP2040 standalone)
+# дефолтный env (RP2040_DC_BTS7960_PWM standalone)
 pio run
 
 # явный target × режим
-pio run -e rpico_rp2040_standalone
-pio run -e rpico_rp2040_companion
+pio run -e rp2040_dc_bts7960_pwm_standalone
+pio run -e rp2040_dc_bts7960_pwm_companion
 
 # BLDC/CAN вариант
-pio run -e rpico_rp2040_bldc_standalone
-pio run -e rpico_rp2040_bldc_companion
-pio run -e rpico_rp2040_bldc_combined
+pio run -e rp2040_bldc_odrive_can_standalone
+pio run -e rp2040_bldc_odrive_can_companion
+pio run -e rp2040_bldc_odrive_can_combined
+
+# BLDC на ODrive по UART (ASCII)
+pio run -e rp2040_bldc_odrive_uart_standalone
+pio run -e rp2040_bldc_odrive_uart_companion
+pio run -e rp2040_bldc_odrive_uart_combined
+
+# BLDC на VESC (Flipsky dual FSESC) по CAN
+pio run -e rp2040_bldc_vesc_can_standalone
+pio run -e rp2040_bldc_vesc_can_companion
+pio run -e rp2040_bldc_vesc_can_combined
 
 # мост HotRC PWM → CRSF (отдельная Pico вместо ELRS-приёмника)
-pio run -e pwm2crsf_rp2040
+pio run -e rp2040_bridge_pwm2crsf
 
 # прошивка через picotool
-pio run -e rpico_rp2040_standalone -t upload
+pio run -e rp2040_dc_bts7960_pwm_standalone -t upload
 
 # хостовые юнит-тесты (не зависят от таргета)
 pio test -e native_test
@@ -72,9 +82,11 @@ firmware/
 │   └── proto/                 # общий с SBC формат кадров
 ├── targets/
 │   ├── README.md              # как добавить новый таргет
-│   ├── RPICO_RP2040/          # {target.h, target_config.h, target.md}
-│   ├── RPICO_RP2040_BLDC/     # {target.h, target_config.h, target.md}
-│   └── PWM2CRSF_RP2040/       # мост HotRC 6×PWM → CRSF (src/pwm2crsf/)
+│   ├── RP2040_DC_BTS7960_PWM/    # {target.h, target_config.h, target.md}
+│   ├── RP2040_BLDC_ODRIVE_CAN/   # BLDC: ODrive по CAN (MCP2515)
+│   ├── RP2040_BLDC_ODRIVE_UART/  # BLDC: ODrive по UART1 ASCII
+│   ├── RP2040_BLDC_VESC_CAN/     # BLDC: Flipsky dual FSESC по CAN
+│   └── RP2040_BRIDGE_PWM2CRSF/   # мост HotRC 6×PWM → CRSF (src/pwm2crsf/)
 └── test/                      # хостовые тесты на Unity для переносимых модулей
 ```
 

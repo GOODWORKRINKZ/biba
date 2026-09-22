@@ -10,16 +10,16 @@
  * does not share that code path and stays alive, so it is the preferred
  * production transport.  Selected per-target via BIBA_ODRIVE_LINK_UART.
  *
- * Transport contract (mirrors odrive.h):
- *   biba_odrive_init()         — bring up UART1, send Set_Limits
- *   biba_odrive_set_enabled()  — `w axisN.requested_state {8|1}`
- *   biba_odrive_drive()        — stores setpoint; TX happens in tick
- *   biba_odrive_tick_50hz()    — TX input_vel @ 50 Hz + liveness poll
- *   biba_odrive_node_alive()   — "responded to a read recently"
+ * Transport contract (mirrors drivers/bldc.h):
+ *   biba_bldc_init()         — bring up UART1, send Set_Limits
+ *   biba_bldc_set_enabled()  — `w axisN.requested_state {8|1}`
+ *   biba_bldc_drive()        — stores setpoint; TX happens in tick
+ *   biba_bldc_tick_50hz()    — TX input_vel @ 50 Hz + liveness poll
+ *   biba_bldc_node_alive()   — "responded to a read recently"
  *
  * Liveness is measured by polling `r axisN.current_state` (round-robin,
  * ~10 Hz).  A successful parse refreshes that node's last-response
- * timestamp; biba_odrive_node_alive() compares it against
+ * timestamp; biba_bldc_node_alive() compares it against
  * BIBA_ODRIVE_UART_TIMEOUT_MS.  Unlike the CAN backend there is no
  * silent-wedge, so no MSG_RESET_ODRIVE watchdog is needed.
  *
@@ -31,7 +31,7 @@
  * is a USB-side concept and is already on for USB.)
  */
 
-#include "odrive.h"
+#include "bldc.h"
 
 #include "biba_board.h"
 #include "biba_config.h"
@@ -160,17 +160,17 @@ static void handle_line(uint32_t now_ms)
 
     switch (s_rx_expect) {
     case UART_RX_AXIS0_STATE:
-        if (BIBA_ODRIVE_LEFT_NODE_ID < MAX_ODRIVE_NODES) {
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid = true;
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_response_ms = now_ms;
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state = (uint8_t)state;
+        if (BIBA_BLDC_LEFT_NODE_ID < MAX_ODRIVE_NODES) {
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].valid = true;
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_response_ms = now_ms;
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_state = (uint8_t)state;
         }
         break;
     case UART_RX_AXIS1_STATE:
-        if (BIBA_ODRIVE_RIGHT_NODE_ID < MAX_ODRIVE_NODES) {
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid = true;
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_response_ms = now_ms;
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state = (uint8_t)state;
+        if (BIBA_BLDC_RIGHT_NODE_ID < MAX_ODRIVE_NODES) {
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].valid = true;
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_response_ms = now_ms;
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_state = (uint8_t)state;
         }
         break;
     case UART_RX_VBUS:
@@ -178,14 +178,14 @@ static void handle_line(uint32_t now_ms)
         printf("[odrive] VBUS      = %6.2f V\r\n", val);
         break;
     case UART_RX_AXIS0_IQ:
-        if (BIBA_ODRIVE_LEFT_NODE_ID < MAX_ODRIVE_NODES) {
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_iq_measured = val;
+        if (BIBA_BLDC_LEFT_NODE_ID < MAX_ODRIVE_NODES) {
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_iq_measured = val;
             printf("[odrive] Iq LEFT   = %+6.2f A\r\n", val);
         }
         break;
     case UART_RX_AXIS1_IQ:
-        if (BIBA_ODRIVE_RIGHT_NODE_ID < MAX_ODRIVE_NODES) {
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_iq_measured = val;
+        if (BIBA_BLDC_RIGHT_NODE_ID < MAX_ODRIVE_NODES) {
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_iq_measured = val;
             printf("[odrive] Iq RIGHT  = %+6.2f A\r\n", val);
         }
         break;
@@ -217,7 +217,7 @@ static void uart_drain_rx(uint32_t now_ms)
 static void send_set_input_vel(uint8_t node_id, float vel_rev_s,
                                uint32_t now_ms)
 {
-    uint32_t *last_ms = (node_id == BIBA_ODRIVE_LEFT_NODE_ID)
+    uint32_t *last_ms = (node_id == BIBA_BLDC_LEFT_NODE_ID)
                           ? &s_last_setpoint_ms_left
                           : &s_last_setpoint_ms_right;
     const uint32_t min_period_ms = 1000u / BIBA_ODRIVE_SETPOINT_RATE_HZ;
@@ -226,8 +226,8 @@ static void send_set_input_vel(uint8_t node_id, float vel_rev_s,
     }
     *last_ms = now_ms;
 
-    const char motor = (node_id == BIBA_ODRIVE_LEFT_NODE_ID) ? '0' : '1';
-    const float ff_nm = (node_id == BIBA_ODRIVE_LEFT_NODE_ID)
+    const char motor = (node_id == BIBA_BLDC_LEFT_NODE_ID) ? '0' : '1';
+    const float ff_nm = (node_id == BIBA_BLDC_LEFT_NODE_ID)
                           ? BIBA_ODRIVE_LEFT_TORQUE_FF_NM
                           : BIBA_ODRIVE_RIGHT_TORQUE_FF_NM;
 
@@ -243,7 +243,7 @@ static void send_set_input_vel(uint8_t node_id, float vel_rev_s,
 
 /* ---- Public API -------------------------------------------------------- */
 
-void biba_odrive_init(void)
+void biba_bldc_init(void)
 {
     memset(s_nodes, 0, sizeof(s_nodes));
     s_bus_voltage = 0.0f;
@@ -266,7 +266,7 @@ void biba_odrive_init(void)
     send_limits();
 }
 
-void biba_odrive_set_enabled(bool enabled)
+void biba_bldc_set_enabled(bool enabled)
 {
     if (enabled && (enabled == s_enabled)) {
         return;
@@ -283,7 +283,7 @@ void biba_odrive_set_enabled(bool enabled)
     send_limits();
 }
 
-void biba_odrive_drive(float left_duty, float right_duty)
+void biba_bldc_drive(float left_duty, float right_duty)
 {
     if (left_duty  >  1.0f) left_duty  =  1.0f;
     if (left_duty  < -1.0f) left_duty  = -1.0f;
@@ -292,29 +292,29 @@ void biba_odrive_drive(float left_duty, float right_duty)
 
     s_setpoint_left  = left_duty;
     s_setpoint_right = right_duty;
-    /* Actual TX happens in biba_odrive_tick_50hz() to stay lock-step
+    /* Actual TX happens in biba_bldc_tick_50hz() to stay lock-step
      * with the control loop. */
 }
 
-void biba_odrive_thermal_reset(uint32_t pulse_us)
+void biba_bldc_thermal_reset(uint32_t pulse_us)
 {
     (void)pulse_us;
-    biba_odrive_set_enabled(false);
-    biba_odrive_drive(0.0f, 0.0f);
+    biba_bldc_set_enabled(false);
+    biba_bldc_drive(0.0f, 0.0f);
 }
 
-void biba_odrive_clear_errors(void)
+void biba_bldc_clear_errors(void)
 {
     /* ASCII `sc` clears the ODrive's latched axis/motor errors. */
     uart_tx_raw("sc");
 }
 
-void biba_odrive_drain_rx(void)
+void biba_bldc_drain_rx(void)
 {
     uart_drain_rx(biba_hal_now_ms());
 }
 
-void biba_odrive_tick_50hz(void)
+void biba_bldc_tick_50hz(void)
 {
     uint32_t now = biba_hal_now_ms();
 
@@ -335,11 +335,11 @@ void biba_odrive_tick_50hz(void)
     }
 
     /* Send Set_Input_Vel, rate-limited per node (50 Hz). */
-    send_set_input_vel(BIBA_ODRIVE_LEFT_NODE_ID,
+    send_set_input_vel(BIBA_BLDC_LEFT_NODE_ID,
                        s_setpoint_left  * BIBA_ODRIVE_LEFT_DIR  *
                                           BIBA_ODRIVE_LEFT_MAX_VEL_REV_S,
                        now);
-    send_set_input_vel(BIBA_ODRIVE_RIGHT_NODE_ID,
+    send_set_input_vel(BIBA_BLDC_RIGHT_NODE_ID,
                        s_setpoint_right * BIBA_ODRIVE_RIGHT_DIR *
                                           BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S,
                        now);
@@ -388,27 +388,27 @@ void biba_odrive_tick_50hz(void)
      * reports CLOSED_LOOP, re-send IDLE; if armed but not yet closed,
      * re-send CLOSED_LOOP (mirrors the CAN backend's retry). */
     if (!s_enabled) {
-        if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state == 0x08u) {
+        if (s_nodes[BIBA_BLDC_LEFT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_state == 0x08u) {
             uart_tx_raw("w axis0.requested_state 1");
         }
-        if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state == 0x08u) {
+        if (s_nodes[BIBA_BLDC_RIGHT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_state == 0x08u) {
             uart_tx_raw("w axis1.requested_state 1");
         }
     } else {
-        if (s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_LEFT_NODE_ID].last_state != 0x08u) {
+        if (s_nodes[BIBA_BLDC_LEFT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_LEFT_NODE_ID].last_state != 0x08u) {
             uart_tx_raw("w axis0.requested_state 8");
         }
-        if (s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].valid &&
-            s_nodes[BIBA_ODRIVE_RIGHT_NODE_ID].last_state != 0x08u) {
+        if (s_nodes[BIBA_BLDC_RIGHT_NODE_ID].valid &&
+            s_nodes[BIBA_BLDC_RIGHT_NODE_ID].last_state != 0x08u) {
             uart_tx_raw("w axis1.requested_state 8");
         }
     }
 }
 
-bool biba_odrive_node_alive(uint8_t node_id)
+bool biba_bldc_node_alive(uint8_t node_id)
 {
     if (node_id >= MAX_ODRIVE_NODES) return false;
     if (!s_nodes[node_id].valid)      return false;
@@ -419,20 +419,20 @@ bool biba_odrive_node_alive(uint8_t node_id)
 
 /* ---- Debug counters ---------------------------------------------------- */
 
-uint32_t biba_odrive_tx_count(void)       { return s_tx_count; }
-uint32_t biba_odrive_rx_count(void)       { return s_rx_count; }
-uint32_t biba_odrive_decode_errors(void)  { return s_decode_errors; }
-uint32_t biba_odrive_recovery_count(void) { return 0u; }   /* no MCP2515 */
-uint32_t biba_odrive_reset_count(void)    { return 0u; }   /* no watchdog */
+uint32_t biba_bldc_tx_count(void)       { return s_tx_count; }
+uint32_t biba_bldc_rx_count(void)       { return s_rx_count; }
+uint32_t biba_bldc_decode_errors(void)  { return s_decode_errors; }
+uint32_t biba_bldc_recovery_count(void) { return 0u; }   /* no MCP2515 */
+uint32_t biba_bldc_reset_count(void)    { return 0u; }   /* no watchdog */
 
 /* ---- Telemetry getters ------------------------------------------------ */
 
-float biba_odrive_bus_voltage(void)
+float biba_bldc_bus_voltage(void)
 {
     return s_bus_voltage;
 }
 
-float biba_odrive_iq_measured(uint8_t node_id)
+float biba_bldc_iq_measured(uint8_t node_id)
 {
     if (node_id >= MAX_ODRIVE_NODES) return 0.0f;
     return s_nodes[node_id].last_iq_measured;

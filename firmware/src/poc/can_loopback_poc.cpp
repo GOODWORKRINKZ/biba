@@ -1,4 +1,4 @@
-/* CAN-loopback PoC for the RPICO_RP2040_BLDC target.
+/* CAN-loopback PoC for the RP2040_BLDC_ODRIVE_CAN target.
  *
  * This is a minimal self-test that exercises the full MCP2515 +
  * ODrive driver stack without requiring a second ODrive on the bus.
@@ -16,7 +16,7 @@
  *      decoder (decode_heartbeat()) just records node 0x3F as alive
  *      which we don't watch.
  *   3. Send a Set_Input_Vel (cmd_id 0x0D) once a second — the same
- *      shape that biba_odrive_drive() would emit, but with a fixed
+ *      shape that biba_bldc_drive() would emit, but with a fixed
  *      1.0 rev/s velocity so the loopback log is deterministic.
  *   4. Drain RX frames and print each one over USB CDC.
  *   5. Print a 1 Hz status line with TX/RX counters.
@@ -195,7 +195,7 @@ void setup()
      * the bring-up log is still useful on a bench. */
     delay(300);
 
-    printf("\r\n[biba] RPICO_RP2040_BLDC CAN-loopback PoC\r\n");
+    printf("\r\n[biba] RP2040_BLDC_ODRIVE_CAN CAN-loopback PoC\r\n");
     printf("[biba] build: " __DATE__ " " __TIME__ "\r\n");
     printf("[biba] target: %s @ %lu MHz, MCP2515 SPI @ %lu Hz\r\n",
            BIBA_TARGET_NAME,
@@ -251,11 +251,11 @@ void setup()
 
     /* Boot-time Set_Limits so a real ODrive applies our safe envelope
      * the moment it sees us on the bus. */
-    biba_odrive_init();
+    biba_bldc_init();
 
     /* One initial broadcast heartbeat so a logic analyser / ODrive
      * can immediately tell "host alive". */
-    send_heartbeat_like(BIBA_ODRIVE_LEFT_NODE_ID, 0x00u);
+    send_heartbeat_like(BIBA_BLDC_LEFT_NODE_ID, 0x00u);
 
     printf("[biba] PoC running: TX Heartbeat @ 5 Hz, Set_Input_Vel @ 1 Hz\r\n");
 }
@@ -287,7 +287,7 @@ void loop()
             raw_modify(0x0Fu, 0xE0u, 0x40u);   /* REQOP = loopback */
             printf("[biba] mode: LOOPBACK (TX paused)\r\n");
         } else if (c == 'T') {
-            send_heartbeat_like(BIBA_ODRIVE_LEFT_NODE_ID, 0x08u);
+            send_heartbeat_like(BIBA_BLDC_LEFT_NODE_ID, 0x08u);
             printf("[biba] manual TX sent\r\n");
         } else if (c == 'N') {
             raw_modify(0x30u, 0x08u, 0x00u);   /* clear TXREQ first */
@@ -315,14 +315,14 @@ void loop()
 
     if (!s_tx_pause && now - s_last_hb_ms >= 200u) {
         s_last_hb_ms = now;
-        send_heartbeat_like(BIBA_ODRIVE_LEFT_NODE_ID, 0x08u);
+        send_heartbeat_like(BIBA_BLDC_LEFT_NODE_ID, 0x08u);
     }
 
     if (!s_tx_pause && now - s_last_vel_ms >= 1000u) {
         s_last_vel_ms = now;
         /* Slow ramp up — at 1 rev/s the ODrive (if present) will
          * move, so this is a bench-friendly default. */
-        send_set_input_vel(BIBA_ODRIVE_LEFT_NODE_ID,
+        send_set_input_vel(BIBA_BLDC_LEFT_NODE_ID,
                            1.0f /* vel_rev_s */,
                            0.0f /* torque_ff_nm */);
     }
@@ -352,9 +352,9 @@ void loop()
                (unsigned long)biba_can_queue_rx_pop_count(),
                (unsigned long)biba_can_queue_tx_push_count(),
                (unsigned long)biba_can_queue_tx_pop_count(),
-               (unsigned long)biba_odrive_tx_count(),
-               (unsigned long)biba_odrive_rx_count(),
-               (unsigned long)biba_odrive_decode_errors(),
+               (unsigned long)biba_bldc_tx_count(),
+               (unsigned long)biba_bldc_rx_count(),
+               (unsigned long)biba_bldc_decode_errors(),
                tec, rec, eflg, txb0, cstat, cctrl, intf, gp15);
     }
 

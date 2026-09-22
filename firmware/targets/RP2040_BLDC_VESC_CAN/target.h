@@ -1,11 +1,39 @@
 #ifndef BIBA_TARGET_H
 #define BIBA_TARGET_H
 
-/* Target: RPICO_RP2040_BLDC
+/* Target: RP2040_BLDC_VESC_CAN
  *
- * RP2040-based BLDC control board. Communicates with two ODrive
- * controllers via a single MCP2515+TJA1050 SPI→CAN module. Replaces
- * the brushed BTS7960 boards of the existing RPICO_RP2040 target.
+ * Name follows the <MCU>_<MOTOR>_<DRIVER>_<LINK> standard documented
+ * in firmware/targets/README.md: RP2040 + BLDC motors + VESC
+ * controllers + CAN link.
+ *
+ * RP2040-based BLDC control board driving a **Flipsky dual FSESC**
+ * (two VESC halves on one board) through a single MCP2515+TJA1050
+ * SPI→CAN module.  Electrically identical to RP2040_BLDC_ODRIVE_CAN —
+ * same MCP2515 wiring, same pinout — but a different controller
+ * dialect: 29-bit extended ids at 500 kbps instead of ODrive
+ * CANSimple's 11-bit ids at 250 kbps.  See ADR-0002 and
+ * src/drivers/vesc_can.c.
+ *
+ * Wiring to the FSESC (per the Flipsky wiring sheet):
+ *
+ *   FSESC connector 1 "CAN"  →  MCP2515 module
+ *     CAH  (CAN-H)           →  TJA1050 CANH
+ *     CAL  (CAN-L)           →  TJA1050 CANL
+ *     -    (GND)             →  common ground
+ *     5V                     →  leave unconnected; the MCP2515 module
+ *                               is powered from the Pico's 5 V rail so
+ *                               a FSESC reboot does not brown it out.
+ *
+ * Only ONE of the two CAN connectors needs wiring: on a dual FSESC the
+ * two halves already share the internal CAN bus.  Keep the board's
+ * dual/single switch in the **ON: dual** position so both halves
+ * arbitrate on that bus.
+ *
+ * Termination: the FSESC has no 120 Ω terminator.  The MCP2515 module
+ * carries a 120 Ω jumper — leave it fitted.  A single terminator on a
+ * sub-metre bus is out of spec but works reliably at 500 kbps; if the
+ * bus errors, add a second 120 Ω at the FSESC end.
  *
  * Pin assignment — left side (GP0-GP15, top to bottom):
  *
@@ -13,8 +41,8 @@
  *   GP1  UART0_RX   CRSF RX ← receiver
  *   GP2  —           (free, PWM1A not used)
  *   GP3  —           (free, PWM1B not used)
- *   GP4  UART1_TX   ODRIVE_ASY_TX (UART ASCII fallback, opt)
- *   GP5  UART1_RX   ODRIVE_ASY_RX (UART ASCII fallback, opt)
+ *   GP4  UART1_TX   reserved: VESC UART link (FSESC "COMM" TX)
+ *   GP5  UART1_RX   reserved: VESC UART link (FSESC "COMM" RX)
  *   GP6  —           (free, PWM3A not used)
  *   GP7  —           (free, PWM3B not used)
  *   GP8  —           (free)
@@ -35,52 +63,60 @@
  *   GP20 I2C0_SDA   IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *   GP21 I2C0_SCL   IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *   GP22 GPIO IN    IMU INT1
- *   GP23 GPIO OUT   (NeoPixel WS2812 — same as RPICO_RP2040)
+ *   GP23 GPIO OUT   (NeoPixel WS2812 — same as RP2040_DC_BTS7960_PWM)
  *   GP25 GPIO OUT   Status LED (Pico onboard, active high)
  *   GP26 ADC0       (reserved — n/a on this target)
  *   GP27 ADC1       (reserved — n/a on this target)
  *   GP28 ADC2       (reserved — n/a on this target)
  *   GP29 ADC3       (reserved — n/a on this target)
  *
- * Status indicator: GP25 (onboard LED on YD-RP2040; WS2812 on GP23).
- * No BTS7960 IS pins are wired — current sense happens ODrive-side
- * (`Get_Iq` cmd_id 0x14). Native ADC pins remain available for
- * thermal / VBAT monitoring if the project ever adds a non-ODrive
- * board power-rail sense.
+ * GP4/GP5 are reserved, not wired: the VESC UART link would be its own
+ * target (RP2040_BLDC_VESC_UART) under the naming standard, and it
+ * does not exist yet.
  *
- * Node IDs:
- *   - node_id 0 → LEFT ODrive (Set_Input_Vel mirrors [+1.0] left forward)
- *   - node_id 1 → RIGHT ODrive
- * (Overridable in target_config.h if discovery assigns different IDs.)
+ * No BTS7960 IS pins are wired — motor current comes from the VESC
+ * itself (CAN_PACKET_STATUS).  Native ADC pins remain available for
+ * thermal / VBAT monitoring if the project ever adds a board-side
+ * power-rail sense.
  *
- * Discovery: CNF3/CNF2/CNF1 set 250 kbps with 87.5% sample point.
- * The firmware issues one CAN Address broadcast (cmd_id 0x06, RTR=1)
- * at boot and listens for the ODrive heartbeat within 1 s.
+ * Controller ids:
+ *   - id 0 → LEFT  VESC
+ *   - id 1 → RIGHT VESC
+ * Both FSESC halves ship as id 0, so the right-hand one MUST be
+ * changed in VESC Tool (App Settings → General → VESC ID) before the
+ * firmware can tell them apart.  Overridable in target_config.h.
+ *
+ * Bus: 500 kbps, 29-bit extended ids, MCP2515 in accept-all mode
+ * (BIBA_MCP2515_ACCEPT_ALL) — see src/drivers/vesc_can.h for why the
+ * hardware filters cannot express "any VESC, these packet types".
  */
 
-#define BIBA_TARGET_NAME            "RPICO_RP2040_BLDC"
+#define BIBA_TARGET_NAME            "RP2040_BLDC_VESC_CAN"
 
 /* --- Capability flags ------------------------------------------------- */
 
-/* BTS7960 driver removed: drive API is now backed by biba_odrive_can. */
+/* No BTS7960: the drive API is backed by drivers/vesc_can.c. */
 #define BIBA_TARGET_HAS_BTS7960_2CH  0
 #define BIBA_TARGET_HAS_BLDC_2CH     1
 
-/* New peripheral capability flag introduced for this target. */
+/* Which BLDC backend implements drivers/bldc.h on this target.
+ * Exactly one of the BACKEND flags may be 1 (see ADR-0002 §3). */
+#define BIBA_TARGET_BLDC_BACKEND_ODRIVE  0
+#define BIBA_TARGET_BLDC_BACKEND_VESC    1
+
+/* SPI→CAN bridge present. */
 #define BIBA_TARGET_HAS_MCP2515      1
 
-/* Same as RPICO_RP2040 — CRSF through UART0. */
+/* Same as RP2040_DC_BTS7960_PWM — CRSF through UART0. */
 #define BIBA_TARGET_HAS_CRSF         1
 
 /* IMU stays on I2C0 GP20/21, no conflict. */
 #define BIBA_TARGET_HAS_IMU          1
 
-/* SBC link moved to USB-CDC on the BLDC variant. */
+/* SBC link is USB-CDC on the BLDC variants. */
 #define BIBA_TARGET_HAS_SPI_SLAVE    0
 
-/* Pairs of RPWM/LPWM per motor each share a PWM slice → no per-channel
- * timer PWM. The BTS7960 motor-audio API does not apply on this target
- * (no BTS7960); audio reuse is reserved for a future buzz feature. */
+/* No BTS7960 → no motor-audio API on this target. */
 #define BIBA_TARGET_HAS_PER_CHANNEL_TIMER_PWM 0
 
 #if !defined(BIBA_NATIVE_TEST)
@@ -96,15 +132,19 @@
 
 /* --- Motor drive (BLDC, not BTS7960) ---------------------------------- */
 
-/* Drive duty on this target is encoded into CANSimple Set_Input_Vel;
- * the BTS7960 PWM pin macros are intentionally NOT defined here. The
- * portable code in src/hal/biba_hal_motor.c, src/hal/biba_hal_motor_rp2040.c
- * and src/drivers/bts7960.c is excluded by [rp2040_bldc_src_filter].
+/* Drive duty on this target is encoded into a VESC CAN command
+ * (SET_DUTY / SET_RPM / SET_CURRENT, picked by
+ * BIBA_VESC_CONTROL_MODE); the BTS7960 PWM pin macros are
+ * intentionally NOT defined here.  The portable code in
+ * src/hal/biba_hal_motor.c, src/hal/biba_hal_motor_rp2040.c and
+ * src/drivers/bts7960.c is excluded by [rp2040_bldc_vesc_src_filter].
  *
- * Numerical mapping [-1.0, +1.0] → rev/s comes from target_config.h:
- *   - BIBA_ODRIVE_LEFT_MAX_VEL_REV_S
- *   - BIBA_ODRIVE_RIGHT_MAX_VEL_REV_S
- * (set conservatively; ODrive enforces its own limits via Set_Limits).
+ * Numerical mapping of [-1.0, +1.0] comes from target_config.h:
+ *   - BIBA_VESC_MAX_DUTY      (duty mode, the default)
+ *   - BIBA_VESC_MAX_ERPM      (ERPM mode)
+ *   - BIBA_VESC_MAX_CURRENT_A (current mode)
+ * The VESC additionally clamps every command against its own motor
+ * configuration, which stays the real safety limit.
  */
 
 /* --- CRSF (UART0, GP0=TX / GP1=RX) ------------------------------------- */
@@ -114,23 +154,11 @@
 #define BIBA_CRSF_UART_INST          uart0
 #define BIBA_CRSF_UART_IRQ           UART0_IRQ
 
-/* --- ODrive UART-A (UART1, GP4=TX / GP5=RX) ---------------------------- *
- *
- * ASCII-protocol fallback transport (drivers/odrive_uart.c), selected
- * when BIBA_ODRIVE_LINK_UART != 0.  Same pins as the "ODRIVE_ASY_*"
- * notes in the pin table at the top of this file.  UART0 is CRSF, so
- * ODrive gets UART1.  ODrive-side UART-A must be enabled (baud matched
- * to BIBA_ODRIVE_UART_BAUD) — see drivers/odrive_uart.c header note. */
-#define BIBA_PIN_ODRIVE_UART_TX_GPIO 4
-#define BIBA_PIN_ODRIVE_UART_RX_GPIO 5
-#define BIBA_ODRIVE_UART_INST        uart1
-#define BIBA_ODRIVE_UART_BAUD        115200
-
 /* --- SBC link -----------------------------------------------------------
  * SPI slave (used on F103 / non-BLDC targets) is replaced on this
  * target by USB-CDC → SBC (Serial over USB on the YD-RP2040 board).
  * No dedicated UART is reserved for the SBC; the SBC handles the USB
- * gadget itself. If needed in future, UART1 (GP12/13) can be reused.
+ * gadget itself.
  */
 
 /* --- MCP2515 SPI0 bus (CAN bridge) ------------------------------------ */
@@ -163,11 +191,11 @@
 
 /* --- ADC ---------------------------------------------------------------
  *
- * No native ADC channels are wired on this BLDC target by default.
- * The ODrive unit reports Bus_Voltage / FET_Temperature / Motor_Temperature
- * over CAN, so the native ADC remains a clean reserve.
- * The macros below are kept defined (length 0) so any code that walks
- * BIBA_ADC_CHANNEL_SEQ will compile cleanly.
+ * No native ADC channels are wired on this target.  The VESC reports
+ * input voltage, motor current and FET / motor temperature over CAN
+ * (CAN_PACKET_STATUS / _4 / _5), so the native ADC remains a clean
+ * reserve.  The macros below are kept defined (length 0) so any code
+ * that walks BIBA_ADC_CHANNEL_SEQ still compiles cleanly.
  */
 
 #define BIBA_ADC_SCAN_LEN           0U

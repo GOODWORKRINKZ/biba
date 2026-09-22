@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """IS-signal PoC — closed-loop PI controller test driver.
 
-Talks to the rpico_rp2040_is_poc firmware over USB CDC.  Sends a
+Talks to the rp2040_dc_bts7960_pwm_is_poc firmware over USB CDC.  Sends a
 RPMRUN command with the requested target frequency (Hz) and duration,
 streams the per-iteration CSV telemetry to disk, prints it live, and
 plots target / measured / duty / current vs time at the end.

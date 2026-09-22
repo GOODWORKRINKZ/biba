@@ -1,4 +1,4 @@
-# Таргет `RPICO_RP2040_BLDC` — BLDC/ODrive через CAN
+# Таргет `RP2040_BLDC_ODRIVE_CAN` — BLDC/ODrive через CAN
 
 Этот документ — пошаговая инструкция по запуску таргета «с нуля»: что
 купить, как спаять, как собрать, как прошить, как проверить, что всё
@@ -7,7 +7,7 @@
 соседним таргетом — в [`target.md`](./target.md). Здесь — только «как
 включить и убедиться, что крутится».
 
-> Таргет `RPICO_RP2040_BLDC` — это альтернативная сборка той же
+> Таргет `RP2040_BLDC_ODRIVE_CAN` — это альтернативная сборка той же
 > платы **Raspberry Pi Pico / YD-RP2040**, на которой вместо двух
 > BTS7960 (щёточный DC) живёт MCP2515+TJA1050 (SPI↔CAN мост) и пара
 > ODrive на шине. Переключение — выбором `env` в PlatformIO (см.
@@ -141,16 +141,16 @@ odrv1.axis0.motor.config.can_node_id = 1   # right
 ```bash
 # PoC: только SPI↔MCP2515 self-test, без ODrive.
 # Прошить первым делом на новой плате — проверяет SPI и питание.
-pio run -e rpico_rp2040_bldc_can_loopback_poc
-pio run -e rpico_rp2040_bldc_can_loopback_poc --target upload
+pio run -e rp2040_bldc_odrive_can_loopback_poc
+pio run -e rp2040_bldc_odrive_can_loopback_poc --target upload
 
 # Продакшен-сборки:
-pio run -e rpico_rp2040_bldc_standalone   # автономная логика (без SBC)
-pio run -e rpico_rp2040_bldc_companion    # работает в паре с SBC по USB-CDC
-pio run -e rpico_rp2040_bldc_combined     # режим выбирается MODE_SEL джампером
+pio run -e rp2040_bldc_odrive_can_standalone   # автономная логика (без SBC)
+pio run -e rp2040_bldc_odrive_can_companion    # работает в паре с SBC по USB-CDC
+pio run -e rp2040_bldc_odrive_can_combined     # режим выбирается MODE_SEL джампером
 
 # Проверить, что UF2 собран, без прошивки:
-pio run -e rpico_rp2040_bldc_can_loopback_poc --target size
+pio run -e rp2040_bldc_odrive_can_loopback_poc --target size
 ```
 
 `upload_protocol = picotool`, поэтому PlatformIO сам позовёт `picotool`.
@@ -164,7 +164,7 @@ pio run -e rpico_rp2040_bldc_can_loopback_poc --target size
 `CMakeLists.txt` лежит прямо в таргете: [`CMakeLists.txt`](./CMakeLists.txt).
 
 ```bash
-cd firmware/targets/RPICO_RP2040_BLDC
+cd firmware/targets/RP2040_BLDC_ODRIVE_CAN
 mkdir build && cd build
 cmake -G Ninja -DPICO_SDK_PATH=/path/to/pico-sdk ..
 ninja
@@ -196,7 +196,7 @@ picotool load -p /dev/ttyACM0 firmware.uf2
 1. Шаг 1–3 выше.
 2. Из артефактов PlatformIO:
    ```bash
-   ls .pio/build/rpico_rp2040_bldc_can_loopback_poc/firmware.uf2
+   ls .pio/build/rp2040_bldc_odrive_can_loopback_poc/firmware.uf2
    ```
 3. `cp .pio/build/<env>/firmware.uf2 /media/$USER/RPI-RP2/`
 4. Pico сама ребутнётся и начнёт исполнять код.
@@ -207,9 +207,9 @@ picotool load -p /dev/ttyACM0 firmware.uf2
 USB-CDC @ 115200 8N1 появляется:
 
 ```
-[biba] RPICO_RP2040_BLDC CAN-loopback PoC
+[biba] RP2040_BLDC_ODRIVE_CAN CAN-loopback PoC
 [biba] build: Jul 20 2026 17:12:34
-[biba] target: RPICO_RP2040_BLDC @ 125 MHz, MCP2515 SPI @ 7812500 Hz
+[biba] target: RP2040_BLDC_ODRIVE_CAN @ 125 MHz, MCP2515 SPI @ 7812500 Hz
 [biba] MCP2515 up @ 250000 bps
 [biba] PoC running: TX Heartbeat @ 5 Hz, Set_Input_Vel @ 1 Hz
 [biba] status t=... tx=... rx=0 rx_drop=0 q_rx_push=0 q_rx_pop=0 ...
@@ -226,7 +226,7 @@ USB-CDC @ 115200 8N1 появляется:
 PlatformIO, конфигурация — двумя header'ами рядом с этим README:
 
 ```
-targets/RPICO_RP2040_BLDC/
+targets/RP2040_BLDC_ODRIVE_CAN/
 ├── target.h            # распиновка + capability-флаги BIBA_TARGET_HAS_*
 ├── target_config.h     # калибровки и лимиты
 └── README.md           # ← этот файл
@@ -274,7 +274,7 @@ Capability-флаги в `target.h` (менять, только если пон�
 Пошагово, минимально-достаточно чтобы понять «живо/не живо»:
 
 1. **Boot-логи.** Откройте USB-CDC терминал на 115200 8N1. Должны
-   увидеть строки `[biba] RPICO_RP2040_BLDC …` и `[biba] MCP2515 up
+   увидеть строки `[biba] RP2040_BLDC_ODRIVE_CAN …` и `[biba] MCP2515 up
    @ 250000 bps`. Если `MCP2515 init FAILED (status=-N)` — нет связи
    по SPI (проверьте провода MISO/SCK/MOSI/CS и питание модуля).
 
@@ -300,7 +300,7 @@ Capability-флаги в `target.h` (менять, только если пон�
    `BIBA_ODRIVE_HEARTBEAT_TIMEOUT_MS` (250 мс по умолчанию)
    firmware перестанет слать `Set_Input_Vel`; ODrive сам disarm'нется
    по своему watchdog (100 мс). Лог покажет
-   `biba_odrive_node_alive(0) == false`.
+   `biba_bldc_node_alive(0) == false`.
 
 ## 7. Минимальный пример обмена
 
@@ -329,7 +329,7 @@ static void pack_f32_le(uint8_t *dst, float v) {
 biba_mcp2515_status_t st = biba_mcp2515_init();   /* 250 kbps, 87.5 % sample point */
 biba_can_queue_rx_init();
 biba_can_queue_tx_init();
-biba_odrive_can_init();  /* отправит Set_Axis_State=CLOSED_LOOP + Set_Limits */
+biba_bldc_init();  /* отправит Set_Axis_State=CLOSED_LOOP + Set_Limits */
 
 /* 2) Set_Input_Vel: 8 байт, [0..3] = velocity float LE, [4..7] = torque_ff float LE. */
 static void send_set_input_vel(uint8_t node_id, float vel_rev_s, float torque_ff_nm) {
@@ -356,7 +356,7 @@ void loop_50hz(void) {
                        0.0f);
 
     /* 4) Дренаж RX: декодирует Heartbeat, Get_Iq, Get_Bus_Voltage_Current и т. д. */
-    biba_odrive_can_tick_50hz();
+    biba_bldc_tick_50hz();
 }
 ```
 
@@ -371,7 +371,7 @@ id=0x001 dlc=7 data= 08 00 00 00 00 00 00
   └─────────────── CAN ID
 ```
 
-Узел жив, если `biba_odrive_node_alive(node_id) == true`. Возвращает
+Узел жив, если `biba_bldc_node_alive(node_id) == true`. Возвращает
 `false` через `BIBA_ODRIVE_HEARTBEAT_TIMEOUT_MS` без кадров.
 
 ## 8. Решение типовых проблем
@@ -390,7 +390,7 @@ id=0x001 dlc=7 data= 08 00 00 00 00 00 00
 ## 9. Куда смотреть дальше
 
 - [`target.md`](./target.md) — детальная распиновка по группам
-  периферии и «что убрано по сравнению с RPICO_RP2040».
+  периферии и «что убрано по сравнению с RP2040_DC_BTS7960_PWM».
 - [`../../src/poc/can_loopback_poc.cpp`](../../src/poc/can_loopback_poc.cpp) —
   самый короткий путь «увидеть байты в шине» без ODrive.
 - [`../../../docs/adr/0001-pico-bldc-target.md`](../../../docs/adr/0001-pico-bldc-target.md) —
@@ -398,5 +398,5 @@ id=0x001 dlc=7 data= 08 00 00 00 00 00 00
 - [`../../../docs/mcp2515_bldc_research.md`](../../../docs/mcp2515_bldc_research.md) —
   полный research: питание модуля, терминаторы, ODrive CANSimple,
   полная таблица cmd_id.
-- [`../RPICO_RP2040/target.md`](../RPICO_RP2040/target.md) — если нужно
+- [`../RP2040_DC_BTS7960_PWM/target.md`](../RP2040_DC_BTS7960_PWM/target.md) — если нужно
   сравнить со щёточным вариантом на той же плате.

@@ -18,7 +18,7 @@ BiBa поддерживает три композиции железа. Где �
 | **A. Pi-only** (текущий продакшен) | да | нет | Pi (`/dev/ttyS0`) | [`docker/legacy-pi/docker-compose.yml`](docker/legacy-pi/docker-compose.yml) |
 | **B. STM32-only** | нет | STM32F103 | STM32 | env `standalone` в [`firmware/`](firmware/) |
 | **C. Pi + STM32** | да | STM32F103 | STM32 (Pi видит каналы через SPI-телеметрию) | env `companion` в [`firmware/`](firmware/) + ROS2-стек в `docker/ros2/` (в разработке) |
-| **D. RP2040-only** (в разработке, ветка `rp2040-port`) | нет | RP2040 | RP2040 | env `rpico_rp2040_standalone` в [`firmware/`](firmware/) |
+| **D. RP2040-only** (в разработке, ветка `rp2040-port`) | нет | RP2040 | RP2040 | env `rp2040_dc_bts7960_pwm_standalone` в [`firmware/`](firmware/) |
 
 Канонический разбор композиций, их обязанности и failsafe-уровни — в [docs/system_architecture.md](docs/system_architecture.md). STM32-сторона детально описана в [docs/stm32_architecture.md](docs/stm32_architecture.md), будущий ROS2-стек композиции C — в [docs/ros2_stack.md](docs/ros2_stack.md). Общий design-doc и план редизайна — [docs/plans/2026-04-28-sbc-architecture-redesign-design.md](docs/plans/2026-04-28-sbc-architecture-redesign-design.md).
 
@@ -61,7 +61,7 @@ BiBa поддерживает три композиции железа. Где �
 
 - `biba-controller/` — Python-контроллер для CRSF, моторов, моторного audio/voice runtime и телеметрии BMS (композиции A и C)
 - `biba-controller/stm32_link/` — опциональный SPI-клиент к STM32F103 add-on (`STM32_LINK_ENABLED=1`, композиция C)
-- `firmware/` — PlatformIO-проект прошивки (STM32F103C8T6 и RP2040): env'ы `standalone` для композиции B, `companion` для композиции C, `rpico_rp2040_standalone` для композиции D (ветка `rp2040-port`), `native_test` для host-side Unity-тестов
+- `firmware/` — PlatformIO-проект прошивки (STM32F103C8T6 и RP2040): env'ы `standalone` для композиции B, `companion` для композиции C, `rp2040_dc_bts7960_pwm_standalone` для композиции D (ветка `rp2040-port`), `native_test` для host-side Unity-тестов
 - `docker/` — каталог compose-стеков, разнесённых по композициям:
   - `docker/legacy-pi/` — текущий продакшен-стек композиции A
   - `docker/ros2/` — будущий ROS2-стек композиции C (в разработке)

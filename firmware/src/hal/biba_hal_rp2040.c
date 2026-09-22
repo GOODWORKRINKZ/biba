@@ -2,7 +2,7 @@
  *
  * Implements the same biba_hal.h API as the STM32Cube version, but uses
  * pico-sdk primitives throughout.  Compiled only when
- * BIBA_TARGET_RPICO_RP2040 is defined (see platformio.ini src_filter).
+ * BIBA_TARGET_RP2040_DC_BTS7960_PWM is defined (see platformio.ini src_filter).
  *
  * printf() is routed to USB CDC by the earlephilhower arduino-pico
  * framework — no _write() override is needed here.

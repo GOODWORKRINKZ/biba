@@ -7,7 +7,7 @@
 #if BIBA_TARGET_HAS_BTS7960_2CH
 #  include "drivers/bts7960.h"
 #elif BIBA_TARGET_HAS_BLDC_2CH
-#  include "drivers/odrive.h"
+#  include "drivers/bldc.h"
 #endif
 
 /* --- Build-time mode selection ------------------------------------------ */
@@ -39,8 +39,8 @@ void biba_mode_dispatcher_boot(void)
 #if BIBA_TARGET_HAS_BTS7960_2CH
     biba_bts7960_set_enabled(false);
 #elif BIBA_TARGET_HAS_BLDC_2CH
-    biba_odrive_set_enabled(false);
-    biba_odrive_drive(0.0f, 0.0f);
+    biba_bldc_set_enabled(false);
+    biba_bldc_drive(0.0f, 0.0f);
 #endif
 
     (void)biba_imu_probe();

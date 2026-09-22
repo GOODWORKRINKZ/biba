@@ -13,7 +13,7 @@
 
 ## Источник истины
 
-- Таргет: `firmware/targets/RPICO_RP2040/` — `target.md` (распиновка), `target.h` (пины).
+- Таргет: `firmware/targets/RP2040_DC_BTS7960_PWM/` — `target.md` (распиновка), `target.h` (пины).
 - Варианты: `docs/variants.md`.
 - Шасси: `firmware/tools/cad/sbiba_chassis.py` — MY1016Z 24 В / 250 Вт,
   колесо насаживается прямо на выходной вал редуктора.

@@ -1,7 +1,7 @@
-# Таргет: RPICO_RP2040_BLDC
+# Таргет: RP2040_BLDC_ODRIVE_CAN
 
 RP2040-вариант BiBa для управления парой BLDC-приводов через ODrive
-по CAN. Заменяет BTS7960 (см. соседний `RPICO_RP2040/target.md`) в
+по CAN. Заменяет BTS7960 (см. соседний `RP2040_DC_BTS7960_PWM/target.md`) в
 проектах, где thermal-режим щёточных модулей стал узким местом.
 
 > **Спутник:** см. `docs/adr/0001-pico-bldc-target.md` — этот
@@ -43,13 +43,13 @@ RP2040-вариант BiBa для управления парой BLDC-прив�
 | Шина | CAN 2.0B, 11-bit ID, 250 кбит/с |
 | Терминатор | 120 Ω на каждом конце шины (включить DIP на одном ODrive + RTERM-перемычку на самом MCP2515-модуле, если он на конце) |
 | Ожидаемое железо | 2 × ODrive Pro / S1 / Micro |
-| Адресация по умолчанию | `node_id 0 → LEFT wheel`, `node_id 1 → RIGHT wheel` (override в `target_config.h` через `BIBA_ODRIVE_*_NODE_ID`) |
+| Адресация по умолчанию | `node_id 0 → LEFT wheel`, `node_id 1 → RIGHT wheel` (override в `target_config.h` через `BIBA_BLDC_*_NODE_ID`) |
 | Протокол | CANSimple: `message_id = (node_id << 5) \| cmd_id`, little-endian, IEEE-754 float для `Input_Vel` |
 | Команда цикла | `Set_Input_Vel` (cmd_id 0x0D) на каждый ODrive @ 50 Гц |
 
 Полная таблица команд — `docs/mcp2515_bldc_research.md` §6.5.
 
-### 4. IMU (I2C0) — без изменений относительно RPICO_RP2040
+### 4. IMU (I2C0) — без изменений относительно RP2040_DC_BTS7960_PWM
 
 | Пин   | Сигнал   | Направление | Примечание               |
 |-------|----------|-------------|--------------------------|
@@ -82,18 +82,18 @@ GP2 / GP3 / GP6 / GP7 / GP8 / GP9 / GP10 / GP11 / GP12 / GP13 / GP14
 питания (Rail 12V, NTC на драйвере) — раскомментировать каналы в
 `target.h` и включить в `BIBA_ADC_CHANNEL_SEQ`.
 
-## Что убрано по сравнению с `RPICO_RP2040`
+## Что убрано по сравнению с `RP2040_DC_BTS7960_PWM`
 
 - **BTS7960.** Все 8 пинов `GP2..GP9` теперь свободны.
   `BIBA_TARGET_HAS_BTS7960_2CH = 0`. Driver `drivers/bts7960.c`
-  исключён из build по `[rp2040_bldc_src_filter]`.
+  исключён из build по `[rp2040_bldc_odrive_can_src_filter]`.
 - **Native ADC scan** для IS_LEFT / IS_RIGHT / IBAT / VBAT.
   Вместо них ODrive-side `Get_Iq` / `Get_Temperature`.
   `BIBA_ADC_SCAN_LEN = 0`. Макросы IS/IBAT/VBAT в
   `target_config.h` занулены, чтобы любой код, ссылающийся на них,
   коротко завершал логическую ветку.
 
-## Что добавлено по сравнению с `RPICO_RP2040`
+## Что добавлено по сравнению с `RP2040_DC_BTS7960_PWM`
 
 - **MCP2515 SPI→CAN мост** (GP16/17/18/19/15).
   С ним связаны новые бинари: `drivers/mcp2515.c`, `drivers/can_queue.c`,
@@ -104,27 +104,27 @@ GP2 / GP3 / GP6 / GP7 / GP8 / GP9 / GP10 / GP11 / GP12 / GP13 / GP14
 
 ```bash
 # BLDC, standalone
-pio run -e rpico_rp2040_bldc_standalone
+pio run -e rp2040_bldc_odrive_can_standalone
 
 # BLDC, companion (SBC via USB-CDC)
-pio run -e rpico_rp2040_bldc_companion
+pio run -e rp2040_bldc_odrive_can_companion
 
 # BLDC, combined (режим выбирается MODE_SEL пинe / flag)
-pio run -e rpico_rp2040_bldc_combined
+pio run -e rp2040_bldc_odrive_can_combined
 ```
 
-## Переключение между RPICO_RP2040 и RPICO_RP2040_BLDC
+## Переключение между RP2040_DC_BTS7960_PWM и RP2040_BLDC_ODRIVE_CAN
 
 Это **разные таргеты**, не режимы. Чтобы переключиться, вызывающий
 просто меняет имя env:
 
 ```bash
-pio run -e rpico_rp2040_standalone          # ← brushed DC (старое поведение)
-pio run -e rpico_rp2040_bldc_standalone    # ← BLDC через ODrive (новое)
+pio run -e rp2040_dc_bts7960_pwm_standalone          # ← brushed DC (старое поведение)
+pio run -e rp2040_bldc_odrive_can_standalone    # ← BLDC через ODrive (новое)
 ```
 
 Флаги `BIBA_TARGET_HAS_BTS7960_2CH = 0` / `BIBA_TARGET_HAS_BLDC_2CH = 1`
-выставляются в `[target_rpico_rp2040_bldc]` stanza; mode code в
+выставляются в `[target_rp2040_bldc_odrive_can]` stanza; mode code в
 `src/modes/*.c` гардирует вызовы backend'а через эти флаги
 (подробности — ADR-0001 §1.5).
 
@@ -133,15 +133,22 @@ pio run -e rpico_rp2040_bldc_standalone    # ← BLDC через ODrive (нов�
 > BIBA_F103_REV_A). Это согласовано с существующей дисциплиной
 > (`firmware/targets/README.md`).
 
-## Debug-канал (опционально)
+## ASCII-линк вместо CAN
 
-Если на плате есть UART1 (GP4 = TX, GP5 = RX), его можно подключить
-прямо к ODrive `UART_A` (GPIO1/2) и работать по ODrive ASCII
-(`v 0 <vel>\n`) без MCP2515. Это бенч-тест fallback — для него
-нужно пересобрать env с флагом `-DODRIVE_LINK=ASCII`. По умолчанию
-он выключён, в production используется CAN.
+Те же ODrive можно вести по ODrive ASCII на UART1 (GP4/GP5), без
+MCP2515 вообще. Это **отдельный таргет** `RP2040_BLDC_ODRIVE_UART`, а
+не флаг сборки: по принятому стандарту имён тип линка входит в имя
+таргета, а распиновка у двух вариантов действительно разная
+(ADR-0002).
 
-Детали — `docs/mcp2515_bldc_research.md` §6.8.
+```bash
+pio run -e rp2040_bldc_odrive_uart_standalone
+```
+
+Сейчас в production используется именно он: CANSimple-стек в прошивке
+ODrive 0.5.6 тихо залипает на холостом ходу. Детали —
+`../RP2040_BLDC_ODRIVE_UART/target.md` и
+`docs/mcp2515_bldc_research.md` §6.8.
 
 ## Проверка после прошивки
 
@@ -158,7 +165,10 @@ pio run -e rpico_rp2040_bldc_standalone    # ← BLDC через ODrive (нов�
 
 ## References
 
-- `../RPICO_RP2040/target.md` — старый (BTS7960) таргет, для сравнения
+- `../RP2040_DC_BTS7960_PWM/target.md` — старый (BTS7960) таргет, для сравнения
+- `../RP2040_BLDC_ODRIVE_UART/target.md` — те же ODrive по ASCII-линку
+- `../RP2040_BLDC_VESC_CAN/target.md` — VESC на том же MCP2515-мосту
+- `docs/adr/0002-target-naming-and-vesc.md` — ADR: стандарт имён + VESC
 - `docs/mcp2515_bldc_research.md` — full research with citations
 - `docs/adr/0001-pico-bldc-target.md` — ADR, обоснование решений
 - `docs/adr/diagram-components.mmd` — диаграмма компонентов
