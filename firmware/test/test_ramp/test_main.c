@@ -161,6 +161,85 @@ static void test_full_reversal_latency_within_budget(void)
 }
 
 /* -----------------------------------------------------------------------
+ * Test 6d: Steering while the throttle is HELD never flips a wheel's sign —
+ * the mixer just asks the inner wheel for a smaller duty of the same sign,
+ * so it takes the plain decel path, not the reversal path.  Regression
+ * guard for the 2026-09-21 field report: REVERSE_DECEL_RATE had been made
+ * 4x faster than DECEL_RATE, so the machine steered crisply when the stick
+ * was released (reversal path) and refused to change course at all while
+ * the throttle was held (decel path).
+ *
+ * Asserts the property, not a tuned number: winding a wheel down from full
+ * duty must not be slower because the command happened to stay same-sign.
+ * ----------------------------------------------------------------------- */
+static void test_same_sign_wind_down_not_slower_than_reversal(void)
+{
+    const float dt = 1.0f / (float)BIBA_CONTROL_LOOP_HZ;
+
+    /* Steering under throttle: 1.0 → 0.0, same sign throughout. */
+    biba_ramp_t steer;
+    biba_ramp_init(&steer);
+    steer.current  = 1.0f;
+    steer.last_dir = 1;
+    float steer_s = 0.0f;
+    while (steer.current > 0.0f && steer_s < 10.0f) {
+        biba_ramp_update(&steer, 0.0f, dt);
+        steer_s += dt;
+    }
+
+    /* Same wind-down, but the command asks for the other direction. */
+    biba_ramp_t rev;
+    biba_ramp_init(&rev);
+    rev.current  = 1.0f;
+    rev.last_dir = 1;
+    float rev_s = 0.0f;
+    while (rev.current > 0.0f && rev_s < 10.0f) {
+        biba_ramp_update(&rev, -1.0f, dt);
+        rev_s += dt;
+    }
+
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, steer.current);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, rev.current);
+    TEST_ASSERT_TRUE(steer_s <= rev_s + 2.0f * dt);
+}
+
+/* -----------------------------------------------------------------------
+ * Test 6e: The full-stick steering differential develops in a time the
+ * operator can steer with.  The concrete case from the 2026-09-21 report,
+ * end to end: throttle held at 1.0, stick to the stop (steering
+ * 1 - BIBA_STEERING_DEADBAND), so the projection mixer holds the outer
+ * wheel at 1.0 and asks the inner one for (1-s)/(1+s).
+ *
+ * The budget is the reversal path's own time for the same wind-down — the
+ * one that was field-validated on 2026-09-21 as feeling right — so this
+ * fails whenever DECEL_RATE drifts below REVERSE_DECEL_RATE, and is not
+ * satisfiable by simply slowing both down.
+ * ----------------------------------------------------------------------- */
+static void test_steering_differential_develops_under_held_throttle(void)
+{
+    const float dt    = 1.0f / (float)BIBA_CONTROL_LOOP_HZ;
+    const float steer = 1.0f - BIBA_STEERING_DEADBAND;
+    const float inner_target = (1.0f - steer) / (1.0f + steer);
+    const float budget = (1.0f - inner_target) / BIBA_RAMP_REVERSE_DECEL_RATE
+                       + 2.0f * dt;
+
+    biba_ramp_t inner;
+    biba_ramp_init(&inner);
+    inner.current  = 1.0f;
+    inner.last_dir = 1;
+
+    float elapsed = 0.0f;
+    while (elapsed <= budget) {
+        float out = biba_ramp_update(&inner, inner_target, dt);
+        elapsed += dt;
+        /* 1.0 is the outer wheel, held there by the mixer. */
+        if (1.0f - out >= 0.9f * (1.0f - inner_target)) break;
+    }
+    TEST_ASSERT_TRUE(1.0f - inner.current >= 0.9f * (1.0f - inner_target));
+    TEST_ASSERT_TRUE(elapsed <= budget);
+}
+
+/* -----------------------------------------------------------------------
  * Test 7: Direction change triggers zero-hold and hold freezes output
  * current=0.1, target=-1.0, dt=1.0 → large step → reaches zero → hold set
  * Second call with dt inside the hold window: returns 0.0 (frozen)
@@ -295,6 +374,8 @@ static void run_all(void)
     RUN_TEST(test_zero_reverse_rate_crosses_immediately);
     RUN_TEST(test_reverse_is_not_slower_than_decel);
     RUN_TEST(test_full_reversal_latency_within_budget);
+    RUN_TEST(test_same_sign_wind_down_not_slower_than_reversal);
+    RUN_TEST(test_steering_differential_develops_under_held_throttle);
     RUN_TEST(test_direction_change_triggers_zero_hold);
     RUN_TEST(test_clamp_output_to_unit);
     RUN_TEST(test_reversal_through_zero_waits_hold);

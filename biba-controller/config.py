@@ -162,10 +162,14 @@ STM32_LINK_SPI_SPEED_HZ = _get_env_int("STM32_LINK_SPI_SPEED_HZ", 8_000_000)
 # Motor ramping / slew rate.
 # Rates are duty per second, so a wheel that must flip sign is stuck at zero
 # for |duty| / RAMP_REVERSE_DECEL_RATE + RAMP_ZERO_HOLD_S.  Invariant:
-# RAMP_REVERSE_DECEL_RATE >= RAMP_DECEL_RATE — winding duty down ahead of a
+# RAMP_REVERSE_DECEL_RATE == RAMP_DECEL_RATE — winding duty down ahead of a
 # reversal is the same electrical event as an ordinary throttle release, so
-# making it slower protects nothing and only delays the wheel while the other
-# one keeps pulling the robot off course (field test 2026-09-20).
+# whichever is slower protects nothing and only delays a wheel.  Slow reverse
+# rate: the wheel drops out mid-turn while the other keeps pulling the robot
+# off course (field test 2026-09-20).  Slow decel rate: steering with the
+# throttle held does nothing at all, because the inner wheel is asked for a
+# smaller duty of the same sign and never crosses zero (field test
+# 2026-09-21).
 # Mirrors BIBA_RAMP_* in firmware/include/biba_config.h.
 RAMP_ACCEL_RATE = _get_env_float("RAMP_ACCEL_RATE", 2.0)
 RAMP_DECEL_RATE = _get_env_float("RAMP_DECEL_RATE", 2.0)

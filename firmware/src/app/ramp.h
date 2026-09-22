@@ -42,7 +42,15 @@ void  biba_ramp_reset(biba_ramp_t *r);
  * Reversal latency is therefore |current| / reverse_decel_rate + zero_hold_ms;
  * keep that budget under ~0.3 s or steering through a sign flip feels like the
  * wheel dropped out (field test 2026-09-20). A reverse_decel_rate <= 0 means
- * "no reversal slew limit" — cross zero on the next tick. */
+ * "no reversal slew limit" — cross zero on the next tick.
+ *
+ * Steering does NOT always take that path. With the throttle held the mixer
+ * asks the inner wheel for a smaller duty of the SAME sign, so the latency is
+ * (current - target) / decel_rate with no hold at all. Both paths are steering,
+ * so decel_rate carries the same ~0.3 s budget; keeping the two rates equal is
+ * enforced by a _Static_assert in ramp.c (field test 2026-09-21, where only
+ * the reversal path had been made fast and the machine would not change course
+ * until the operator released the throttle). */
 float biba_ramp_update(biba_ramp_t *r, float target, float dt);
 
 /* Same ramp logic with caller-provided rates. Useful when a control mode needs

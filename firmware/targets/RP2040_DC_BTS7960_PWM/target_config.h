@@ -80,16 +80,56 @@
  *    pointed at it.
  * Worst case reversal is now ~280 ms at full duty instead of 2400 ms.
  *
- * If the pack rail trips the 28 V BTN7970 lockout under hard reversals,
- * back off from build_flags before editing this file:
- *   -D BIBA_RAMP_REVERSE_DECEL_RATE=1.0f -D BIBA_RAMP_ZERO_HOLD_MS=50
- * (= reversal no slower than an ordinary stop, ~1.05 s, regen envelope
- * unchanged from the pre-rework board).  The other lever is the current
- * limiter, still disabled above. */
-#define BIBA_RAMP_ACCEL_RATE           2.0f
-#define BIBA_RAMP_DECEL_RATE           1.0f
-#define BIBA_RAMP_REVERSE_DECEL_RATE   4.0f
-#define BIBA_RAMP_ZERO_HOLD_MS         30u
+ * Field test 2026-09-21 (with the above): reversal-based steering is good
+ * — figure-eights, obstacles it could not clear the day before — but with
+ * the throttle HELD the machine will not change course at all; the driver
+ * has to release the stick first, then it turns.  That is the other half
+ * of the same bug.  Steering under throttle never flips a sign: the mixer
+ * keeps the outer wheel where it is and asks the inner one for a SMALLER
+ * duty of the SAME sign, so it goes down the plain DECEL_RATE path, not
+ * the reversal path that was just made fast.  At full stick (deadband
+ * 0.20 → s = 0.8) the mixer asks the inner wheel for 0.111 while it sits
+ * at 1.0: 0.889 / 1.0f = 890 ms to develop the differential, against
+ * 250 ms for the same wind-down when it happens to be a reversal.  A
+ * correction held for a few hundred ms therefore never arrives, while
+ * releasing the throttle drops both wheels into the fast path.
+ *  - DECEL_RATE 1.0f → 4.0f, i.e. equal to REVERSE_DECEL_RATE.  The two
+ *    are the same electrical event — duty winding down, motor feeding the
+ *    rail — and the reversal path already runs at 4.0f, so the PEAK regen
+ *    the pack sees is unchanged; this only stops the ramp from deciding
+ *    which of two identical events is allowed to be fast.  Inner-wheel
+ *    response drops 890 ms → 222 ms.
+ *    Exposure that does change: an ordinary throttle release is far more
+ *    frequent than a reversal, so the board now meets that 4.0f envelope
+ *    many times per run instead of occasionally.  It is the same envelope
+ *    the snubber / TVS / bulk-ceramic rework (2084a2f) was fitted for.
+ *  - ACCEL_RATE still untouched, and now deliberately so: the 2026-09-21
+ *    report also has the drivers running hot enough to drop a wheel on a
+ *    climb with an 80 kg load, and ACCEL_RATE is the only constant
+ *    bounding current INTO a stalled or back-driven motor.
+ *
+ * If the pack rail trips the 28 V BTN7970 lockout under hard reversals or
+ * hard stops, back off from build_flags before editing this file:
+ *   -D BIBA_RAMP_DECEL_RATE=1.0f -D BIBA_RAMP_REVERSE_DECEL_RATE=1.0f
+ *   -D BIBA_RAMP_ZERO_HOLD_MS=50
+ * (= pre-rework regen envelope; steering under throttle goes back to
+ * unusable, so treat it as a diagnostic, not a setting).  The other lever
+ * is the current limiter, still disabled above. */
+/* #ifndef, unlike the rest of this file: these four are the knobs the
+ * back-off line above tells you to reach for, and a plain #define here would
+ * silently win over the -D (redefinition warning only, no -Werror). */
+#ifndef BIBA_RAMP_ACCEL_RATE
+#  define BIBA_RAMP_ACCEL_RATE         2.0f
+#endif
+#ifndef BIBA_RAMP_DECEL_RATE
+#  define BIBA_RAMP_DECEL_RATE         4.0f
+#endif
+#ifndef BIBA_RAMP_REVERSE_DECEL_RATE
+#  define BIBA_RAMP_REVERSE_DECEL_RATE 4.0f
+#endif
+#ifndef BIBA_RAMP_ZERO_HOLD_MS
+#  define BIBA_RAMP_ZERO_HOLD_MS       30u
+#endif
 
 /* Speed mode scales (3-position switch, brushed variant).
  * Old first gear (1/3) was too slow, so:
