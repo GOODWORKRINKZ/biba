@@ -1,0 +1,44 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {},
+      "rule_severities": {},
+      "rules": {}
+    },
+    "layer_presets": [],
+    "viewports": []
+  },
+  "boards": [],
+  "cvpcb": {
+    "equivalence_files": []
+  },
+  "libraries": {
+    "pinned_footprint_libs": [],
+    "pinned_symbol_libs": []
+  },
+  "meta": {
+    "filename": "ripple-lm2917.kicad_pro",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [],
+    "meta": {
+      "version": 3
+    }
+  },
+  "pcbnew": {
+    "last_paths": {},
+    "page_layout_descr_file": ""
+  },
+  "schematic": {
+    "legacy_lib_dir": "",
+    "legacy_lib_list": []
+  },
+  "sheets": [
+    [
+      "f39d6d62-e4e0-58bf-b501-4e9ce20bedfd",
+      "Root"
+    ]
+  ],
+  "text_variables": {}
+}
