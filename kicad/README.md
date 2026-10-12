@@ -20,7 +20,9 @@ kicad/
 Каждый вариант = отдельный KiCad-проект в `variants/<name>/`:
 
 - `<name>.kicad_pro` — проект
-- `<name>.kicad_sch` — схема
+- `<name>.kicad_sch` — схема (корневой лист)
+- `<блок>.kicad_sch` — дополнительные листы схемы, если блок не помещается
+  на корневой (например `antispark.kicad_sch` у `brushed-bts7960`)
 - `<name>.kicad_pcb` — плата (если есть)
 - `README.md` — план варианта: таргет, распиновка, BOM, статус
 

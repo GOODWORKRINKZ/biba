@@ -4937,6 +4937,39 @@
     (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#PWR122") (unit 1))))
   )
   (no_connect (at 257.81 247.65) (uuid "f16706bd-6801-55b1-b348-5db48c68dfc7"))
+  (text "Лист 2: антиспарк-выключатель BAT+ → VIN (LTC7004 + 2× N-MOSFET, мягкий старт RC, выключатель J5). Клемма батареи на плате становится BAT+, VIN — шина после ключа."
+    (at 304.8 168.91 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "4c6813cd-055d-5ece-b84e-992a0db1792f"))
+  (sheet
+    (at 304.8 172.72)
+    (size 50.8 20.32)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid))
+    (fill
+      (color 0 0 0 0.0000))
+    (uuid "34cf75ef-d557-52dc-a24c-f2d81962f303")
+    (property "Sheetname" "Антиспарк (LTC7004)"
+      (at 304.8 172.0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left bottom)))
+    (property "Sheetfile" "antispark.kicad_sch"
+      (at 304.8 193.6 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left top)))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
+          (page "2")))))
   (sheet_instances
     (path "/" (page "1"))
   )

@@ -1,7 +1,11 @@
 # Общие библиотеки KiCad
 
 - `symbols/` — общие символы (`.kicad_sym`): разъёмы, модули, специфичные для BiBa.
-  `biba.kicad_sym` генерируется `scripts/easyeda_sch2kicad.py` — руками не правим.
+  Основа `biba.kicad_sym` сгенерирована `scripts/easyeda_sch2kicad.py` при
+  разовом импорте из EasyEDA. После импорта в конец библиотеки дописаны
+  руками `TVS_BIDIR`, `LTC7004` и `Q_NMOS_GDS` (N-MOSFET с выводами
+  1=G 2=D 3=S под TO-263/TO-252) — генератор о них не знает, повторный
+  запуск их затрёт.
 - `footprints/` — общие футпринты (`.kicad_mod`, папки `.pretty`).
   `biba.pretty/` генерируется `scripts/gen_pcb.py` с платы — руками не правим.
 - `3dmodels/` — 3D-модели (`.step` / `.wrl`) для 3D-вида плат. Пока пусто.

@@ -1020,4 +1020,378 @@
         (number "5" (effects (font (size 1.27 1.27)))))
     )
   )
+  (symbol "LTC7004"
+    (pin_names
+      (offset 0.508))
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "U"
+      (at 0 12.7 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "LTC7004"
+      (at 0 -12.7 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" "Package_SO:MSOP-10-1EP_3x3mm_P0.5mm_EP1.68x1.88mm"
+      (at 0 0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" "https://www.analog.com/media/en/technical-documentation/data-sheets/LTC7004.pdf"
+      (at 0 0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Description" "Драйвер N-MOSFET верхнего плеча 60 В со встроенным зарядовым насосом (статический ключ)"
+      (at 0 0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (symbol "LTC7004_0_1"
+      (rectangle
+        (start -12.7 10.16)
+        (end 12.7 -10.16)
+        (stroke
+          (width 0.254)
+          (type default))
+        (fill
+          (type background))))
+    (symbol "LTC7004_1_1"
+      (pin power_in line
+        (at -15.24 7.62 0)
+        (length 2.54)
+        (name "VCC"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "1"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin input line
+        (at -15.24 5.08 0)
+        (length 2.54)
+        (name "VCCUV"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "2"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin input line
+        (at -15.24 2.54 0)
+        (length 2.54)
+        (name "OVLO"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "5"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin input line
+        (at -15.24 -5.08 0)
+        (length 2.54)
+        (name "INP"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "4"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin power_in line
+        (at -2.54 -12.7 90)
+        (length 2.54)
+        (name "GND"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "3"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin passive line
+        (at 2.54 -12.7 90)
+        (length 2.54)
+        (name "EP"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "11"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin passive line
+        (at 15.24 7.62 180)
+        (length 2.54)
+        (name "BST"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "9"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin output line
+        (at 15.24 2.54 180)
+        (length 2.54)
+        (name "TGUP"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "7"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin output line
+        (at 15.24 0 180)
+        (length 2.54)
+        (name "TGDN"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "6"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin passive line
+        (at 15.24 -5.08 180)
+        (length 2.54)
+        (name "TS"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "8"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin no_connect line
+        (at 15.24 -7.62 180)
+        (length 2.54)
+        (name "NC"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "10"
+          (effects
+            (font
+              (size 1.27 1.27)))))))
+  (symbol "Q_NMOS_GDS"
+    (pin_numbers hide)
+    (pin_names
+      (offset 0)
+      hide)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "Q"
+      (at 5.08 1.27 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "Q_NMOS"
+      (at 5.08 -1.27 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 5.08 2.54 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 0 0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Description" "N-MOSFET, выводы 1=G 2=D 3=S (TO-263/TO-252)"
+      (at 0 0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "ki_keywords" "NMOS N-MOS"
+      (at 0 0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (symbol "Q_NMOS_GDS_0_1"
+      (polyline
+        (pts
+          (xy 0.254 1.905)
+          (xy 0.254 -1.905))
+        (stroke
+          (width 0.254)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 0.254 0)
+          (xy -2.54 0))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 0.762 2.286)
+          (xy 0.762 1.27))
+        (stroke
+          (width 0.254)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 0.762 0.508)
+          (xy 0.762 -0.508))
+        (stroke
+          (width 0.254)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 0.762 -1.27)
+          (xy 0.762 -2.286))
+        (stroke
+          (width 0.254)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 0.762 -1.778)
+          (xy 3.302 -1.778)
+          (xy 3.302 1.778)
+          (xy 0.762 1.778))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 1.016 0)
+          (xy 2.032 0.381)
+          (xy 2.032 -0.381)
+          (xy 1.016 0))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type outline)))
+      (circle
+        (center 1.651 0)
+        (radius 2.794)
+        (stroke
+          (width 0.254)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 2.54 2.54)
+          (xy 2.54 1.778))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type none)))
+      (circle
+        (center 2.54 1.778)
+        (radius 0.254)
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type outline)))
+      (circle
+        (center 2.54 -1.778)
+        (radius 0.254)
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type outline)))
+      (polyline
+        (pts
+          (xy 2.54 -2.54)
+          (xy 2.54 0)
+          (xy 0.762 0))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 2.921 0.381)
+          (xy 3.683 0.381))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type none)))
+      (polyline
+        (pts
+          (xy 3.302 0.381)
+          (xy 2.921 -0.254)
+          (xy 3.683 -0.254)
+          (xy 3.302 0.381))
+        (stroke
+          (width 0)
+          (type default))
+        (fill
+          (type none))))
+    (symbol "Q_NMOS_GDS_1_1"
+      (pin passive line
+        (at 2.54 5.08 270)
+        (length 2.54)
+        (name "D"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "2"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin input line
+        (at -5.08 0 0)
+        (length 2.54)
+        (name "G"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "1"
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (pin passive line
+        (at 2.54 -5.08 90)
+        (length 2.54)
+        (name "S"
+          (effects
+            (font
+              (size 1.27 1.27))))
+        (number "3"
+          (effects
+            (font
+              (size 1.27 1.27)))))))
 )
