@@ -2892,14 +2892,14 @@
     (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 95.25 107.95 0)
       (effects (font (size 1.27 1.27)) hide))
   )
-  (global_label "L_IS" (shape input) (at 83.82 127 0)
+  (global_label "ADC_L" (shape input) (at 83.82 127 0)
     (fields_autoplaced yes)
     (effects (font (size 1.27 1.27)) (justify left))
     (uuid "f934121c-8f4c-5b3e-aea3-b2d3f3019a64")
     (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 83.82 127 0)
       (effects (font (size 1.27 1.27)) hide))
   )
-  (global_label "R_IS" (shape input) (at 83.82 129.54 0)
+  (global_label "ADC_R" (shape input) (at 83.82 129.54 0)
     (fields_autoplaced yes)
     (effects (font (size 1.27 1.27)) (justify left))
     (uuid "da30632e-c33e-523a-9ac0-48849c578752")
@@ -5035,16 +5035,16 @@
     (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#PWR122") (unit 1))))
   )
   (no_connect (at 257.81 247.65) (uuid "f16706bd-6801-55b1-b348-5db48c68dfc7"))
-  (text "Лист 2: антиспарк-выключатель BAT+ → VIN (LTC7004 + 2× N-MOSFET, мягкий старт RC, выключатель J5). Клемма батареи на плате становится BAT+, VIN — шина после ключа."
+  (text "Лист 2: антиспарк BAT+ → VIN (LTC7004, 2× MOSFET, выключатель J5),\nизмерение шины (шунт + INA240 → IBAT, делитель → VBAT)."
     (at 304.8 168.91 0)
     (effects
       (font
-        (size 1.27 1.27))
+        (size 1.016 1.016))
       (justify left bottom))
     (uuid "4c6813cd-055d-5ece-b84e-992a0db1792f"))
   (sheet
     (at 304.8 172.72)
-    (size 50.8 20.32)
+    (size 45.72 20.32)
     (fields_autoplaced yes)
     (stroke
       (width 0.1524)
@@ -5221,6 +5221,39 @@
         (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
           (reference "#PWR123")
           (unit 1)))))
+  (text "Лист 3 (справа): J6 дочерней платы счётчика пульсаций,\nJP4/JP5 в разрыве L_IS/R_IS → ADC_L/ADC_R (IC1.32/31)."
+    (at 304.8 162.56 0)
+    (effects
+      (font
+        (size 1.016 1.016))
+      (justify left bottom))
+    (uuid "324e5a16-9aec-5770-8136-a42d9b9f8446"))
+  (sheet
+    (at 353.06 172.72)
+    (size 45.72 20.32)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid))
+    (fill
+      (color 0 0 0 0.0000))
+    (uuid "954b59d7-1654-510b-b295-20b42a8de275")
+    (property "Sheetname" "Счётчик пульсаций (интерфейс)"
+      (at 353.06 172.0 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left bottom)))
+    (property "Sheetfile" "ripple.kicad_sch"
+      (at 353.06 193.6 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left top)))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
+          (page "3")))))
   (sheet_instances
     (path "/" (page "1"))
   )

@@ -21,8 +21,8 @@
  *   GP8  GPIO OUT  R_REN
  *   GP9  GPIO OUT  R_LEN
  *   ---- SBC UART link (UART1) --------------------------
- *   GP10 —          (free)
- *   GP11 —          (free)
+ *   GP10 —          (free; reserved: RIPPLE_PULSE_L — J6 daughterboard, kicad sheet 3)
+ *   GP11 —          (free; reserved: RIPPLE_PULSE_R — J6 daughterboard)
  *   GP12 UART1_TX   SBC RX  (RP2040 → SBC)
  *   GP13 UART1_RX   SBC TX  (SBC → RP2040)
  *   GP14 PIO OUT    LED_PANEL data (WS2812 chain: left panel → right)
@@ -30,13 +30,18 @@
  *
  * Pin assignment — right side (GP16-GP29, bottom to top):
  *
- *   GP16 —          (free)
+ *   GP16 —          (free; reserved: RIPPLE_AUX0 — J6 daughterboard)
+ *   GP17 —          (free; reserved: RIPPLE_AUX1 — J6 daughterboard)
+ *   GP18 —          (free; reserved: I2C1_SDA   — J6 daughterboard)
+ *   GP19 —          (free; reserved: I2C1_SCL   — J6 daughterboard)
  *   GP20 I2C0_SDA  IMU  (SDA)
  *   GP21 I2C0_SCL  IMU  (SCL)
  *   GP22 GPIO IN   IMU INT1
  *   GP25 GPIO OUT  Onboard LED (active high)
- *   GP26 ADC0      IS_RIGHT (1kΩ‖1kΩ RC filter from BTS7960 R IS pins — Phase 06)
- *   GP27 ADC1      IS_LEFT  (1kΩ‖1kΩ RC filter from BTS7960 L IS pins — Phase 06)
+ *   GP26 ADC0      IS_RIGHT (1kΩ‖1kΩ RC filter from BTS7960 R IS pins — Phase 06;
+ *                            net ADC_R, через перемычку JP5 от узла R_IS — kicad sheet 3)
+ *   GP27 ADC1      IS_LEFT  (1kΩ‖1kΩ RC filter from BTS7960 L IS pins — Phase 06;
+ *                            net ADC_L, через перемычку JP4 от узла L_IS)
  *   GP20 I2C0_SDA  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *   GP21 I2C0_SCL  IMU + ADS1115 + AHT30 (shared I2C0 bus)
  *

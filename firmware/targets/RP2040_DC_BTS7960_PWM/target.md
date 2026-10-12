@@ -138,13 +138,18 @@ GP14 → [ ЛЕВАЯ панель ] DOUT → [ ПРАВАЯ панель ]
 
 | Пин  | Аппаратные функции RP2040         | Возможное применение              |
 |------|-----------------------------------|-----------------------------------|
-| GP10 | SPI1_SCK / UART1_TX / PWM5A / I2C1_SDA | GPIO, SPI, доп. UART, ШИМ   |
-| GP11 | SPI1_TX  / UART1_RX / PWM5B / I2C1_SCL | GPIO, SPI, доп. UART, ШИМ   |
+| GP10 | SPI1_SCK / UART1_TX / PWM5A / I2C1_SDA | зарезервирован: PULSE_L дочерней платы счётчика пульсаций (J6, лист 3 схемы) |
+| GP11 | SPI1_TX  / UART1_RX / PWM5B / I2C1_SCL | зарезервирован: PULSE_R (J6)  |
 | GP15 | SPI1_TX  / UART0_RX / PWM7B / I2C1_SCL | GPIO, ШИМ, I2C              |
-| GP16 | SPI0_RX  / UART0_TX / PWM0A / I2C0_SDA | GPIO, ШИМ                   |
-| GP17 | SPI0_CSn / UART0_RX / PWM0B / I2C0_SCL | GPIO, ШИМ                   |
-| GP18 | SPI0_SCK / UART0_TX / PWM1A / I2C1_SDA | GPIO, ШИМ                   |
-| GP19 | SPI0_TX  / UART0_RX / PWM1B / I2C1_SCL | GPIO, ШИМ                   |
+| GP16 | SPI0_RX  / UART0_TX / PWM0A / I2C0_SDA | зарезервирован: AUX0 (J6)   |
+| GP17 | SPI0_CSn / UART0_RX / PWM0B / I2C0_SCL | зарезервирован: AUX1 (J6)   |
+| GP18 | SPI0_SCK / UART0_TX / PWM1A / I2C1_SDA | зарезервирован: I2C1_SDA (J6) |
+| GP19 | SPI0_TX  / UART0_RX / PWM1B / I2C1_SCL | зарезервирован: I2C1_SCL (J6) |
+
+Дочерняя плата счётчика пульсаций (J6, 1×14) делит эти GPIO с гребёнками
+H1–H8: занимать их можно либо платой, либо внешними датчиками, не вместе.
+Аналоговые входы GP26/GP27 идут от узлов IS через перемычки JP5/JP4 —
+дочерняя плата с аналоговым выходом (LM2917) подменяет их на свой сигнал.
 
 
 ## Частота несущей ШИМ
