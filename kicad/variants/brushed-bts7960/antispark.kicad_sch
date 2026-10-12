@@ -781,6 +781,272 @@
             (type default))
           (fill
             (type none)))))
+    (symbol "Amplifier_Current:INA240A2D"
+      (pin_names
+        (offset 0.127))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "U"
+        (at 3.81 3.81 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "INA240A2D"
+        (at 3.81 -2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+        (at 0 -16.51 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Datasheet" "http://www.ti.com/lit/ds/symlink/ina240.pdf"
+        (at 3.81 3.81 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Description" "High- and Low-Side, Bidirectional, Zero-Drift, Current-Sense Amplifier With Enhanced PWM Rejection, 50V/V, SOIC-8"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_keywords" "current monitor shunt sensor bidirectional high low"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_fp_filters" "SOIC*3.9x4.9mm*P1.27mm*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (symbol "INA240A2D_0_1"
+        (polyline
+          (pts
+            (xy 5.08 0)
+            (xy -5.08 5.08)
+            (xy -5.08 -5.08)
+            (xy 5.08 0))
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background))))
+      (symbol "INA240A2D_1_1"
+        (pin input line
+          (at -7.62 -2.54 0)
+          (length 2.54)
+          (name "-"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin power_in line
+          (at -2.54 -7.62 90)
+          (length 3.81)
+          (name "GND"
+            (effects
+              (font
+                (size 1.016 1.016))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -7.62 90)
+          (length 5.08)
+          (name "REF2"
+            (effects
+              (font
+                (size 0.508 0.508))))
+          (number "3"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at -2.54 -7.62 90)
+          (length 3.81)
+          hide
+          (name "GND"
+            (effects
+              (font
+                (size 1.016 1.016))))
+          (number "4"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin output line
+          (at 7.62 0 180)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "5"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin power_in line
+          (at -2.54 7.62 270)
+          (length 3.81)
+          (name "V+"
+            (effects
+              (font
+                (size 1.016 1.016))))
+          (number "6"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 2.54 -7.62 90)
+          (length 6.35)
+          (name "REF1"
+            (effects
+              (font
+                (size 0.508 0.508))))
+          (number "7"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin input line
+          (at -7.62 2.54 0)
+          (length 2.54)
+          (name "+"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "8"
+            (effects
+              (font
+                (size 1.27 1.27)))))))
+    (symbol "Jumper:SolderJumper_2_Bridged"
+      (pin_numbers hide)
+      (pin_names
+        (offset 0)
+        hide)
+      (exclude_from_sim no)
+      (in_bom no)
+      (on_board yes)
+      (property "Reference" "JP"
+        (at 0 2.032 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "SolderJumper_2_Bridged"
+        (at 0 -2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Datasheet" ""
+        (at 0 -6.35 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Description" "Solder Jumper, 2-pole, closed/bridged"
+        (at 0 -5.08 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_keywords" "solder jumper SPST"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_fp_filters" "SolderJumper*Bridged*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (symbol "SolderJumper_2_Bridged_0_1"
+        (rectangle
+          (start -0.508 0.508)
+          (end 0.508 -0.508)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type outline)))
+        (polyline
+          (pts
+            (xy -0.254 1.016)
+            (xy -0.254 -1.016))
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none)))
+        (arc
+          (start -0.254 -1.016)
+          (mid -1.2656 0)
+          (end -0.254 1.016)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type outline)))
+        (arc
+          (start 0.254 1.016)
+          (mid 1.2656 0)
+          (end 0.254 -1.016)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type outline)))
+        (polyline
+          (pts
+            (xy 0.254 1.016)
+            (xy 0.254 -1.016))
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "SolderJumper_2_Bridged_1_1"
+        (pin passive line
+          (at -5.08 0 0)
+          (length 3.81)
+          (name "A"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 5.08 0 180)
+          (length 3.81)
+          (name "B"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27)))))))
     (symbol "biba:GND"
       (power)
       (pin_numbers hide)
@@ -1243,13 +1509,13 @@
             (effects
               (font
                 (size 1.27 1.27))))))))
-  (text "Антиспарк-выключатель шины 24 В: BAT+ → Q1‖Q2 (N-MOSFET, верхнее плечо) → VIN. Драйвер LTC7004, мягкий старт RC на затворе (RG·CG), выключатель — J5."
+  (text "Антиспарк-выключатель шины 24 В: BAT+ → Q1‖Q2 (N-MOSFET, верхнее плечо) → VSW → шунт R37 → VIN. Драйвер LTC7004, мягкий старт RC на затворе (RG·CG), выключатель — J5."
     (at 15.24 22.86 0)
     (effects
       (font
         (size 1.78 1.78))
       (justify left bottom))
-    (uuid "5d48d771-4703-5cb2-8aaf-a4e35fb178fa"))
+    (uuid "01e2e88b-19b0-51bb-b4c6-9fb7d9752715"))
   (text "Выключатель J5: перемычка — «всегда включено» (чистый антиспарк), тумблер / ключ / геркон — вкл/выкл. Ток через контакты ~1 мА при 24 В."
     (at 15.24 27.94 0)
     (effects
@@ -1457,7 +1723,7 @@
       (width 0)
       (type default))
     (uuid "156b840d-a818-5037-891b-0ded9dec655a"))
-  (global_label "VIN"
+  (global_label "VSW"
     (shape input)
     (at 180.34 60.96 0)
     (fields_autoplaced yes)
@@ -1465,7 +1731,7 @@
       (font
         (size 1.27 1.27))
       (justify left))
-    (uuid "fcb70016-e4dd-5424-a629-90b98a532195")
+    (uuid "7ca34d64-f33d-542b-9671-e3a7b45e38a6")
     (property "Intersheetrefs" "${INTERSHEET_REFS}"
       (at 180.34 60.96 0)
       (effects
@@ -3369,7 +3635,7 @@
       (width 0)
       (type default))
     (uuid "e508e041-87bd-5727-9646-0298f7cbc07a"))
-  (global_label "VIN"
+  (global_label "VSW"
     (shape input)
     (at 160.02 127 0)
     (fields_autoplaced yes)
@@ -3377,7 +3643,7 @@
       (font
         (size 1.27 1.27))
       (justify left))
-    (uuid "08e62509-d27e-5557-b9e9-3333425bfe60")
+    (uuid "6ac81eaf-a99e-51e5-8c18-84b350d89479")
     (property "Intersheetrefs" "${INTERSHEET_REFS}"
       (at 160.02 127 0)
       (effects
@@ -3646,30 +3912,1046 @@
           (reference "#PWR141")
           (unit 1)))))
   (text "Q1, Q2: ≥60 В, ≤3 мОм, TO-263 (IPB020N10N5 — из типовой схемы даташита); ставится 1 или 2 шт. Нет защиты от переполюсовки. Body-диоды пропускают рекуперацию VIN→BAT+ и при выключенном ключе."
-    (at 15.24 160.02 0)
+    (at 15.24 152.4 0)
     (effects
       (font
         (size 1.27 1.27))
       (justify left bottom))
     (uuid "89334b1e-9484-57d1-8f3d-44aef5b7b090"))
   (text "78L12: вход ≤35 В — D3 27 В + R33 100 Ом защищают его при выбросах на BAT+ (BMS закрыл заряд, рекуперация). VCCUV открыт → UVLO VCC 7 В. OVLO не используется (на GND)."
-    (at 15.24 164.08 0)
+    (at 15.24 156.21 0)
     (effects
       (font
         (size 1.27 1.27))
       (justify left bottom))
     (uuid "11cc4608-b85f-548c-89d7-f9a5820c72e6"))
   (text "CB (C20) > QG/1 В + 10·CG ≈ 0.4 + 4.7 мкФ → 10 мкФ. D4 заряжает CB от VCC до включения (насос даёт 30 мкА, иначе ~4 с). R32 10 Ом гасит генерацию из-за CG."
-    (at 15.24 168.14 0)
+    (at 15.24 160.02 0)
     (effects
       (font
         (size 1.27 1.27))
       (justify left bottom))
     (uuid "75abfc93-d622-53b4-be7f-df466a8ae444"))
   (text "Выключение: J5 размыкается → SW_IN падает → INP < 1.6 В → TGDN сажает затвор на TS за мкс, VCC ещё жив. В выключенном состоянии от батареи ничего не потребляется."
-    (at 15.24 172.21 0)
+    (at 15.24 163.83 0)
     (effects
       (font
         (size 1.27 1.27))
       (justify left bottom))
-    (uuid "7ae0322b-eda5-5669-b799-05bebc725153")))
+    (uuid "7ae0322b-eda5-5669-b799-05bebc725153"))
+  (text "Измерение шины (как power module APM: шунт + усилитель + делитель):"
+    (at 200.66 40.64 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "d283605f-bd20-58bf-a2f6-02dbc8964c67"))
+  (text "R37 0.5 мОм → INA240A2 (50 В/В, синфазное −4…+80 В, подавление ШИМ) → 25 мВ/А."
+    (at 200.66 44.45 0)
+    (effects
+      (font
+        (size 1.02 1.02))
+      (justify left bottom))
+    (uuid "3621c8b6-6f62-5223-b336-09d1947fbeba"))
+  (text "REF1=3.3V, REF2=GND → середина 1.65 В, двунаправленно ±66 А (32 мА/LSB)."
+    (at 200.66 47.63 0)
+    (effects
+      (font
+        (size 1.02 1.02))
+      (justify left bottom))
+    (uuid "757bfd6d-0067-582d-947c-f8077bc260ad"))
+  (text "Делитель 100k/10k (1:11): 36 В = 3.3 В. JP1/JP2 замкнуты = VBAT/IBAT с платы;"
+    (at 200.66 50.8 0)
+    (effects
+      (font
+        (size 1.02 1.02))
+      (justify left bottom))
+    (uuid "e6647a66-7ff1-50ef-9dc7-a6b9225af25d"))
+  (text "отрезать, если датчики с внешнего модуля через H10. Прошивка: IBAT 40 А/В,"
+    (at 200.66 53.98 0)
+    (effects
+      (font
+        (size 1.02 1.02))
+      (justify left bottom))
+    (uuid "3c7e2cd9-d4cf-5840-aa45-bf1c86724ce8"))
+  (text "смещение 1.65 В, BIBA_VBAT_DIVIDER_RATIO ≈ 11 — откалибровать на плате."
+    (at 200.66 57.15 0)
+    (effects
+      (font
+        (size 1.02 1.02))
+      (justify left bottom))
+    (uuid "2dd247c9-267d-5c36-8be4-6caf569ced93"))
+  (global_label "VSW"
+    (shape input)
+    (at 213.36 88.9 180)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify right))
+    (uuid "0a8a0d85-b130-51ca-9c76-65a37ba64d82")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 213.36 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (symbol
+    (lib_id "Device:R")
+    (at 223.52 88.9 90)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "8eaa0826-12c8-5a1a-a4a7-9b19346ad03b")
+    (property "Reference" "R37"
+      (at 220.5 85.1 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "0.5mR 3W"
+      (at 218 92.7 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Resistor_SMD:R_2512_6332Metric"
+      (at 223.52 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 223.52 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" "2512, шунт"
+      (at 223.52 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 223.52 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 223.52 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "b5e4b7b1-8f02-53e1-aa48-2f06214f28ee"))
+    (pin "2"
+      (uuid "7c4b534a-5ac4-52e8-886c-adcc8a571a73"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "R37")
+          (unit 1)))))
+  (wire
+    (pts
+      (xy 213.36 88.9)
+      (xy 219.71 88.9))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "57e0366c-17fd-51fb-b22e-05ddce9a5061"))
+  (wire
+    (pts
+      (xy 227.33 88.9)
+      (xy 266.7 88.9))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "870ebd07-5081-5496-9e7b-b96fe6905f5c"))
+  (global_label "VIN"
+    (shape input)
+    (at 266.7 88.9 0)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left))
+    (uuid "3f07b10b-b3b4-56d2-a817-c3809ef01b4d")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 266.7 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (text "Входы U10 — отдельными (Kelvin) дорожками от площадок R37, не от силовых полигонов."
+    (at 205.74 80.01 0)
+    (effects
+      (font
+        (size 1.02 1.02))
+      (justify left bottom))
+    (uuid "1034d75c-9909-5aa5-a7a3-53b0a3cc1479"))
+  (symbol
+    (lib_id "Amplifier_Current:INA240A2D")
+    (at 248.92 115.57 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "dd041510-c821-5f49-a931-22a77a91d816")
+    (property "Reference" "U10"
+      (at 236 124 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "INA240A2D"
+      (at 229 126.5 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+      (at 248.92 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 248.92 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 248.92 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 248.92 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" "INA240A2DR"
+      (at 248.92 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "28d0af6d-8e69-5383-93fe-2f5c63a0fb81"))
+    (pin "2"
+      (uuid "38250e0d-f96a-5f24-b928-a9646e558e85"))
+    (pin "3"
+      (uuid "befbb2e0-c729-5572-a16c-eb4661acb2c2"))
+    (pin "4"
+      (uuid "1746bc89-467a-5282-a93f-174cacaaf66b"))
+    (pin "5"
+      (uuid "c94c8b38-7295-58d7-8178-0169c45a205b"))
+    (pin "6"
+      (uuid "dacc8e4c-035c-5390-8b52-e3c61139c5d6"))
+    (pin "7"
+      (uuid "7972a997-48af-54e3-ab23-36aa27e73fc6"))
+    (pin "8"
+      (uuid "57bae730-a29a-5089-b951-a2cf5a0817e8"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "U10")
+          (unit 1)))))
+  (global_label "VSW"
+    (shape input)
+    (at 233.68 113.03 180)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify right))
+    (uuid "c73b34f5-7d57-5a75-9573-26fbbfdd5918")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 233.68 113.03 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (wire
+    (pts
+      (xy 233.68 113.03)
+      (xy 241.3 113.03))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "a08ccab6-64be-5396-b014-e5812dca9973"))
+  (global_label "VIN"
+    (shape input)
+    (at 233.68 118.11 180)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify right))
+    (uuid "163c4458-519e-503d-b92e-204e44ab406c")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 233.68 118.11 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (wire
+    (pts
+      (xy 233.68 118.11)
+      (xy 241.3 118.11))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "19cc7d00-c22a-5e41-a988-8b073738aa49"))
+  (wire
+    (pts
+      (xy 246.38 107.95)
+      (xy 246.38 101.6))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "09a0d39b-3da8-5436-bbb4-c261bfd31579"))
+  (global_label "3.3V"
+    (shape input)
+    (at 246.38 101.6 90)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left))
+    (uuid "a46d1551-c44c-53e3-af5d-9c08d24f50b2")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 246.38 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (symbol
+    (lib_id "Device:C")
+    (at 242.57 104.14 90)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "be14bec3-a2bb-594b-830b-a8a38fdd41cd")
+    (property "Reference" "C24"
+      (at 240 100.3 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100n"
+      (at 240 107.9 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "biba:C0805"
+      (at 242.57 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 242.57 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 242.57 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 242.57 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 242.57 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "ffa7c5c8-b590-5474-acf0-779c56fb7438"))
+    (pin "2"
+      (uuid "5a3b621e-29a2-5a28-be1c-d3e92a48b549"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "C24")
+          (unit 1)))))
+  (junction
+    (at 246.38 104.14)
+    (diameter 0)
+    (color 0 0 0 0)
+    (uuid "a20ca907-9dd0-5fc0-8f1a-d5bfb0923c89"))
+  (symbol
+    (lib_id "biba:GND")
+    (at 238.76 104.14 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "a541c572-0f33-5ffa-b07d-dd572b521ad0")
+    (property "Reference" "#PWR142"
+      (at 238.76 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)
+        hide))
+    (property "Value" "GND"
+      (at 237.56 109.94 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 238.76 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 238.76 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "9fd74f0b-27c3-52da-b3e0-789f6820c87d"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "#PWR142")
+          (unit 1)))))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 246.38 101.6 90)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "2dcac7f3-5488-5e1c-9e8c-9c65b81d889c")
+    (property "Reference" "#FLG03"
+      (at 246.38 101.6 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)
+        hide))
+    (property "Value" "PWR_FLAG"
+      (at 229 100.3 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 246.38 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 246.38 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "5e2a86bb-7144-5bcc-9113-5115f4dc17a3"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "#FLG03")
+          (unit 1)))))
+  (junction
+    (at 246.38 101.6)
+    (diameter 0)
+    (color 0 0 0 0)
+    (uuid "bba6277a-88de-52c7-b016-3fa47106a84f"))
+  (wire
+    (pts
+      (xy 246.38 123.19)
+      (xy 246.38 128.27))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "8915ffc0-fc99-5434-87dc-65da70464d5d"))
+  (symbol
+    (lib_id "biba:GND")
+    (at 246.38 128.27 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "a114933b-22e1-5595-893f-8237f03fcee1")
+    (property "Reference" "#PWR143"
+      (at 246.38 128.27 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)
+        hide))
+    (property "Value" "GND"
+      (at 245.18 134.07 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 246.38 128.27 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 246.38 128.27 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "d1c01491-0a34-5a5b-9926-31ae444662bc"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "#PWR143")
+          (unit 1)))))
+  (wire
+    (pts
+      (xy 248.92 123.19)
+      (xy 248.92 125.73))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "53fd31dd-de92-5a13-9c98-ae9358f5e8fc"))
+  (wire
+    (pts
+      (xy 248.92 125.73)
+      (xy 246.38 125.73))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "be6b2d9c-03a8-5c74-a1b5-7363189dce80"))
+  (junction
+    (at 246.38 125.73)
+    (diameter 0)
+    (color 0 0 0 0)
+    (uuid "a45b1b68-fadf-5204-801f-7b38eac68d4a"))
+  (wire
+    (pts
+      (xy 251.46 123.19)
+      (xy 251.46 127))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "4cd97bd0-9efc-5b3e-980d-e8bb863c5a5f"))
+  (global_label "3.3V"
+    (shape input)
+    (at 251.46 127 0)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left))
+    (uuid "c759fb18-d49a-5855-8e0d-bcb1c78038d9")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 251.46 127 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (symbol
+    (lib_id "Jumper:SolderJumper_2_Bridged")
+    (at 266.7 115.57 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "840de5da-a987-58b5-aa77-91d537781877")
+    (property "Reference" "JP2"
+      (at 267 112.3 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "IBAT c платы"
+      (at 260 119.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm"
+      (at 266.7 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 266.7 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 266.7 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 266.7 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 266.7 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "a3ccd4ca-9193-5702-9bdc-d6518d0943b9"))
+    (pin "2"
+      (uuid "80e5e832-9a0d-542f-9715-66ff6010028e"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "JP2")
+          (unit 1)))))
+  (wire
+    (pts
+      (xy 256.54 115.57)
+      (xy 261.62 115.57))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "6d8008ff-cdac-5734-97ce-768b227f0d45"))
+  (wire
+    (pts
+      (xy 271.78 115.57)
+      (xy 274.32 115.57))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "ac7f73eb-4a0c-5ee4-b467-65c9f585111e"))
+  (global_label "IBAT"
+    (shape input)
+    (at 274.32 115.57 0)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left))
+    (uuid "6a917207-34db-5a77-bbbb-fb3efb9c80d0")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 274.32 115.57 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (symbol
+    (lib_id "Device:R")
+    (at 259.08 92.71 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "00ab450c-2cfd-5fa5-b5ea-d53b2d94c30a")
+    (property "Reference" "R38"
+      (at 260.4 91.4 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100k"
+      (at 260.4 93.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "biba:R0805"
+      (at 259.08 92.71 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 259.08 92.71 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 259.08 92.71 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 259.08 92.71 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 259.08 92.71 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "ca8464ff-8e9e-5494-bdf0-7cd7d719ba5f"))
+    (pin "2"
+      (uuid "bfe704a0-4a31-5a5a-82b2-ce2e93b62c82"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "R38")
+          (unit 1)))))
+  (symbol
+    (lib_id "Device:R")
+    (at 259.08 102.87 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "644051cc-eb3a-5803-a81c-470151c76fb1")
+    (property "Reference" "R39"
+      (at 260.4 101 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "10k"
+      (at 260.4 103.5 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "biba:R0805"
+      (at 259.08 102.87 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 259.08 102.87 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 259.08 102.87 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 259.08 102.87 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 259.08 102.87 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "56628624-cf74-54be-9428-77df02f6c8ba"))
+    (pin "2"
+      (uuid "a0bbbcc0-96f3-5417-aebe-6342ed7d3e69"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "R39")
+          (unit 1)))))
+  (junction
+    (at 259.08 88.9)
+    (diameter 0)
+    (color 0 0 0 0)
+    (uuid "e7bb1e7f-3c7b-5385-9273-587591c76c6e"))
+  (wire
+    (pts
+      (xy 259.08 96.52)
+      (xy 259.08 99.06))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "ebf9840b-9a44-5408-96e0-5eafe849ee19"))
+  (junction
+    (at 259.08 97.79)
+    (diameter 0)
+    (color 0 0 0 0)
+    (uuid "630a3c46-7ecc-5060-b723-92b158debe22"))
+  (wire
+    (pts
+      (xy 259.08 97.79)
+      (xy 264.16 97.79))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "a2c63466-9f6a-5770-972f-60937305f43d"))
+  (symbol
+    (lib_id "Jumper:SolderJumper_2_Bridged")
+    (at 269.24 97.79 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "385dbd5b-a7b4-53f0-a482-9316d3fdd4c4")
+    (property "Reference" "JP1"
+      (at 266 94.7 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "VBAT c платы"
+      (at 266 102 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm"
+      (at 269.24 97.79 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 269.24 97.79 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 269.24 97.79 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 269.24 97.79 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 269.24 97.79 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "2a92f853-bd2f-52ba-903d-1a0b44f7f09e"))
+    (pin "2"
+      (uuid "fd86a5e1-85c8-553c-bd93-f2ed6e5807d9"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "JP1")
+          (unit 1)))))
+  (wire
+    (pts
+      (xy 274.32 97.79)
+      (xy 274.32 97.79))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "3a5dfa72-7461-54aa-96b1-ed974739f4e8"))
+  (global_label "VBAT"
+    (shape input)
+    (at 274.32 97.79 0)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left))
+    (uuid "56ee449c-cec2-52c3-9283-3edf9aea961e")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 274.32 97.79 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (symbol
+    (lib_id "Device:C")
+    (at 254 99.06 90)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "e1f9cbb6-bb8d-5f08-96f2-3109f7013334")
+    (property "Reference" "C23"
+      (at 250.5 96.3 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100n"
+      (at 254.5 96.3 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "biba:C0805"
+      (at 254 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 254 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 254 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 254 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 254 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "99634429-34a1-5fb6-b14e-d13cbc7f9e1b"))
+    (pin "2"
+      (uuid "1732dae3-bbb2-5610-9165-ec8b7d2e0b3e"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "C23")
+          (unit 1)))))
+  (wire
+    (pts
+      (xy 257.81 99.06)
+      (xy 259.08 99.06))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "8140e87d-de25-5d8b-80dc-10ed2677c58a"))
+  (junction
+    (at 259.08 99.06)
+    (diameter 0)
+    (color 0 0 0 0)
+    (uuid "2673f789-e3b3-50ea-bf77-2c272fa502e5"))
+  (symbol
+    (lib_id "biba:GND")
+    (at 250.19 99.06 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "053a6b7e-e910-5e06-aaef-96b901fd5c7e")
+    (property "Reference" "#PWR144"
+      (at 250.19 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)
+        hide))
+    (property "Value" "GND"
+      (at 248.99 104.86 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 250.19 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 250.19 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "1d2e5e9d-f51d-5403-adad-6b4423204f33"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "#PWR144")
+          (unit 1)))))
+  (symbol
+    (lib_id "biba:GND")
+    (at 259.08 106.68 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "e0b5a237-b8b5-585b-a80b-8064ce726725")
+    (property "Reference" "#PWR145"
+      (at 259.08 106.68 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)
+        hide))
+    (property "Value" "GND"
+      (at 257.88 112.48 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 259.08 106.68 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 259.08 106.68 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "c1928f2f-f924-5ae1-87d7-04f4378038c4"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c/34cf75ef-d557-52dc-a24c-f2d81962f303"
+          (reference "#PWR145")
+          (unit 1))))))

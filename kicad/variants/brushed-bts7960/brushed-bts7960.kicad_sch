@@ -999,10 +999,10 @@
     (pin_names (offset 0.508))
     (exclude_from_sim no) (in_bom yes) (on_board yes)
     (property "Reference" "PM" (at 0 6.35 0) (effects (font (size 1.27 1.27))))
-    (property "Value" "NSD10-48S5" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "NSD10-12S5" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
     (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Description" "Mean Well NSD10-48S5, 22-72V -> 5V 2A, DIP-6" (at 0 0 0)
+    (property "Description" "Mean Well NSD10-12S5, 9.8-36V -> 5V 2A, DIP-6" (at 0 0 0)
       (effects (font (size 1.27 1.27)) hide))
     (symbol "NSD10_0_1"
       (rectangle (start -5.08 4.445) (end 5.08 -4.445)
@@ -1030,6 +1030,114 @@
         (number "5" (effects (font (size 1.27 1.27)))))
     )
   )
+    (symbol "Jumper:SolderJumper_2_Open"
+      (pin_numbers hide)
+      (pin_names
+        (offset 0)
+        hide)
+      (exclude_from_sim no)
+      (in_bom no)
+      (on_board yes)
+      (property "Reference" "JP"
+        (at 0 2.032 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "SolderJumper_2_Open"
+        (at 0 -2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Datasheet" ""
+        (at 0 -7.62 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Description" "Solder Jumper, 2-pole, open"
+        (at 0 -5.08 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_keywords" "solder jumper SPST"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_fp_filters" "SolderJumper*Open*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (symbol "SolderJumper_2_Open_0_1"
+        (polyline
+          (pts
+            (xy -0.254 1.016)
+            (xy -0.254 -1.016))
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none)))
+        (arc
+          (start -0.254 -1.016)
+          (mid -1.2656 0)
+          (end -0.254 1.016)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type outline)))
+        (arc
+          (start 0.254 1.016)
+          (mid 1.2656 0)
+          (end 0.254 -1.016)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type outline)))
+        (polyline
+          (pts
+            (xy 0.254 1.016)
+            (xy 0.254 -1.016))
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "SolderJumper_2_Open_1_1"
+        (pin passive line
+          (at -5.08 0 0)
+          (length 3.81)
+          (name "A"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 5.08 0 180)
+          (length 3.81)
+          (name "B"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27)))))))
   )
   (symbol (lib_id "biba:C") (at 110.49 33.02 0) (unit 1)
     (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
@@ -3039,13 +3147,6 @@
     (pin "1" (uuid "06a67711-8c81-5ed0-adb8-0c9c90d73a63"))
     (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#PWR026") (unit 1))))
   )
-  (global_label "SW" (shape input) (at 151.13 208.28 90)
-    (fields_autoplaced yes)
-    (effects (font (size 1.27 1.27)) (justify left))
-    (uuid "293e8d84-7c50-5a57-b0d3-325ccf8440ce")
-    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 151.13 208.28 0)
-      (effects (font (size 1.27 1.27)) hide))
-  )
   (symbol (lib_id "biba:GND") (at 140.97 205.74 270) (unit 1)
     (exclude_from_sim no) (in_bom no) (on_board no) (dnp no)
     (uuid "30dd5461-d928-5ce4-a0a9-7e522e2f82db")
@@ -4160,9 +4261,6 @@
   (wire (pts (xy 165.1 152.4) (xy 175.26 152.4))
     (stroke (width 0) (type default))
     (uuid "94a2e8b6-0b4b-5094-9262-20eb8ca67960"))
-  (wire (pts (xy 151.13 208.28) (xy 151.13 209.55))
-    (stroke (width 0) (type default))
-    (uuid "64d36efc-d584-5ace-af61-785298028e08"))
   (wire (pts (xy 148.59 209.55) (xy 148.59 205.74))
     (stroke (width 0) (type default))
     (uuid "0a56b00b-5c60-5099-a1cb-a80f1f29a24a"))
@@ -4863,7 +4961,7 @@
     (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 180.34 279.40 0)
       (effects (font (size 1.27 1.27)) hide))
   )
-  (text "Альтернативный DC/DC: ставится ЛИБО PM1 (SKMW30G-05), ЛИБО PM2 (NSD10-48S5).\nВыводы 3/4/5 у них разные, поэтому посадочные места раздельные — общих отверстий нет."
+  (text "Альтернативный DC/DC: ставится ЛИБО PM1 (SKMW30G-05), ЛИБО PM2 (NSD10-12S5).\nВыводы 3/4/5 у них разные, поэтому посадочные места раздельные — общих отверстий нет."
     (at 227.33 227.33 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid "10b12b38-e717-5e1a-9b1c-d572f6532334"))
@@ -4872,7 +4970,7 @@
     (uuid "68dbe387-e617-59a9-b504-4356c525d006")
     (property "Reference" "PM2" (at 248.92 236.22 0)
       (effects (font (size 1.27 1.27))))
-    (property "Value" "NSD10-48S5" (at 248.92 254.00 0)
+    (property "Value" "NSD10-12S5" (at 248.92 254.00 0)
       (effects (font (size 1.27 1.27))))
     (property "Footprint" "Converter_DCDC:Converter_DCDC_MeanWell_NSD10_THT" (at 250.19 245.11 0)
       (effects (font (size 1.27 1.27)) hide))
@@ -4880,7 +4978,7 @@
       (effects (font (size 1.27 1.27)) hide))
     (property "Package" "" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
     (property "LCSC" "" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "MPN" "NSD10-48S5" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
+    (property "MPN" "NSD10-12S5" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
     (pin "1" (uuid "fdfca062-54b4-54db-a6c3-82d4ebaf1acb"))
     (pin "2" (uuid "8d9c76d9-45ec-5062-bc96-6f962a206434"))
     (pin "6" (uuid "9a4a1fb6-3282-5c50-a0a8-35fd289c2228"))
@@ -4970,6 +5068,159 @@
       (project "brushed-bts7960"
         (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
           (page "2")))))
+  (no_connect
+    (at 151.13 209.55)
+    (uuid "3dc831e6-2d07-537b-9883-8fe9abf356d6"))
+  (text "J2.1 (SW) не подключён —\nвыключатель один: J5, лист 2."
+    (at 158.75 213.36 0)
+    (effects
+      (font
+        (size 1.016 1.016))
+      (justify left bottom))
+    (uuid "2ef768ff-82d6-537e-965c-c796e421fdda"))
+  (text "JP3 открыт — DC/DC включён (R.C./CTRL: open = ON, short to -Vin = OFF, даташиты Mean Well). Замкнуть только для сервиса (погасить 5 В при живой шине)."
+    (at 100.33 166.37 0)
+    (effects
+      (font
+        (size 1.016 1.016))
+      (justify left bottom))
+    (uuid "2c8027ca-dda6-5160-865a-1179b5fee179"))
+  (global_label "SW"
+    (shape input)
+    (at 114.3 170.18 180)
+    (fields_autoplaced yes)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify right))
+    (uuid "b9d41db8-457f-57d8-89c7-c9ced9c63185")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 114.3 170.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide)))
+  (wire
+    (pts
+      (xy 114.3 170.18)
+      (xy 116.84 170.18))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "73559363-e6ce-5731-bd5c-5ec2ca8f8417"))
+  (symbol
+    (lib_id "Jumper:SolderJumper_2_Open")
+    (at 121.92 170.18 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "c95d7c0f-f79f-5bbd-9faf-288a949f1302")
+    (property "Reference" "JP3"
+      (at 121.92 166.37 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "DC/DC OFF (сервис)"
+      (at 107.95 175.26 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" "Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm"
+      (at 121.92 170.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 121.92 170.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Package" ""
+      (at 121.92 170.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "LCSC" ""
+      (at 121.92 170.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "MPN" ""
+      (at 121.92 170.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "88644416-adfc-5b4d-9a89-84ad4bf4df8a"))
+    (pin "2"
+      (uuid "ed6f7b4d-6f6c-5563-bc6e-6184ece18f83"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
+          (reference "JP3")
+          (unit 1)))))
+  (wire
+    (pts
+      (xy 127.0 170.18)
+      (xy 129.54 170.18))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "f09035be-1268-5cb8-99c2-af4840564508"))
+  (wire
+    (pts
+      (xy 129.54 170.18)
+      (xy 129.54 172.72))
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "7170bf87-5e34-54b8-8b64-168ac54a228b"))
+  (symbol
+    (lib_id "biba:GND")
+    (at 129.54 172.72 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "d0be95aa-00c4-5341-b4b2-38b3604edbc0")
+    (property "Reference" "#PWR123"
+      (at 129.54 172.72 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Value" "GND"
+      (at 128.3 178.5 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 129.54 172.72 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (property "Datasheet" ""
+      (at 129.54 172.72 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        hide))
+    (pin "1"
+      (uuid "e55d1134-d80b-54f2-8b80-073f25f24c88"))
+    (instances
+      (project "brushed-bts7960"
+        (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
+          (reference "#PWR123")
+          (unit 1)))))
   (sheet_instances
     (path "/" (page "1"))
   )

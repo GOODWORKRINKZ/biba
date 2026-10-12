@@ -989,10 +989,10 @@
     (pin_names (offset 0.508))
     (exclude_from_sim no) (in_bom yes) (on_board yes)
     (property "Reference" "PM" (at 0 6.35 0) (effects (font (size 1.27 1.27))))
-    (property "Value" "NSD10-48S5" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "NSD10-12S5" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
     (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Description" "Mean Well NSD10-48S5, 22-72V -> 5V 2A, DIP-6" (at 0 0 0)
+    (property "Description" "Mean Well NSD10-12S5, 9.8-36V -> 5V 2A, DIP-6" (at 0 0 0)
       (effects (font (size 1.27 1.27)) hide))
     (symbol "NSD10_0_1"
       (rectangle (start -5.08 4.445) (end 5.08 -4.445)
