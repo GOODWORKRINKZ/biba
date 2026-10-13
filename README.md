@@ -76,6 +76,7 @@ BiBa поддерживает три композиции железа. Где �
 - `voice-work/` — staging-каталог для сгенерированных кандидатов перед promote в production voice каталог
 - `docs/deployment.md` — руководство по развёртыванию по композициям
 - `docs/system_architecture.md` — канонический обзор всех трёх композиций
+- `firmware/docs/openipc_wfb.md` — приём FPV-видео с OpenIPC-камеры по радио (RTL8812AU + wfb-ng)
 - `.agents/skills/` — вендорный каталог skills
 
 ## Quick-start по композициям

@@ -102,6 +102,11 @@ tools\biba_eye\run.cmd                                             # запус�
   (CRSF/CAN) в один экран — продолжение `tools/camera_fpv.py`.
 
 ## OpenIPC (альтернативная прошивка, кандидат)
+
+> Готовый рабочий рецепт приёма видео с OpenIPC-камеры (Goke GK7205V200 + RTL8812AU)
+> по радио через wfb-ng (RTL8812AU monitor + `wfb_rx`) — в
+> [`openipc_wfb.md`](openipc_wfb.md).
+
 Идея: заменить стоковую прошивку V380 на OpenIPC → задержка ~100 мс вместо
 300–500, локальные RTSP/MJPEG/HTTP без облака — для FPV это лучшее решение.
 
