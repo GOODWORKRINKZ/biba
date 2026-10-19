@@ -11,6 +11,170 @@
     (comment 1 "Конвертировано из EasyEDA (scripts/easyeda_sch2kicad.py)")
   )
   (lib_symbols
+    (symbol "Connector_Generic:Conn_01x02"
+      (pin_names
+        (offset 1.016)
+        hide)
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "J"
+        (at 0 2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "Conn_01x02"
+        (at 0 -5.08 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Description" "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_keywords" "connector"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_fp_filters" "Connector*:*_1x??_*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (symbol "Conn_01x02_1_1"
+        (rectangle
+          (start -1.27 1.27)
+          (end 1.27 -3.81)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background)))
+        (rectangle
+          (start -1.27 0.127)
+          (end 0 -0.127)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none)))
+        (rectangle
+          (start -1.27 -2.413)
+          (end 0 -2.667)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none)))
+        (pin passive line
+          (at -5.08 0 0)
+          (length 3.81)
+          (name "Pin_1"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at -5.08 -2.54 0)
+          (length 3.81)
+          (name "Pin_2"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27)))))))
+    (symbol "power:PWR_FLAG"
+      (power)
+      (pin_numbers hide)
+      (pin_names
+        (offset 0)
+        hide)
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          hide))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))))
     (symbol "biba:C"
       (pin_numbers hide)
       (pin_names (offset 0.508) hide)
@@ -1685,13 +1849,13 @@
     (uuid "944af989-e757-506c-9bd1-10c4fae1570c")
     (property "Reference" "PM1" (at 149.0751 143.6167 0)
       (effects (font (size 1.27 1.27))))
-    (property "Value" "SKMW30f-05" (at 152.9334 145.9357 0)
+    (property "Value" "SKMW30G-05 / NSD10-12S5" (at 152.9334 145.9357 0)
       (effects (font (size 1.27 1.27))))
-    (property "Footprint" "biba:SKMW30G-05" (at 139.7 157.48 0)
+    (property "Footprint" "biba:DCDC_SKMW30_NSD10" (at 139.7 157.48 0)
       (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "" (at 139.7 157.48 0)
       (effects (font (size 1.27 1.27)) hide))
-    (property "Package" "SKMW30G-05" (at 139.7 157.48 0)
+    (property "Package" "SKMW30G-05 или NSD10-12S5" (at 139.7 157.48 0)
       (effects (font (size 1.27 1.27)) hide))
     (property "LCSC" "" (at 139.7 157.48 0)
       (effects (font (size 1.27 1.27)) hide))
@@ -4961,80 +5125,6 @@
     (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 180.34 279.40 0)
       (effects (font (size 1.27 1.27)) hide))
   )
-  (text "Альтернативный DC/DC: ставится ЛИБО PM1 (SKMW30G-05), ЛИБО PM2 (NSD10-12S5).\nВыводы 3/4/5 у них разные, поэтому посадочные места раздельные — общих отверстий нет."
-    (at 227.33 227.33 0)
-    (effects (font (size 1.27 1.27)) (justify left bottom))
-    (uuid "10b12b38-e717-5e1a-9b1c-d572f6532334"))
-  (symbol (lib_id "biba:NSD10") (at 250.19 245.11 0) (unit 1)
-    (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
-    (uuid "68dbe387-e617-59a9-b504-4356c525d006")
-    (property "Reference" "PM2" (at 248.92 236.22 0)
-      (effects (font (size 1.27 1.27))))
-    (property "Value" "NSD10-12S5" (at 248.92 254.00 0)
-      (effects (font (size 1.27 1.27))))
-    (property "Footprint" "Converter_DCDC:Converter_DCDC_MeanWell_NSD10_THT" (at 250.19 245.11 0)
-      (effects (font (size 1.27 1.27)) hide))
-    (property "Datasheet" "https://www.meanwell.com/Upload/PDF/NSD10-S/NSD10-S-SPEC.PDF" (at 250.19 245.11 0)
-      (effects (font (size 1.27 1.27)) hide))
-    (property "Package" "" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "LCSC" "" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "MPN" "NSD10-12S5" (at 250.19 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (pin "1" (uuid "fdfca062-54b4-54db-a6c3-82d4ebaf1acb"))
-    (pin "2" (uuid "8d9c76d9-45ec-5062-bc96-6f962a206434"))
-    (pin "6" (uuid "9a4a1fb6-3282-5c50-a0a8-35fd289c2228"))
-    (pin "4" (uuid "31940351-e6c3-59b9-b6f1-98cce4fd615b"))
-    (pin "3" (uuid "0501f659-34de-5891-aa7b-b5bf0a9d0cab"))
-    (pin "5" (uuid "22217fea-3e9c-52ce-b701-4ed6b2cae0ab"))
-    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "PM2") (unit 1))))
-  )
-  (global_label "VIN" (shape input) (at 242.57 242.57 180)
-    (fields_autoplaced yes)
-    (effects (font (size 1.27 1.27)) (justify right))
-    (uuid "d7b50c8b-8dce-5d22-b8a7-aa9b1f3528f4")
-    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 242.57 242.57 0)
-      (effects (font (size 1.27 1.27)) hide))
-  )
-  (symbol (lib_id "biba:GND") (at 242.57 245.11 0) (unit 1)
-    (exclude_from_sim no) (in_bom no) (on_board no) (dnp no)
-    (uuid "e703a462-5fdf-59ca-8e8f-8b127f43bf3a")
-    (property "Reference" "#PWR120" (at 242.57 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Value" "GND" (at 242.57 250.11 0)
-      (effects (font (size 1.27 1.27))))
-    (property "Footprint" "" (at 242.57 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Datasheet" "" (at 242.57 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (pin "1" (uuid "6116971c-4d08-5501-acaa-bec3bacf8a96"))
-    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#PWR120") (unit 1))))
-  )
-  (global_label "SW" (shape input) (at 242.57 247.65 180)
-    (fields_autoplaced yes)
-    (effects (font (size 1.27 1.27)) (justify right))
-    (uuid "adb83ae5-353c-5591-9dc6-42bf6095ad38")
-    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 242.57 247.65 0)
-      (effects (font (size 1.27 1.27)) hide))
-  )
-  (symbol (lib_id "biba:+5V") (at 257.81 242.57 0) (unit 1)
-    (exclude_from_sim no) (in_bom no) (on_board no) (dnp no)
-    (uuid "b649daec-b16e-52e1-95e5-b284432fba72")
-    (property "Reference" "#PWR121" (at 257.81 242.57 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Value" "+5V" (at 257.81 247.57 0)
-      (effects (font (size 1.27 1.27))))
-    (property "Footprint" "" (at 257.81 242.57 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Datasheet" "" (at 257.81 242.57 0) (effects (font (size 1.27 1.27)) hide))
-    (pin "1" (uuid "d6a8b219-f6ef-51b3-a402-f6d39942894f"))
-    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#PWR121") (unit 1))))
-  )
-  (symbol (lib_id "biba:GND") (at 257.81 245.11 0) (unit 1)
-    (exclude_from_sim no) (in_bom no) (on_board no) (dnp no)
-    (uuid "55abd012-0c52-5c30-b826-d750e90a59e9")
-    (property "Reference" "#PWR122" (at 257.81 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Value" "GND" (at 257.81 250.11 0)
-      (effects (font (size 1.27 1.27))))
-    (property "Footprint" "" (at 257.81 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (property "Datasheet" "" (at 257.81 245.11 0) (effects (font (size 1.27 1.27)) hide))
-    (pin "1" (uuid "1fbabd23-8bd2-5191-a637-7e99a591decf"))
-    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#PWR122") (unit 1))))
-  )
-  (no_connect (at 257.81 247.65) (uuid "f16706bd-6801-55b1-b348-5db48c68dfc7"))
   (text "Лист 2: антиспарк BAT+ → VIN (LTC7004, 2× MOSFET, выключатель J5),\nизмерение шины (шунт + INA240 → IBAT, делитель → VBAT)."
     (at 304.8 168.91 0)
     (effects
@@ -5254,6 +5344,94 @@
       (project "brushed-bts7960"
         (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c"
           (page "3")))))
+  (symbol (lib_id "power:PWR_FLAG") (at 101.6 29.21 0) (unit 1)
+    (exclude_from_sim no) (in_bom no) (on_board no) (dnp no)
+    (uuid "e801c4ff-7a0c-4726-a509-7f597103e017")
+    (property "Reference" "#FLG04" (at 101.6 29.21 0) (effects (font (size 1.27 1.27)) (justify left) hide))
+    (property "Value" "PWR_FLAG" (at 103.505 27.94 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Footprint" "" (at 101.6 29.21 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Datasheet" "" (at 101.6 29.21 0) (effects (font (size 1.27 1.27)) hide))
+    (pin "1" (uuid "bea1cbfc-89c3-49ed-9b45-eb805d8c2116"))
+    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "#FLG04") (unit 1))))
+  )
+  (symbol (lib_id "Connector_Generic:Conn_01x02") (at 252.73 236.22 0) (unit 1)
+    (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+    (uuid "656bde7e-815d-4420-825e-242f07b4a20e")
+    (property "Reference" "J7" (at 254.0 231.14 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Value" "M1" (at 254.0 242.57 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Footprint" "biba:WirePad_1x2_P7.62mm_D2.0mm" (at 252.73 236.22 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Datasheet" "" (at 252.73 236.22 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Package" "" (at 252.73 236.22 0) (effects (font (size 1.27 1.27)) hide))
+    (property "LCSC" "" (at 252.73 236.22 0) (effects (font (size 1.27 1.27)) hide))
+    (property "MPN" "" (at 252.73 236.22 0) (effects (font (size 1.27 1.27)) hide))
+    (pin "1" (uuid "63fa4abd-5077-4c7f-b1c1-5555a1bf693a"))
+    (pin "2" (uuid "73801391-2f59-43c2-b4b5-849d9c85ea41"))
+    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "J7") (unit 1))))
+  )
+  (global_label "M1+" (shape passive) (at 247.64999999999998 236.22 180) (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "e5c8948d-6e2a-49ee-8c3b-35d905214420")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.64999999999998 236.22 0) (effects (font (size 1.27 1.27)) hide))
+  )
+  (global_label "M1-" (shape passive) (at 247.64999999999998 238.76 180) (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "40f1f664-dd72-4d2f-b27a-751fcf267139")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.64999999999998 238.76 0) (effects (font (size 1.27 1.27)) hide))
+  )
+  (symbol (lib_id "Connector_Generic:Conn_01x02") (at 252.73 245.11 0) (unit 1)
+    (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+    (uuid "6016aa90-7e13-4801-a6ba-5c62778709db")
+    (property "Reference" "J8" (at 254.0 240.03 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Value" "M2" (at 254.0 251.46 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Footprint" "biba:WirePad_1x2_P7.62mm_D2.0mm" (at 252.73 245.11 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Datasheet" "" (at 252.73 245.11 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Package" "" (at 252.73 245.11 0) (effects (font (size 1.27 1.27)) hide))
+    (property "LCSC" "" (at 252.73 245.11 0) (effects (font (size 1.27 1.27)) hide))
+    (property "MPN" "" (at 252.73 245.11 0) (effects (font (size 1.27 1.27)) hide))
+    (pin "1" (uuid "bc6980d3-986b-4c02-a0f4-deaad2482255"))
+    (pin "2" (uuid "f9988a6c-21b0-427c-9ed7-520c5d7a8c47"))
+    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "J8") (unit 1))))
+  )
+  (global_label "M2+" (shape passive) (at 247.64999999999998 245.11 180) (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "5c529726-4d08-45a6-ab2a-e4557d5dae2b")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.64999999999998 245.11 0) (effects (font (size 1.27 1.27)) hide))
+  )
+  (global_label "M2-" (shape passive) (at 247.64999999999998 247.65 180) (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "0c16a945-a7c7-409a-9762-615c22fb652e")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.64999999999998 247.65 0) (effects (font (size 1.27 1.27)) hide))
+  )
+  (symbol (lib_id "Connector_Generic:Conn_01x02") (at 252.73 254.0 0) (unit 1)
+    (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+    (uuid "d3032266-1cd0-4525-9e3e-63866f126ac7")
+    (property "Reference" "J9" (at 254.0 248.92 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Value" "BAT" (at 254.0 260.35 0) (effects (font (size 1.27 1.27)) (justify left)))
+    (property "Footprint" "biba:WirePad_1x2_P7.62mm_D2.0mm" (at 252.73 254.0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Datasheet" "" (at 252.73 254.0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Package" "" (at 252.73 254.0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "LCSC" "" (at 252.73 254.0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "MPN" "" (at 252.73 254.0 0) (effects (font (size 1.27 1.27)) hide))
+    (pin "1" (uuid "7f7172fa-02fa-4f96-8e21-8988f18d392f"))
+    (pin "2" (uuid "2fa4bc02-e0e6-404a-8f59-b02ea00b92e2"))
+    (instances (project "brushed-bts7960" (path "/5d1025ef-bd26-5426-bb12-5355817dfc1c" (reference "J9") (unit 1))))
+  )
+  (global_label "BAT+" (shape passive) (at 247.64999999999998 254.0 180) (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "26b3973c-ae14-454d-8900-f72582e6df5d")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.64999999999998 254.0 0) (effects (font (size 1.27 1.27)) hide))
+  )
+  (global_label "GND" (shape passive) (at 247.64999999999998 256.54 180) (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify right))
+    (uuid "e1a0fda3-409d-48e1-a028-906888ec9fab")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}" (at 247.64999999999998 256.54 0) (effects (font (size 1.27 1.27)) hide))
+  )
+  (text "DC/DC: одно место на плате, два набора отверстий (PM1, футпринт DCDC_SKMW30_NSD10).\nСтавится ЛИБО SKMW30G-05, ЛИБО NSD10-12S5 — в свои отверстия; у NSD10 отверстия\nпронумерованы по назначению выводов SKMW30 (-Vout→5, +Vout→3, NC без номера).\nJ7–J9 — силовые клеммы под пайку провода на правом краю платы."
+    (exclude_from_sim no)
+    (at 227.33 227.33 0)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "fc6d9847-2cb0-4edd-9195-63abf21c7935")
+  )
   (sheet_instances
     (path "/" (page "1"))
   )
